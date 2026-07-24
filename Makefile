@@ -1,34 +1,34 @@
 ifeq ($(OS),Windows_NT)
 TARCA_CONDA_PREFIX ?= $(UV_PROJECT_ENVIRONMENT)
-UV ?= $(TARCA_CONDA_PREFIX)/Scripts/uv.exe
+UV_CMD ?= $(TARCA_CONDA_PREFIX)/Scripts/uv.exe
 export UV_PROJECT_ENVIRONMENT := $(TARCA_CONDA_PREFIX)
 else
-UV ?= uv
+UV_CMD ?= uv
 endif
 
 .PHONY: lock sync doctor smoke test lint stage0-check
 
 lock:
-	"$(UV)" lock
+	"$(UV_CMD)" lock
 
 sync:
-	"$(UV)" sync --frozen --extra research --group dev
+	"$(UV_CMD)" sync --frozen --extra research --group dev
 
 doctor:
-	"$(UV)" run python scripts/doctor.py
+	"$(UV_CMD)" run python scripts/doctor.py
 
 smoke:
-	"$(UV)" run pytest --no-cov -q tests/test_doctor.py tests/test_pot_smoke.py tests/test_torch_hook_smoke.py
+	"$(UV_CMD)" run pytest --no-cov -q tests/test_doctor.py tests/test_pot_smoke.py tests/test_torch_hook_smoke.py
 
 test:
-	"$(UV)" run pytest -q
+	"$(UV_CMD)" run pytest -q
 
 lint:
-	"$(UV)" run ruff check .
-	"$(UV)" run ruff format --check .
+	"$(UV_CMD)" run ruff check .
+	"$(UV_CMD)" run ruff format --check .
 
 stage0-check:
-	"$(UV)" run python -m compileall -q src scripts tests third_party_manifest
-	"$(UV)" run pytest -q
-	"$(UV)" run pre-commit run --all-files
-	"$(UV)" run python scripts/doctor.py
+	"$(UV_CMD)" run python -m compileall -q src scripts tests third_party_manifest
+	"$(UV_CMD)" run pytest -q
+	"$(UV_CMD)" run pre-commit run --all-files
+	"$(UV_CMD)" run python scripts/doctor.py

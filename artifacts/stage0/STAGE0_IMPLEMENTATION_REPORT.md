@@ -57,6 +57,7 @@ TARCA 首篇研究只能对模型内部计算机制提出因果陈述。模型�
 
 - PLOT：`PARTIAL` / `COMPONENT`。固定源码的静态编译和一个受审计纯 CPU transport primitive 通过；没有运行端到端训练或论文实验。
 - DiRoCA：`IMPORT_ONLY` / `STATIC`。只完成静态/import 级检查，避免在缺少 OS/network sandbox 时执行第三方顶层运行时路径。
+- 已缓存仓库只有在官方 origin、固定 commit、detached HEAD 和完全干净的工作树同时成立时才允许复用；临时 Python 字节码不会写入第三方源码树。
 - 两项摘要均明确 `used_gpu=false`，并明确不是论文结果复现。
 - PLOT、DiRoCA 与 HyperDAS 的代码许可证状态仍为 `UNVERIFIED`，其源码没有复制到 TARCA。
 
@@ -72,7 +73,9 @@ Stage 0 的发布门禁包括：
 6. Doctor 的 CPU-only 诊断；
 7. 从候选发布文件构建的干净检出验证。
 
-发布候选在 2026-07-24 重新验证为：`uv sync --frozen --extra research --group dev` 通过，compileall 通过，pytest `155 passed, 1 skipped`，branch coverage `90.47%`，干净候选检出中的 `pre-commit run --all-files` 全通过，Doctor 为 18 `PASS` / 2 预期 `SKIP`。GitHub Actions 工作流采用 frozen、offline、CPU-only 配置；本报告不声称尚未实际运行的托管任务已经通过。
+发布候选在 2026-07-24 重新验证为：`uv sync --frozen --extra research --group dev` 通过，compileall 通过，pytest `159 passed, 1 skipped`，branch coverage `91.17%`，干净候选检出中的 `pre-commit run --all-files` 全通过，Doctor 为 18 `PASS` / 2 预期 `SKIP`。GitHub Actions 工作流采用 frozen、offline、CPU-only 配置；托管结果以对应提交的远端 Actions 记录为准。
+
+提交前依赖审计在旧锁文件中发现 pytest 1 项、uv 2 项已知漏洞；开发依赖下限已分别提高到 pytest `9.0.3` 与 uv `0.11.15`，当前锁定版本为 pytest `9.1.1` 与 uv `0.11.32`。`torch 2.13.0+cpu` 不在 PyPI，审计器无法映射该 wheel；升级后的在线复扫又被本机代理中断，因此本报告只声明已修复本次明确检出的三项，不声明完整依赖集合“零漏洞”。
 
 ## 8. 公开文件与本地证据边界
 

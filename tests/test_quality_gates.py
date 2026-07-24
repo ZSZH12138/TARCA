@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,6 +24,8 @@ RUFF_PRE_COMMIT_SHA = "60ef368a6f48dfb4317651017f66dbb055241a6c"
 CHECKOUT_ACTION_SHA = "11d5960a326750d5838078e36cf38b85af677262"
 SETUP_PYTHON_ACTION_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 SETUP_UV_ACTION_SHA = "d0cc045d04ccac9d8b7881df0226f9e82c39688e"
+MINIMUM_SECURE_PYTEST_VERSION = "9.0.3"
+MINIMUM_SECURE_UV_VERSION = "0.11.15"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -171,6 +175,10 @@ def test_ci_is_cpu_only_offline_and_frozen() -> None:
     python_step = next(step for step in steps if step.get("uses") == setup_python_uses)
     assert python_step["with"]["python-version"] == "3.11"
 
+    setup_uv_uses = f"astral-sh/setup-uv@{SETUP_UV_ACTION_SHA}"
+    uv_step = next(step for step in steps if step.get("uses") == setup_uv_uses)
+    assert uv_step["with"]["version"] == MINIMUM_SECURE_UV_VERSION
+
     commands = [step["run"] for step in steps if "run" in step]
     assert commands == [
         "uv sync --frozen --extra research --group dev",
@@ -186,6 +194,10 @@ def test_ci_is_cpu_only_offline_and_frozen() -> None:
 
 def test_pyproject_enforces_stage0_coverage_and_ruff() -> None:
     config = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
+
+    dev_dependencies = set(config["dependency-groups"]["dev"])
+    assert f"pytest>={MINIMUM_SECURE_PYTEST_VERSION},<10" in dev_dependencies
+    assert f"uv>={MINIMUM_SECURE_UV_VERSION},<0.12" in dev_dependencies
 
     pytest_options = config["tool"]["pytest"]["ini_options"]
     assert pytest_options["testpaths"] == ["tests"]
@@ -211,17 +223,18 @@ def test_makefile_targets_use_overrideable_conda_uv_and_bounded_smoke() -> None:
         "Makefile must derive its optional Windows prefix from the environment."
     )
     assert "ifeq ($(OS),Windows_NT)" in text, "Makefile must branch for Windows."
-    assert "UV ?= $(TARCA_CONDA_PREFIX)/Scripts/uv.exe" in text, (
-        "The Windows branch must derive uv.exe from the caller-provided prefix."
+    assert "UV_CMD ?= $(TARCA_CONDA_PREFIX)/Scripts/uv.exe" in text, (
+        "The Windows branch must derive its collision-free uv command from the "
+        "caller-provided prefix."
     )
-    assert "UV ?= uv" in text, "The non-Windows branch must retain plain uv."
-    assert "D:/software/MyAnaconda/envs/tarca-stage0" not in text, (
-        "Makefile must not embed the maintainer's local Conda prefix."
+    assert "UV_CMD ?= uv" in text, "The non-Windows branch must retain plain uv."
+    assert re.search(r"\b[A-Za-z]:[\\/]", text) is None, (
+        "Makefile must not embed an absolute maintainer-machine path."
     )
     assert ".PHONY: lock sync doctor smoke test lint stage0-check" in text
 
-    assert '"$(UV)" lock' in _make_recipe(text, "lock")
-    assert '"$(UV)" sync --frozen --extra research --group dev' in _make_recipe(text, "sync")
+    assert '"$(UV_CMD)" lock' in _make_recipe(text, "lock")
+    assert '"$(UV_CMD)" sync --frozen --extra research --group dev' in _make_recipe(text, "sync")
     assert "scripts/doctor.py" in _make_recipe(text, "doctor")
 
     smoke = _make_recipe(text, "smoke").lower()
@@ -232,10 +245,10 @@ def test_makefile_targets_use_overrideable_conda_uv_and_bounded_smoke() -> None:
         token in smoke for token in ("plot", "diroca", "gemma", "mcqa", "slurm", "sweep")
     )
 
-    assert '"$(UV)" run pytest -q' in _make_recipe(text, "test")
+    assert '"$(UV_CMD)" run pytest -q' in _make_recipe(text, "test")
     lint = _make_recipe(text, "lint")
-    assert '"$(UV)" run ruff check .' in lint
-    assert '"$(UV)" run ruff format --check .' in lint
+    assert '"$(UV_CMD)" run ruff check .' in lint
+    assert '"$(UV_CMD)" run ruff format --check .' in lint
 
     stage0 = _make_recipe(text, "stage0-check")
     assert "python -m compileall -q src scripts tests third_party_manifest" in stage0
@@ -249,6 +262,7 @@ def test_makefile_expands_portable_uv_for_each_platform_branch() -> None:
     if make is None:
         pytest.skip("GNU make is unavailable locally; CI must exercise Makefile expansion.")
 
+    inherited_environment = {**os.environ, "UV": "/opt/hostedtoolcache/uv/ci/uv"}
     windows_prefix = "C:/portable/tarca-conda"
     windows = subprocess.run(
         [
@@ -263,6 +277,7 @@ def test_makefile_expands_portable_uv_for_each_platform_branch() -> None:
         check=False,
         capture_output=True,
         text=True,
+        env=inherited_environment,
     )
     assert windows.returncode == 0, windows.stderr
     assert f'"{windows_prefix}/Scripts/uv.exe" lock' in windows.stdout, (
@@ -275,6 +290,7 @@ def test_makefile_expands_portable_uv_for_each_platform_branch() -> None:
         check=False,
         capture_output=True,
         text=True,
+        env=inherited_environment,
     )
     assert non_windows.returncode == 0, non_windows.stderr
     assert '"uv" lock' in non_windows.stdout, "Non-Windows Makefile expansion must use plain uv."

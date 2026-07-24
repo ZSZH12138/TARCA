@@ -27,9 +27,7 @@ from tarca.stage0.models import CheckResult, DoctorReport
 _REMEDIATIONS = {
     "system": "Verify the isolated Conda environment and rerun python scripts/doctor.py.",
     "system.os": "Run the doctor on a supported local operating system.",
-    "system.python": (
-        "Activate D:\\software\\MyAnaconda\\envs\\tarca-stage0 and verify Python is >=3.11,<3.12."
-    ),
+    "system.python": ("Activate the isolated Conda environment and verify Python is >=3.11,<3.12."),
     "system.cpu": "Verify the operating system exposes at least one CPU core.",
     "system.memory": "Close memory-heavy programs and rerun the doctor.",
     "system.gpu": "No action is required for the CPU-only Stage 0 workflow.",
@@ -39,9 +37,7 @@ _REMEDIATIONS = {
         "Grant write permission to the project directory and rerun the doctor."
     ),
     "system.git": "Install Git, add it to PATH, and rerun git --version.",
-    "system.uv": (
-        "Install uv in D:\\software\\MyAnaconda\\envs\\tarca-stage0 and rerun uv --version."
-    ),
+    "system.uv": ("Install uv in the isolated Conda environment and rerun uv --version."),
     "numeric": "Run pytest tests/test_doctor.py -q in the isolated Conda environment.",
     "numeric.reproducibility": (
         "Run pytest tests/test_reproducibility.py -q in the isolated Conda environment."

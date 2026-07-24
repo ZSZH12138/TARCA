@@ -202,10 +202,30 @@ def _offline_environment(repository_path: Path | None = None) -> dict[str, str]:
         "PYTHONDONTWRITEBYTECODE": "1",
         "GIT_TERMINAL_PROMPT": "0",
         "GCM_INTERACTIVE": "never",
+        "GIT_NO_REPLACE_OBJECTS": "1",
     }
     if repository_path is not None:
         environment["PYTHONPATH"] = str(repository_path)
     return environment
+
+
+def _run_isolated_python_process(
+    command: tuple[str, ...],
+    *,
+    cwd: Path,
+    timeout_seconds: int,
+) -> CommandOutcome:
+    with tempfile.TemporaryDirectory(prefix="tarca-stage0-pycache-") as pycache_root:
+        environment = {
+            **_offline_environment(cwd),
+            "PYTHONPYCACHEPREFIX": pycache_root,
+        }
+        return _run_process(
+            command,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            env=environment,
+        )
 
 
 def _run_process(
@@ -320,17 +340,56 @@ def _verify_existing_repository(
             "Existing repository HEAD does not exactly match verified_commit.",
             (origin, head),
         )
+    branch = _run_process(
+        ("git", "rev-parse", "--abbrev-ref", "HEAD"),
+        cwd=repository_path,
+        timeout_seconds=timeout_seconds,
+        env=environment,
+    )
+    status = _run_process(
+        (
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.untrackedCache=false",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--ignored=matching",
+        ),
+        cwd=repository_path,
+        timeout_seconds=timeout_seconds,
+        env=environment,
+    )
+    outcomes = (origin, head, branch, status)
+    _require_success((branch, status), "existing repository state verification")
+    if branch.stdout.strip() != "HEAD":
+        raise RepositoryPolicyError(
+            "Existing repository must remain on a detached HEAD. Detach the verified "
+            "commit or move or remove the cache manually, then rerun.",
+            outcomes,
+        )
+    if status.stdout.strip():
+        raise RepositoryPolicyError(
+            "Existing repository worktree must be clean, including ignored files. "
+            "Inspect it first, then move or remove the cache manually and rerun; TARCA "
+            "will not overwrite local changes.",
+            outcomes,
+        )
     return RepositoryOutcome(
         repository_path=repository_path,
         observed_commit=observed_head,
-        commands=(origin.command, head.command),
+        commands=tuple(outcome.command for outcome in outcomes),
         checks=(
             SmokeCheck("repository_origin", "PASS", observed_origin),
             SmokeCheck("repository_head", "PASS", observed_head),
+            SmokeCheck("repository_detached", "PASS", "HEAD"),
+            SmokeCheck("repository_worktree", "PASS", "clean"),
         ),
-        stdout=origin.stdout + head.stdout,
-        stderr=origin.stderr + head.stderr,
-        duration_seconds=origin.duration_seconds + head.duration_seconds,
+        stdout="".join(outcome.stdout for outcome in outcomes),
+        stderr="".join(outcome.stderr for outcome in outcomes),
+        duration_seconds=sum(outcome.duration_seconds for outcome in outcomes),
     )
 
 
@@ -373,8 +432,6 @@ def _clone_fixed_repository(
                 policy.verified_commit,
             ),
             ("git", "checkout", "--detach", policy.verified_commit),
-            ("git", "remote", "get-url", "origin"),
-            ("git", "rev-parse", "HEAD"),
         )
         for command in clone_commands:
             outcome = _run_process(
@@ -386,19 +443,11 @@ def _clone_fixed_repository(
             commands.append(command)
             outcomes.append(outcome)
             _require_success(tuple(outcomes), "fixed-commit clone")
-        observed_origin = outcomes[-2].stdout.strip()
-        observed_head = outcomes[-1].stdout.strip().lower()
-        if observed_origin != policy.repository_url:
-            raise RepositoryPolicyError(
-                "Fetched repository origin verification failed.",
-                tuple(outcomes),
-            )
-        if observed_head != policy.verified_commit:
-            raise RepositoryPolicyError(
-                "Fetched repository commit verification failed.",
-                tuple(outcomes),
-            )
-        _verify_repo_links(temporary)
+        verification = _verify_existing_repository(
+            temporary,
+            policy,
+            timeout_seconds,
+        )
         if repository_path.exists():
             raise RepositoryPolicyError(
                 "Destination appeared during clone; refusing to overwrite local content."
@@ -406,20 +455,22 @@ def _clone_fixed_repository(
         temporary.replace(repository_path)
         return RepositoryOutcome(
             repository_path=repository_path,
-            observed_commit=observed_head,
-            commands=tuple(commands),
+            observed_commit=verification.observed_commit,
+            commands=(*commands, *verification.commands),
             checks=(
-                SmokeCheck("repository_origin", "PASS", observed_origin),
-                SmokeCheck("repository_head", "PASS", observed_head),
+                *verification.checks,
                 SmokeCheck(
                     "clone_policy",
                     "PASS",
                     "Fetched one fixed commit without dependency installation.",
                 ),
             ),
-            stdout="".join(outcome.stdout for outcome in outcomes),
-            stderr="".join(outcome.stderr for outcome in outcomes),
-            duration_seconds=sum(outcome.duration_seconds for outcome in outcomes),
+            stdout="".join(outcome.stdout for outcome in outcomes) + verification.stdout,
+            stderr="".join(outcome.stderr for outcome in outcomes) + verification.stderr,
+            duration_seconds=(
+                sum(outcome.duration_seconds for outcome in outcomes)
+                + verification.duration_seconds
+            ),
         )
     finally:
         _remove_owned_temporary_clone(temporary, cache_root, policy.name)
@@ -464,11 +515,10 @@ def _run_plot(
         (SAFE_PYTHON, "-m", "compileall", "-q", "experiments"),
         PLOT_COMMANDS,
     )
-    compile_outcome = _run_process(
+    compile_outcome = _run_isolated_python_process(
         compile_command,
         cwd=repository_path,
         timeout_seconds=timeout_seconds,
-        env=_offline_environment(repository_path),
     )
     updated_checks = (
         *checks,
@@ -488,11 +538,10 @@ def _run_plot(
         (SAFE_PYTHON, "-c", PLOT_COMPONENT_CODE),
         PLOT_COMMANDS,
     )
-    component_outcome = _run_process(
+    component_outcome = _run_isolated_python_process(
         component_command,
         cwd=repository_path,
         timeout_seconds=timeout_seconds,
-        env=_offline_environment(repository_path),
     )
     updated_checks += (
         SmokeCheck(
@@ -523,11 +572,10 @@ def _run_diroca(
         (SAFE_PYTHON, "-m", "compileall", "-q", "."),
         DIROCA_COMMANDS,
     )
-    outcome = _run_process(
+    outcome = _run_isolated_python_process(
         command,
         cwd=repository_path,
         timeout_seconds=timeout_seconds,
-        env=_offline_environment(repository_path),
     )
     updated_checks = (
         *checks,

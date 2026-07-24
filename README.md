@@ -133,7 +133,9 @@ Reference 状态：
 
 `LOCAL_OK` 表示普通 CPU 工作站足以运行 Stage 0 核心检查；它不是特定机器的性能承诺。Stage 0 `不需要 GPU`，CUDA/GPU 不可用是预期 `SKIP`，不是核心失败，也不需要租用服务器。
 
-第三方运行必须来自 manifest 中的 HTTPS 官方仓库和固定 commit，并受命令、路径、链接、资源与产物 allowlist 限制。没有 OS/network sandbox 时，可能执行第三方顶层代码的路径必须降级为静态或 import-only 检查。
+第三方运行必须来自 manifest 中的 HTTPS 官方仓库和固定 commit，并受命令、路径、链接、资源与产物 allowlist 限制。复用的源码缓存还必须处于 detached HEAD 且工作树完全干净（包括 ignored/untracked 文件）；Python 字节码写入独立临时目录，避免 smoke 自身污染缓存。没有 OS/network sandbox 时，可能执行第三方顶层代码的路径必须降级为静态或 import-only 检查。
+
+缓存校验失败时工具会 fail closed，并且不会自动覆盖本地修改。请先检查 `.cache/third_party/<name>`，再将该目录移到备份位置或手动删除，随后重试；工具会从 manifest 中的固定 commit 重新获取源码。
 
 ## Stage 0 禁止事项
 

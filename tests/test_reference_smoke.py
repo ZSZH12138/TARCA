@@ -376,6 +376,7 @@ def test_process_runner_uses_argv_shell_false_timeout_and_offline_cpu_env(
     assert env["HF_HUB_OFFLINE"] == "1"
     assert env["TRANSFORMERS_OFFLINE"] == "1"
     assert env["HF_DATASETS_OFFLINE"] == "1"
+    assert env["GIT_NO_REPLACE_OBJECTS"] == "1"
 
 
 def test_clone_commands_use_fixed_commit_and_never_push_install_or_download(
@@ -399,6 +400,8 @@ def test_clone_commands_use_fixed_commit_and_never_push_install_or_download(
             stdout = EXPECTED_REPOSITORIES["plot"]
         if command[-2:] == ("rev-parse", "HEAD"):
             stdout = EXPECTED_COMMITS["plot"]
+        if command[-3:] == ("rev-parse", "--abbrev-ref", "HEAD"):
+            stdout = "HEAD"
         return CommandOutcome(command, 0, stdout, "", 0.01)
 
     monkeypatch.setattr(smoke, "_run_process", fake_process)

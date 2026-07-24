@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -46,15 +47,13 @@ PUBLIC_TEXT_FILES = (
     STAGE0_SCOPE_PATH,
     REPORT_PATH,
     PROJECT_ROOT / "Makefile",
+    PROJECT_ROOT / "src" / "tarca" / "stage0" / "diagnostics.py",
     *(PROJECT_ROOT / path for path in CURATED_EVIDENCE[1:]),
 )
-MACHINE_FINGERPRINTS = (
-    r"C:\Users\DELL",
-    "C:/Users/DELL",
-    r"AppData\Local\Temp",
-    "AppData/Local/Temp",
-    r"D:\software\MyAnaconda\envs\tarca-stage0",
-    "D:/software/MyAnaconda/envs/tarca-stage0",
+MACHINE_FINGERPRINT_PATTERNS = (
+    re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s]+", re.IGNORECASE),
+    re.compile(r"[A-Za-z]:[\\/]+software[\\/]+", re.IGNORECASE),
+    re.compile(r"AppData[\\/]+Local[\\/]+Temp", re.IGNORECASE),
 )
 
 
@@ -114,8 +113,10 @@ def test_gitignore_unignores_exactly_four_curated_evidence_files() -> None:
 def test_public_text_does_not_contain_machine_fingerprints() -> None:
     for path in PUBLIC_TEXT_FILES:
         text = path.read_text(encoding="utf-8")
-        for fingerprint in MACHINE_FINGERPRINTS:
-            assert fingerprint not in text, f"{path} leaks machine fingerprint: {fingerprint}"
+        for pattern in MACHINE_FINGERPRINT_PATTERNS:
+            assert pattern.search(text) is None, (
+                f"{path} leaks a machine-specific path matching {pattern.pattern!r}"
+            )
 
 
 def test_public_release_does_not_add_a_license_file() -> None:

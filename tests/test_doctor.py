@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,6 +95,13 @@ def test_system_check_isolates_one_component_exception(
     assert by_name["system.memory"].details["exception_type"] == "OSError"
     assert by_name["system.cpu"].status == "PASS"
     assert by_name["system.disk"].status == "PASS"
+
+
+def test_remediation_messages_do_not_embed_maintainer_machine_paths() -> None:
+    for key in ("system.python", "system.uv"):
+        remediation = diagnostics._REMEDIATIONS[key]
+        assert re.search(r"[A-Za-z]:[\\/]", remediation) is None
+        assert "isolated Conda environment" in remediation
 
 
 def test_numeric_checks_cover_dtypes_cpu_matmul_and_nonfinite_detection() -> None:
