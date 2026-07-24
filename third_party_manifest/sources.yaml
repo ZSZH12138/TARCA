@@ -1,0 +1,99 @@
+- name: pyvene
+  paper_title: "pyvene: A Library for Understanding and Improving PyTorch Models via Interventions"
+  paper_url: https://aclanthology.org/2024.naacl-demo.16/
+  repository_url: https://github.com/stanfordnlp/pyvene
+  role: intervention_library
+  license: Apache-2.0
+  default_branch: main
+  verified_commit: 9e333904dcf9e597ca76170010d17f4d4580de8d
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/pyvene
+  notes: Official proceedings page and repository verified on 2026-07-23.
+- name: plot
+  paper_title: "PLOT: Progressive Localization via Optimal Transport in Neural Causal Abstraction"
+  paper_url: https://arxiv.org/abs/2605.06979
+  repository_url: https://github.com/jchang153/causal-abstractions-ot
+  role: localization_baseline
+  license: UNVERIFIED
+  default_branch: main
+  verified_commit: 96dbec5f04bc03aea6e55c430eeafd5c9be27fb2
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/plot
+  notes: Official paper and repository verified; no top-level LICENSE and GitHub license metadata is null.
+- name: diroca
+  paper_title: "Distributionally Robust Causal Abstractions"
+  paper_url: https://arxiv.org/abs/2510.04842
+  repository_url: https://github.com/yfelekis/DiRoCA
+  role: robust_abstraction_baseline
+  license: UNVERIFIED
+  default_branch: main
+  verified_commit: 7002947b4954abea1f3d11fcb6f36e7f3c43e8bd
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/diroca
+  notes: Official paper and repository verified; no top-level LICENSE and GitHub license metadata is null.
+- name: pot
+  paper_title: "POT: Python Optimal Transport"
+  paper_url: https://jmlr.org/papers/v22/20-451.html
+  repository_url: https://github.com/PythonOT/POT
+  role: ot_backend
+  license: MIT
+  default_branch: master
+  verified_commit: a12794ea4cc5eba5f6d215e4d86757344c392788
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/pot
+  notes: Official JMLR paper and repository verified.
+- name: hyperdas
+  paper_title: "HyperDAS: Towards Automating Mechanistic Interpretability with Hypernetworks"
+  paper_url: https://arxiv.org/abs/2503.10894
+  repository_url: https://github.com/jiudingsun01/HyperDAS
+  role: das_baseline
+  license: UNVERIFIED
+  default_branch: main
+  verified_commit: ad89825abfdc6875f0c8529e64ca7c84f75e3946
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/hyperdas
+  notes: Official paper and repository verified; README license badge is not corroborated by a top-level LICENSE.
+- name: time_series_library
+  paper_title: UNRESOLVED
+  paper_url: UNRESOLVED
+  repository_url: https://github.com/thuml/Time-Series-Library
+  role: forecasting_benchmark_suite
+  license: MIT
+  default_branch: main
+  verified_commit: 4e938a1767106324dd753b2a44832bf870a0252e
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/time_series_library
+  notes: Repository and license verified; no singular canonical Time-Series-Library paper is identified.
+- name: patchtst
+  paper_title: "A Time Series is Worth 64 Words: Long-term Forecasting with Transformers"
+  paper_url: https://arxiv.org/abs/2211.14730
+  repository_url: https://github.com/yuqinie98/PatchTST
+  role: forecasting_backbone
+  license: Apache-2.0
+  default_branch: main
+  verified_commit: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/patchtst
+  notes: Official paper, repository, and license verified.
+- name: itransformer
+  paper_title: "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting"
+  paper_url: https://arxiv.org/abs/2310.06625
+  repository_url: https://github.com/thuml/iTransformer
+  role: forecasting_backbone
+  license: MIT
+  default_branch: main
+  verified_commit: c2426e68ca13f74aaec08045c5c724d8ad328124
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/itransformer
+  notes: Official paper, repository, and license verified.
+- name: chronos_forecasting
+  paper_title: "Chronos: Learning the Language of Time Series"
+  paper_url: https://openreview.net/forum?id=gerNCVqqtR
+  repository_url: https://github.com/amazon-science/chronos-forecasting
+  role: foundation_forecasting_baseline
+  license: Apache-2.0
+  default_branch: main
+  verified_commit: 7dc4435706a4454feb79df44ca9f33631f3027bf
+  verified_at: "2026-07-23"
+  local_reference_path: .cache/third_party/chronos_forecasting
+  notes: Original Chronos paper, official repository, and license verified.

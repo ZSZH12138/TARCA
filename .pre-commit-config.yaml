@@ -1,0 +1,95 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b  # v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-case-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 60ef368a6f48dfb4317651017f66dbb055241a6c  # v0.12.12
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+        args: [--check]
+
+  - repo: local
+    hooks:
+      - id: repository-hygiene
+        name: reject secrets, models, caches, and data payloads
+        language: python
+        entry: python -I
+        args:
+          - -c
+          - |
+            import sys
+            from pathlib import PurePosixPath
+
+            model_suffixes = {
+                ".bin",
+                ".ckpt",
+                ".onnx",
+                ".pt",
+                ".pth",
+                ".safetensors",
+            }
+            data_areas = {"raw", "interim", "processed"}
+            curated_stage0_artifacts = {
+                "artifacts/stage0/stage0_implementation_report.md",
+                "artifacts/stage0/third_party_commits.json",
+                "artifacts/stage0/reference_smoke/plot/result_summary.md",
+                "artifacts/stage0/reference_smoke/diroca/result_summary.md",
+            }
+
+            def rejection_reason(raw_path):
+                path = PurePosixPath(raw_path.replace("\\", "/"))
+                parts = tuple(part.lower() for part in path.parts)
+                name = path.name.lower()
+                normalized = "/".join(parts)
+                for index, part in enumerate(parts):
+                    is_environment_name = part == ".env" or part.startswith(".env.")
+                    is_allowed_example = (
+                        part == ".env.example" and index == len(parts) - 1
+                    )
+                    if is_environment_name and not is_allowed_example:
+                        return "environment secret path"
+                if path.suffix.lower() in model_suffixes:
+                    return "model artifact"
+                if ".cache" in parts:
+                    return "cache path"
+                if (
+                    len(parts) >= 3
+                    and parts[0] == "data"
+                    and parts[1] in data_areas
+                    and not (len(parts) == 3 and name == "readme.md")
+                ):
+                    return "data payload"
+                if parts and parts[0] == ".superpowers":
+                    return "internal workflow path"
+                if len(parts) >= 2 and parts[:2] == ("docs", "superpowers"):
+                    return "internal workflow path"
+                if normalized == "docs/manual_verification_stage0.md":
+                    return "local operator material"
+                if (
+                    len(parts) >= 2
+                    and parts[:2] == ("artifacts", "stage0")
+                    and normalized not in curated_stage0_artifacts
+                ):
+                    return "unreviewed Stage 0 evidence"
+                return None
+
+            violations = [
+                (raw_path, reason)
+                for raw_path in sys.argv[1:]
+                if (reason := rejection_reason(raw_path)) is not None
+            ]
+            for raw_path, reason in violations:
+                print(f"{raw_path}: rejected {reason}")
+            raise SystemExit(1 if violations else 0)
+          - tarca-repository-hygiene
+        pass_filenames: true

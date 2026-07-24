@@ -1,0 +1,87 @@
+{
+  "manifest": "third_party_manifest/sources.yaml",
+  "generated_at": "2026-07-23T17:48:21.572902+00:00",
+  "results": [
+    {
+      "name": "pyvene",
+      "repository_url": "https://github.com/stanfordnlp/pyvene",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "9e333904dcf9e597ca76170010d17f4d4580de8d",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    },
+    {
+      "name": "plot",
+      "repository_url": "https://github.com/jchang153/causal-abstractions-ot",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "96dbec5f04bc03aea6e55c430eeafd5c9be27fb2",
+      "source": "local",
+      "detail": "Resolved from local clone."
+    },
+    {
+      "name": "diroca",
+      "repository_url": "https://github.com/yfelekis/DiRoCA",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "7002947b4954abea1f3d11fcb6f36e7f3c43e8bd",
+      "source": "local",
+      "detail": "Resolved from local clone."
+    },
+    {
+      "name": "pot",
+      "repository_url": "https://github.com/PythonOT/POT",
+      "default_branch": "master",
+      "status": "VERIFIED",
+      "resolved_commit": "a12794ea4cc5eba5f6d215e4d86757344c392788",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    },
+    {
+      "name": "hyperdas",
+      "repository_url": "https://github.com/jiudingsun01/HyperDAS",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "ad89825abfdc6875f0c8529e64ca7c84f75e3946",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    },
+    {
+      "name": "time_series_library",
+      "repository_url": "https://github.com/thuml/Time-Series-Library",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "4e938a1767106324dd753b2a44832bf870a0252e",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    },
+    {
+      "name": "patchtst",
+      "repository_url": "https://github.com/yuqinie98/PatchTST",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "204c21efe0b39603ad6e2ca640ef5896646ab1a9",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    },
+    {
+      "name": "itransformer",
+      "repository_url": "https://github.com/thuml/iTransformer",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "c2426e68ca13f74aaec08045c5c724d8ad328124",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    },
+    {
+      "name": "chronos_forecasting",
+      "repository_url": "https://github.com/amazon-science/chronos-forecasting",
+      "default_branch": "main",
+      "status": "VERIFIED",
+      "resolved_commit": "7dc4435706a4454feb79df44ca9f33631f3027bf",
+      "source": "remote",
+      "detail": "Resolved via git ls-remote."
+    }
+  ]
+}

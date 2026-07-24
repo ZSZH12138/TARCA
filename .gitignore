@@ -1,0 +1,58 @@
+# Local environments and Conda metadata
+.venv/
+.conda/
+conda-meta/
+.env*
+!.env.example
+
+# Generated caches, coverage, logs, and temporary smoke clones
+.cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+logs/
+*.log
+smoke-clone*/
+tmp-smoke-*/
+
+# Large model artifacts
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.bin
+
+# Data boundaries: retain only directory guidance
+data/raw/*
+!data/raw/README.md
+data/interim/*
+!data/interim/README.md
+data/processed/*
+!data/processed/README.md
+
+# Internal workflow notes and local-only operator material
+.superpowers/
+docs/superpowers/
+docs/MANUAL_VERIFICATION_STAGE0.md
+
+# Stage 0 evidence is local by default. Only the four reviewed summaries below
+# are part of the public research baseline.
+artifacts/stage0/*
+!artifacts/
+!artifacts/stage0/
+!artifacts/stage0/STAGE0_IMPLEMENTATION_REPORT.md
+!artifacts/stage0/third_party_commits.json
+!artifacts/stage0/reference_smoke/
+artifacts/stage0/reference_smoke/*
+!artifacts/stage0/reference_smoke/plot/
+!artifacts/stage0/reference_smoke/diroca/
+artifacts/stage0/reference_smoke/plot/*
+artifacts/stage0/reference_smoke/diroca/*
+!artifacts/stage0/reference_smoke/plot/result_summary.md
+!artifacts/stage0/reference_smoke/diroca/result_summary.md
