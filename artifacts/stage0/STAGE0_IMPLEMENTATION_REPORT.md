@@ -75,7 +75,7 @@ Stage 0 的发布门禁包括：
 
 发布候选在 2026-07-24 重新验证为：`uv sync --frozen --extra research --group dev` 通过，compileall 通过，pytest `159 passed, 1 skipped`，branch coverage `91.17%`，干净候选检出中的 `pre-commit run --all-files` 全通过，Doctor 为 18 `PASS` / 2 预期 `SKIP`。GitHub Actions 工作流采用 frozen、offline、CPU-only 配置；托管结果以对应提交的远端 Actions 记录为准。
 
-提交前依赖审计在旧锁文件中发现 pytest 1 项、uv 2 项已知漏洞；开发依赖下限已分别提高到 pytest `9.0.3` 与 uv `0.11.15`，当前锁定版本为 pytest `9.1.1` 与 uv `0.11.32`。`torch 2.13.0+cpu` 不在 PyPI，审计器无法映射该 wheel；升级后的在线复扫又被本机代理中断，因此本报告只声明已修复本次明确检出的三项，不声明完整依赖集合“零漏洞”。
+提交前依赖审计在旧锁文件中发现 pytest 1 项、uv 2 项已知漏洞；开发依赖下限已分别提高到 pytest `9.0.3` 与 uv `0.11.15`，当前锁定版本为 pytest `9.1.1` 与 uv `0.11.32`。升级后使用 pip-audit `2.10.1` 复扫，可映射的已安装依赖未发现已知漏洞；`torch 2.13.0+cpu` 不在 PyPI，审计器无法映射该 wheel，因此本报告不声明完整依赖集合“零漏洞”。
 
 ## 8. 公开文件与本地证据边界
 
