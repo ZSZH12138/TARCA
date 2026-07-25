@@ -159,6 +159,57 @@ def test_window_batch_preserves_every_provided_tensor_unchanged() -> None:
         ) == expected[field_name]
 
 
+def test_window_batch_rejection_preserves_every_input_tensor_unchanged() -> None:
+    kwargs = make_valid_window_batch_kwargs()
+    invalid_x = kwargs["x"]
+    assert isinstance(invalid_x, torch.Tensor)
+    invalid_x[0, 0, 0] = float("inf")
+    tensor_fields = (
+        "x",
+        "y",
+        "observed_covariates",
+        "known_future_covariates",
+        "x_mask",
+        "y_mask",
+        "observed_covariates_mask",
+        "known_future_covariates_mask",
+        "regime",
+    )
+    tensors = {field_name: kwargs[field_name] for field_name in tensor_fields}
+    assert all(isinstance(tensor, torch.Tensor) for tensor in tensors.values())
+    for field_name in ("x", "y", "observed_covariates", "known_future_covariates"):
+        tensor = tensors[field_name]
+        assert isinstance(tensor, torch.Tensor)
+        tensor.requires_grad_(True)
+    expected = {
+        field_name: (
+            id(tensor),
+            tensor.device,
+            tensor.dtype,
+            tensor.shape,
+            tensor.stride(),
+            tensor.requires_grad,
+        )
+        for field_name, tensor in tensors.items()
+        if isinstance(tensor, torch.Tensor)
+    }
+
+    with pytest.raises(ValueError, match=r"x: values must be finite"):
+        WindowBatch(**kwargs)
+
+    for field_name, original in tensors.items():
+        assert isinstance(original, torch.Tensor)
+        assert kwargs[field_name] is original
+        assert (
+            id(original),
+            original.device,
+            original.dtype,
+            original.shape,
+            original.stride(),
+            original.requires_grad,
+        ) == expected[field_name]
+
+
 @pytest.mark.parametrize(
     ("x", "reason"),
     [
