@@ -6,7 +6,7 @@
 
 COMPLETED
 
-本报告对应 `383b767..238d87a` 的 Stage 1A 合同实现。实现严格限定在 `src/tarca/contracts/`、`tests/contracts/`、`docs/stage1_unified_data_contract.md` 和本报告，不提前实现 Stage 1 后续模块，不修改 Stage 0 基线，不新增真实训练、真实 adapter、真实干预执行、SCM、OT/DAS/DRO、金融实验或 hooks。
+本报告覆盖以 `383b767` 为基线的 Stage 1A 合同分支变更。实现严格限定在 `src/tarca/contracts/`、`tests/contracts/`、`docs/stage1_unified_data_contract.md` 和本报告，不提前实现 Stage 1 后续模块，不修改 Stage 0 基线，不新增真实训练、真实 adapter、真实干预执行、SCM、OT/DAS/DRO、金融实验或 hooks。
 
 ## B. 实现了什么
 
@@ -110,7 +110,7 @@ COMPLETED
 7. `uv run pytest -q`
    - 退出码：0
    - 结果：574 passed, 1 skipped。
-   - 总覆盖率：92.36%。
+   - 冻结的 Stage 0 覆盖率：91.17%。
 
 8. `uv run python -m compileall -q src tests`
    - 退出码：0
@@ -132,21 +132,25 @@ COMPLETED
     - 退出码：0
     - 结果：Overall status PASS；GPU/CUDA 按 Stage 0 CPU-only 预期 SKIP，其余 PASS。
 
-13. `git diff --check 383b767..HEAD`
+13. 静态类型检查
+    - 仓库未声明 mypy、pyright 或等价的静态类型检查入口，因此未虚构或临时新增类型门禁。
+
+14. `git diff --check 383b767..HEAD`
     - 退出码：0
     - 结果：无空白/补丁格式错误。
 
-14. `git diff --stat 383b767..HEAD`
+15. `git diff --stat 383b767..HEAD`
     - 结果：
-      `docs/stage1_unified_data_contract.md 329 | src/tarca/contracts/{__init__,adapters,arrow_schemas,artifacts,concepts,data,forecast,interventions,manifests,types,validation,version}.py 1582 | tests/contracts/* 3208 | 25 files changed, 5119 insertions(+)`
+      `26 files changed, 5299 insertions(+)`；文件均位于合同源码、合同测试、Stage 1 合同文档和本报告范围内。
 
-15. `git status --short`
-    - 结果：
-      `M README.md; M artifacts/stage0/STAGE0_IMPLEMENTATION_REPORT.md; M docs/TARCA_具体实施计划.md; D docs/TARCA_项目汇报书.md; M docs/TARCA_项目计划书.md; M docs/stage0_scope.md; M src/tarca/contracts/artifacts.py; M src/tarca/contracts/data.py; M src/tarca/contracts/manifests.py; M tests/test_operator_docs.py; ?? artifacts/stage1/`
+16. `git status --short`
+    - Stage 1 合同源码、测试、文档和本报告均已提交，无 Stage 1 未提交文件。
+    - 仅保留任务开始前已有的用户工作区变更：`README.md`、`artifacts/stage0/STAGE0_IMPLEMENTATION_REPORT.md`、`docs/TARCA_具体实施计划.md`、已删除的 `docs/TARCA_项目汇报书.md`、`docs/TARCA_项目计划书.md`、`docs/stage0_scope.md`、`tests/test_operator_docs.py`；这些文件未被本阶段提交。
 
 ## F. 算力结论
 
-- 实际执行环境：Windows 10，CPython 3.11.15，CPU-only PyTorch，12 logical cores / 6 physical cores，约 16.9 GB RAM，无 CUDA GPU。
+- 实际执行环境：Windows 10，CPython 3.11.15，CPU-only PyTorch，12 logical cores / 6 physical cores，15.75 GiB（约 16.9 GB）RAM，无 CUDA GPU，验证时 C 盘可用约 170 GiB。
+- 未启用峰值资源 profiler；并行审查期间的两次近似快照显示可用内存约 1.35–3.05 GiB，全部 CPU-only 门禁仍完成。
 - 本阶段可在普通日常电脑完成：是。
 - 是否需要租用 GPU/CPU 服务器：否。
 - 实际任务为 schema/validation/tests/docs 工作负载，未出现显存需求；CPU 与内存占用在本机可承受范围内。
@@ -162,14 +166,15 @@ COMPLETED
 ## H. 人工核对步骤
 
 1. 运行 `git diff --stat 383b767..HEAD`，确认修改仅限合同、测试、文档和本报告。
-2. 检查 `src/tarca/` 下不存在 `data/`、`models/`、`hooks/`、`scm/`、`training/`、`ot/`、`das/`、`dro/`、`financial/` 等禁区目录。
+2. 检查 `src/tarca/` 下不存在本阶段禁止的顶层 `data/`、`models/`、`concepts/`、`interventions/`、`localization/`、`robustness/`、`metrics/`，并确认没有新增 hooks、SCM、training、OT、DAS、DRO 或 financial 实现。
 3. 运行 `uv lock --check`。
-4. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`，预期 414 passed。
-5. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`，预期 414 passed 且合同覆盖率 ≥ 80%。
-6. 运行 `uv run pytest -q`，预期 574 passed, 1 skipped。
-7. 运行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pre-commit run --all-files`、`uv run python scripts/doctor.py`，预期全部通过或按 Stage 0 CPU-only 显示 GPU/CUDA SKIP。
-8. 打开 `docs/stage1_unified_data_contract.md`，逐项核对字段名、`sha256:` 哈希格式、`strict=True`、Arrow schema、ArtifactLayout 边界。
-9. 在 Python REPL 构造一个合法 `WindowBatch`，再分别注入 NaN、naive datetime、错误 mask、`meta` tensor，确认立即 `ValueError`。
-10. 构造 `ForecastDistribution` 的 `scale=0`、quantile crossing、`meta` tensor，确认立即报错。
-11. 在临时目录写入并读回最小 Parquet，确认 schema metadata 中版本为 `1.0.0`。
-12. 通读本报告，确认没有把“合同实现通过”夸大成“方法验证完成”。
+4. 运行字面量命令 `uv run pytest tests/contracts -q`；预期 414 个行为测试全部通过，但进程因冻结的 `--cov=tarca.stage0` 对 focused 测试收集不到覆盖数据而退出 1。
+5. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`，预期 414 passed、退出 0。
+6. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`，预期 414 passed 且合同覆盖率 ≥ 80%。
+7. 运行 `uv run pytest -q`，预期 574 passed, 1 skipped。
+8. 运行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pre-commit run --all-files`、`uv run python scripts/doctor.py`，预期全部通过或按 Stage 0 CPU-only 显示 GPU/CUDA SKIP。
+9. 打开 `docs/stage1_unified_data_contract.md`，逐项核对字段名、`sha256:` 哈希格式、`strict=True`、Arrow schema、ArtifactLayout 边界。
+10. 在 Python REPL 构造一个合法 `WindowBatch`，记录每个输入 tensor 的 `id`、`is`、device、dtype、shape、stride、`requires_grad`，再分别注入 NaN、naive datetime、错误 mask、`meta` tensor；确认立即 `ValueError` 且输入属性未变化。
+11. 构造 `ForecastDistribution` 的 `scale=0`、quantile crossing、`meta` tensor，确认立即报错。
+12. 在临时目录写入并读回最小 Parquet，确认 schema metadata 中版本为 `1.0.0`。
+13. 通读本报告，确认没有把“合同实现通过”夸大成“方法验证完成”。
