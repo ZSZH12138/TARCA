@@ -14,7 +14,7 @@ COMPLETED
 
 - 实现 `WindowBatch` 冻结 dataclass，字段名与权威合同一致：`x_observed_mask`、`y_observed_mask`、`input_feature_names`。
 - 对 `x`、`y`、`observed_covariates`、`known_future_covariates`、mask、`regime`、窗口 ID、名称、UTC 时间边界、`forecast_time`、metadata 执行 fail-fast 校验。
-- 明确拒绝 `meta` tensor，并在非法输入路径上保持 tensor identity/device/dtype/shape/stride/requires_grad 不变。
+- 明确拒绝 `meta` tensor，并将 locked Torch 不支持 finite-validation 的 sparse/non-strided tensor 稳定拒绝；非法输入路径保持 tensor identity/device/dtype/shape/stride/requires_grad 不变。
 
 ### 2) 分布输出契约
 
@@ -91,25 +91,25 @@ COMPLETED
 
 3. `uv run pytest tests/contracts/test_window_batch.py -q -o addopts='--strict-config --strict-markers --no-cov'`
    - 退出码：0
-   - 结果：40 passed（在 `238d87a` 后针对 meta 修复复跑）。
+   - 结果：45 passed（包含 meta、sparse/non-strided 及 dense 后端异常分类回归）。
 
 4. `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`
    - 退出码：0
-   - 结果：414 passed。
+   - 结果：427 passed。
 
 5. `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`
    - 退出码：0
-   - 结果：414 passed。
-   - 合同覆盖率：93.47%。
+   - 结果：427 passed。
+   - 合同覆盖率：93.14%。
 
 6. `uv run pytest tests/contracts -q`
    - 退出码：1
-   - 结果：414 passed，但失败原因为冻结的 Stage 0 覆盖 addopts 仍只统计 `tarca.stage0`，导致 focused 合同集 coverage=0.00%。
+   - 结果：427 passed，但失败原因为冻结的 Stage 0 覆盖 addopts 仍只统计 `tarca.stage0`，导致 focused 合同集 coverage=0.00%。
    - 说明：这是现有 Stage 0 覆盖门禁与 focused Stage 1 合同测试之间的配置限制；未改动该基线配置。
 
 7. `uv run pytest -q`
    - 退出码：0
-   - 结果：574 passed, 1 skipped。
+   - 结果：587 passed, 1 skipped。
    - 冻结的 Stage 0 覆盖率：91.17%。
 
 8. `uv run python -m compileall -q src tests`
@@ -141,7 +141,7 @@ COMPLETED
 
 15. `git diff --stat 383b767..HEAD`
     - 结果：
-      `26 files changed, 5299 insertions(+)`；文件均位于合同源码、合同测试、Stage 1 合同文档和本报告范围内。
+      `26 files changed, 5592 insertions(+)`；文件均位于合同源码、合同测试、Stage 1 合同文档和本报告范围内。
 
 16. `git status --short`
     - Stage 1 合同源码、测试、文档和本报告均已提交，无 Stage 1 未提交文件。
@@ -157,7 +157,7 @@ COMPLETED
 
 ## G. 已知限制
 
-- `frozen=True` 只能冻结 dataclass 字段绑定，不能阻止用户对已传入 tensor 做原地修改。
+- `frozen=True` 只能冻结 dataclass 字段绑定，不能阻止用户对已传入 tensor 做原地修改；locked Torch 不支持 finite-validation 的 sparse/non-strided tensor 会 fail-closed，而不是获得隐式支持。
 - `ForecastModelAdapter` 是静态 `Protocol`，不提供运行时签名校验或真实行为保证。
 - `1.0.0` schema 目前只被测试消费，尚未被真实数据生产链路或真实 adapter 消费。
 - 本阶段只实现合同与验证，不证明 TARCA 方法本身的科学有效性、金融有效性或因果有效性。
@@ -168,13 +168,13 @@ COMPLETED
 1. 运行 `git diff --stat 383b767..HEAD`，确认修改仅限合同、测试、文档和本报告。
 2. 检查 `src/tarca/` 下不存在本阶段禁止的顶层 `data/`、`models/`、`concepts/`、`interventions/`、`localization/`、`robustness/`、`metrics/`，并确认没有新增 hooks、SCM、training、OT、DAS、DRO 或 financial 实现。
 3. 运行 `uv lock --check`。
-4. 运行字面量命令 `uv run pytest tests/contracts -q`；预期 414 个行为测试全部通过，但进程因冻结的 `--cov=tarca.stage0` 对 focused 测试收集不到覆盖数据而退出 1。
-5. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`，预期 414 passed、退出 0。
-6. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`，预期 414 passed 且合同覆盖率 ≥ 80%。
-7. 运行 `uv run pytest -q`，预期 574 passed, 1 skipped。
+4. 运行字面量命令 `uv run pytest tests/contracts -q`；预期 427 个行为测试全部通过，但进程因冻结的 `--cov=tarca.stage0` 对 focused 测试收集不到覆盖数据而退出 1。
+5. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`，预期 427 passed、退出 0。
+6. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`，预期 427 passed 且合同覆盖率 ≥ 80%。
+7. 运行 `uv run pytest -q`，预期 587 passed, 1 skipped。
 8. 运行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pre-commit run --all-files`、`uv run python scripts/doctor.py`，预期全部通过或按 Stage 0 CPU-only 显示 GPU/CUDA SKIP。
 9. 打开 `docs/stage1_unified_data_contract.md`，逐项核对字段名、`sha256:` 哈希格式、`strict=True`、Arrow schema、ArtifactLayout 边界。
-10. 在 Python REPL 构造一个合法 `WindowBatch`，记录每个输入 tensor 的 `id`、`is`、device、dtype、shape、stride、`requires_grad`，再分别注入 NaN、naive datetime、错误 mask、`meta` tensor；确认立即 `ValueError` 且输入属性未变化。
-11. 构造 `ForecastDistribution` 的 `scale=0`、quantile crossing、`meta` tensor，确认立即报错。
+10. 在 Python REPL 构造一个合法 `WindowBatch`，记录每个输入 tensor 的 `id`、`is`、device、dtype、shape、stride、`requires_grad`，再分别注入 NaN、naive datetime、错误 mask、`meta` tensor、后端不支持 finite-validation 的 sparse tensor；确认立即 `ValueError` 且输入属性未变化。
+11. 构造 `ForecastDistribution` 的 `scale=0`、quantile crossing、`meta` tensor 和后端不支持 finite-validation 的 sparse tensor，确认立即报错。
 12. 在临时目录写入并读回最小 Parquet，确认 schema metadata 中版本为 `1.0.0`。
 13. 通读本报告，确认没有把“合同实现通过”夸大成“方法验证完成”。
