@@ -166,6 +166,8 @@ def _validate_float_tensor(tensor: Tensor, field_name: str) -> None:
         raise ValueError(f"{field_name}: expected a torch.Tensor")
     if not torch.is_floating_point(tensor):
         raise ValueError(f"{field_name}: expected a floating tensor")
+    if tensor.device.type == "meta":
+        raise ValueError(f"{field_name}: expected a materialized non-meta tensor")
     if not bool(torch.isfinite(tensor).all()):
         raise ValueError(f"{field_name}: values must be finite")
 
@@ -229,6 +231,8 @@ def _validate_regime(regime: Tensor | None, batch_size: int, device: torch.devic
         raise ValueError("regime: expected shape [B]")
     if regime.dtype == torch.bool or not _is_integer_dtype(regime.dtype):
         raise ValueError("regime: expected an integer dtype")
+    if regime.device.type == "meta":
+        raise ValueError("regime: expected a materialized non-meta tensor")
     if regime.device != device:
         raise ValueError("regime: device must match x")
     if not bool(torch.isfinite(regime).all()):

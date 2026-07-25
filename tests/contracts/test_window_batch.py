@@ -229,6 +229,48 @@ def test_window_batch_rejection_preserves_every_input_tensor_unchanged() -> None
 
 
 @pytest.mark.parametrize(
+    ("field_name", "tensor"),
+    [
+        ("x", torch.ones((2, 3, 2), device="meta", requires_grad=True)),
+        ("y", torch.ones((2, 2, 1), device="meta", requires_grad=True)),
+        (
+            "observed_covariates",
+            torch.ones((2, 3, 1), device="meta", requires_grad=True),
+        ),
+        ("regime", torch.ones(2, dtype=torch.int64, device="meta")),
+    ],
+)
+def test_window_batch_rejects_unmaterialized_tensors_without_changing_them(
+    field_name: str, tensor: torch.Tensor
+) -> None:
+    kwargs = make_valid_window_batch_kwargs(**{field_name: tensor})
+    expected = (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.stride(),
+        tensor.requires_grad,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{field_name}: expected a materialized non-meta tensor",
+    ):
+        WindowBatch(**kwargs)
+
+    assert kwargs[field_name] is tensor
+    assert (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.stride(),
+        tensor.requires_grad,
+    ) == expected
+
+
+@pytest.mark.parametrize(
     ("x", "reason"),
     [
         (torch.ones((2, 3), dtype=torch.float32), r"x: expected rank 3"),
