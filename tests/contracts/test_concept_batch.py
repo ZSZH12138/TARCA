@@ -22,6 +22,17 @@ def _valid_mask_tensor() -> torch.Tensor:
     ).transpose(0, 1)
 
 
+def _sparse_values_tensor() -> torch.Tensor:
+    tensor = torch.sparse_coo_tensor(
+        torch.tensor([[0], [0]], dtype=torch.int64),
+        torch.ones(1, dtype=torch.float64),
+        (2, 3),
+        check_invariants=True,
+    )
+    tensor.requires_grad_(True)
+    return tensor
+
+
 def _valid_concept_kwargs(**overrides: object) -> dict[str, object]:
     kwargs: dict[str, object] = {
         "values": _values_tensor(),
@@ -59,6 +70,37 @@ def _assert_unchanged(
         tensor.requires_grad,
     ) == properties
     assert torch.equal(tensor.detach(), values)
+
+
+def _sparse_snapshot(
+    tensor: torch.Tensor,
+) -> tuple[tuple[object, ...], torch.Tensor, torch.Tensor]:
+    properties = (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.requires_grad,
+        tensor.layout,
+    )
+    return properties, tensor._indices().clone(), tensor._values().detach().clone()
+
+
+def _assert_sparse_unchanged(
+    tensor: torch.Tensor,
+    snapshot: tuple[tuple[object, ...], torch.Tensor, torch.Tensor],
+) -> None:
+    properties, indices, values = snapshot
+    assert (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.requires_grad,
+        tensor.layout,
+    ) == properties
+    assert torch.equal(tensor._indices(), indices)
+    assert torch.equal(tensor._values().detach(), values)
 
 
 def test_concept_batch_has_exact_frozen_field_surface() -> None:
@@ -124,6 +166,16 @@ def test_concept_batch_preserves_both_tensors_on_rejection() -> None:
 def test_concept_batch_rejects_invalid_values(values: object) -> None:
     with pytest.raises(ValueError, match=r"values"):
         ConceptBatch(**_valid_concept_kwargs(values=values))
+
+
+def test_concept_batch_fails_closed_when_sparse_values_cannot_be_validated() -> None:
+    values = _sparse_values_tensor()
+    snapshot = _sparse_snapshot(values)
+
+    with pytest.raises(ValueError, match=r"values: values must support finite validation"):
+        ConceptBatch(**_valid_concept_kwargs(values=values))
+
+    _assert_sparse_unchanged(values, snapshot)
 
 
 @pytest.mark.parametrize(

@@ -29,6 +29,17 @@ def _samples_tensor() -> torch.Tensor:
     return tensor
 
 
+def _sparse_tensor(shape: tuple[int, ...]) -> torch.Tensor:
+    tensor = torch.sparse_coo_tensor(
+        torch.zeros((len(shape), 1), dtype=torch.int64),
+        torch.ones(1, dtype=torch.float64),
+        shape,
+        check_invariants=True,
+    )
+    tensor.requires_grad_(True)
+    return tensor
+
+
 def _valid_forecast_kwargs(**overrides: object) -> dict[str, object]:
     kwargs: dict[str, object] = {
         "mean": _rank_three_tensor(),
@@ -85,6 +96,37 @@ def _assert_unchanged(
         tensor.requires_grad,
     ) == properties
     assert torch.equal(tensor.detach(), values)
+
+
+def _sparse_snapshot(
+    tensor: torch.Tensor,
+) -> tuple[tuple[object, ...], torch.Tensor, torch.Tensor]:
+    properties = (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.requires_grad,
+        tensor.layout,
+    )
+    return properties, tensor._indices().clone(), tensor._values().detach().clone()
+
+
+def _assert_sparse_unchanged(
+    tensor: torch.Tensor,
+    snapshot: tuple[tuple[object, ...], torch.Tensor, torch.Tensor],
+) -> None:
+    properties, indices, values = snapshot
+    assert (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.requires_grad,
+        tensor.layout,
+    ) == properties
+    assert torch.equal(tensor._indices(), indices)
+    assert torch.equal(tensor._values().detach(), values)
 
 
 def test_forecast_distribution_has_exact_frozen_field_surface() -> None:
@@ -149,6 +191,39 @@ def test_forecast_distribution_preserves_every_tensor_on_rejection() -> None:
 def test_forecast_distribution_rejects_invalid_mean(mean: object, reason: str) -> None:
     with pytest.raises(ValueError, match=reason):
         ForecastDistribution(**_valid_forecast_kwargs(mean=mean))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "shape", "message"),
+    [
+        ("mean", (2, 3, 2), r"mean: values must support finite validation"),
+        ("scale", (2, 3, 2), r"scale: values must support finite validation"),
+        (
+            "quantiles",
+            (2, 3, 2),
+            r"quantiles\[0\.5\]: values must support finite validation",
+        ),
+        ("logits", (2, 3, 2, 4), r"logits: values must support finite validation"),
+        ("samples", (3, 2, 3, 2), r"samples: values must support finite validation"),
+    ],
+)
+def test_forecast_distribution_fails_closed_when_sparse_values_cannot_be_validated(
+    field_name: str,
+    shape: tuple[int, ...],
+    message: str,
+) -> None:
+    sparse = _sparse_tensor(shape)
+    snapshot = _sparse_snapshot(sparse)
+    kwargs = _valid_forecast_kwargs()
+    if field_name == "quantiles":
+        kwargs[field_name] = {0.5: sparse}
+    else:
+        kwargs[field_name] = sparse
+
+    with pytest.raises(ValueError, match=message):
+        ForecastDistribution(**kwargs)
+
+    _assert_sparse_unchanged(sparse, snapshot)
 
 
 @pytest.mark.parametrize(

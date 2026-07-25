@@ -41,7 +41,11 @@ def _validate_values(values: object) -> tuple[int, int]:
         raise ValueError("values: expected a floating tensor")
     if values.device.type == "meta":
         raise ValueError("values: values must be materialized and finite")
-    if not bool(torch.isfinite(values).all()):
+    try:
+        finite = bool(torch.isfinite(values).all())
+    except (NotImplementedError, RuntimeError) as error:
+        raise ValueError("values: values must support finite validation") from error
+    if not finite:
         raise ValueError("values: values must be finite")
     if values.ndim != 2:
         raise ValueError("values: expected rank 2 [B, K]")

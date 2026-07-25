@@ -66,7 +66,11 @@ def _validate_floating_tensor(value: object, field_name: str) -> Tensor:
         raise ValueError(f"{field_name}: expected a floating tensor")
     if value.device.type == "meta":
         raise ValueError(f"{field_name}: values must be materialized and finite")
-    if not bool(torch.isfinite(value).all()):
+    try:
+        finite = bool(torch.isfinite(value).all())
+    except (NotImplementedError, RuntimeError) as error:
+        raise ValueError(f"{field_name}: values must support finite validation") from error
+    if not finite:
         raise ValueError(f"{field_name}: values must be finite")
     return value
 
