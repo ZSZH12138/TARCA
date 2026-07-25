@@ -271,6 +271,84 @@ def test_window_batch_rejects_unmaterialized_tensors_without_changing_them(
 
 
 @pytest.mark.parametrize(
+    ("field_name", "shape"),
+    [
+        ("x", (2, 3, 2)),
+        ("y", (2, 2, 1)),
+    ],
+)
+def test_window_batch_rejects_sparse_float_tensors_with_a_field_error_without_changing_them(
+    field_name: str, shape: tuple[int, ...]
+) -> None:
+    tensor = torch.sparse_coo_tensor(
+        torch.zeros((len(shape), 1), dtype=torch.int64),
+        torch.ones(1, dtype=torch.float32),
+        size=shape,
+        requires_grad=True,
+        check_invariants=True,
+    )
+    kwargs = make_valid_window_batch_kwargs(**{field_name: tensor})
+    expected = (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.requires_grad,
+        tensor.layout,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{field_name}: values must support finite validation",
+    ):
+        WindowBatch(**kwargs)
+
+    assert kwargs[field_name] is tensor
+    assert (
+        id(tensor),
+        tensor.device,
+        tensor.dtype,
+        tensor.shape,
+        tensor.requires_grad,
+        tensor.layout,
+    ) == expected
+
+
+def test_window_batch_rejects_sparse_regime_with_a_field_error_without_changing_it() -> None:
+    regime = torch.sparse_coo_tensor(
+        torch.zeros((1, 1), dtype=torch.int64),
+        torch.ones(1, dtype=torch.int64),
+        size=(2,),
+        check_invariants=True,
+    )
+    kwargs = make_valid_window_batch_kwargs(regime=regime)
+    expected = (
+        id(regime),
+        regime.device,
+        regime.dtype,
+        regime.shape,
+        regime.requires_grad,
+        regime.layout,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"regime: values must support finite validation",
+    ):
+        WindowBatch(**kwargs)
+
+    assert kwargs["regime"] is regime
+    assert (
+        id(regime),
+        regime.device,
+        regime.dtype,
+        regime.shape,
+        regime.requires_grad,
+        regime.layout,
+    ) == expected
+
+
+@pytest.mark.parametrize(
     ("x", "reason"),
     [
         (torch.ones((2, 3), dtype=torch.float32), r"x: expected rank 3"),

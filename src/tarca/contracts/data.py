@@ -168,7 +168,11 @@ def _validate_float_tensor(tensor: Tensor, field_name: str) -> None:
         raise ValueError(f"{field_name}: expected a floating tensor")
     if tensor.device.type == "meta":
         raise ValueError(f"{field_name}: expected a materialized non-meta tensor")
-    if not bool(torch.isfinite(tensor).all()):
+    try:
+        finite = bool(torch.isfinite(tensor).all())
+    except (NotImplementedError, RuntimeError) as error:
+        raise ValueError(f"{field_name}: values must support finite validation") from error
+    if not finite:
         raise ValueError(f"{field_name}: values must be finite")
 
 
@@ -235,7 +239,11 @@ def _validate_regime(regime: Tensor | None, batch_size: int, device: torch.devic
         raise ValueError("regime: expected a materialized non-meta tensor")
     if regime.device != device:
         raise ValueError("regime: device must match x")
-    if not bool(torch.isfinite(regime).all()):
+    try:
+        finite = bool(torch.isfinite(regime).all())
+    except (NotImplementedError, RuntimeError) as error:
+        raise ValueError("regime: values must support finite validation") from error
+    if not finite:
         raise ValueError("regime: values must be finite")
 
 
