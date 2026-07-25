@@ -68,8 +68,12 @@ def _validate_floating_tensor(value: object, field_name: str) -> Tensor:
         raise ValueError(f"{field_name}: values must be materialized and finite")
     try:
         finite = bool(torch.isfinite(value).all())
-    except (NotImplementedError, RuntimeError) as error:
+    except NotImplementedError as error:
         raise ValueError(f"{field_name}: values must support finite validation") from error
+    except RuntimeError as error:
+        if value.layout != torch.strided:
+            raise ValueError(f"{field_name}: values must support finite validation") from error
+        raise
     if not finite:
         raise ValueError(f"{field_name}: values must be finite")
     return value

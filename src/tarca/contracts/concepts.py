@@ -43,8 +43,12 @@ def _validate_values(values: object) -> tuple[int, int]:
         raise ValueError("values: values must be materialized and finite")
     try:
         finite = bool(torch.isfinite(values).all())
-    except (NotImplementedError, RuntimeError) as error:
+    except NotImplementedError as error:
         raise ValueError("values: values must support finite validation") from error
+    except RuntimeError as error:
+        if values.layout != torch.strided:
+            raise ValueError("values: values must support finite validation") from error
+        raise
     if not finite:
         raise ValueError("values: values must be finite")
     if values.ndim != 2:

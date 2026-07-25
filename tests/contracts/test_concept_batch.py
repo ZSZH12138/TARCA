@@ -178,6 +178,22 @@ def test_concept_batch_fails_closed_when_sparse_values_cannot_be_validated() -> 
     _assert_sparse_unchanged(values, snapshot)
 
 
+def test_concept_batch_preserves_dense_finite_validation_runtime_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = RuntimeError("dense concept backend failure")
+
+    def fail_finite_validation(_value: object) -> None:
+        raise sentinel
+
+    monkeypatch.setattr(torch, "isfinite", fail_finite_validation)
+
+    with pytest.raises(RuntimeError) as captured:
+        ConceptBatch(**_valid_concept_kwargs())
+
+    assert captured.value is sentinel
+
+
 @pytest.mark.parametrize(
     "valid_mask",
     [

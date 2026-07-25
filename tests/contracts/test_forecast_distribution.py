@@ -226,6 +226,22 @@ def test_forecast_distribution_fails_closed_when_sparse_values_cannot_be_validat
     _assert_sparse_unchanged(sparse, snapshot)
 
 
+def test_forecast_distribution_preserves_dense_finite_validation_runtime_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = RuntimeError("dense forecast backend failure")
+
+    def fail_finite_validation(_value: object) -> None:
+        raise sentinel
+
+    monkeypatch.setattr(torch, "isfinite", fail_finite_validation)
+
+    with pytest.raises(RuntimeError) as captured:
+        ForecastDistribution(**_valid_forecast_kwargs())
+
+    assert captured.value is sentinel
+
+
 @pytest.mark.parametrize(
     "scale",
     [
