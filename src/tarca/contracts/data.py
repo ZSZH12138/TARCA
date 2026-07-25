@@ -22,13 +22,13 @@ class WindowBatch:
     y: Tensor | None
     observed_covariates: Tensor | None
     known_future_covariates: Tensor | None
-    x_mask: Tensor | None
-    y_mask: Tensor | None
+    x_observed_mask: Tensor | None
+    y_observed_mask: Tensor | None
     observed_covariates_mask: Tensor | None
     known_future_covariates_mask: Tensor | None
     regime: Tensor | None
     window_id: tuple[str, ...]
-    feature_names: tuple[str, ...]
+    input_feature_names: tuple[str, ...]
     target_names: tuple[str, ...]
     observed_covariate_names: tuple[str, ...]
     known_future_covariate_names: tuple[str, ...]
@@ -81,13 +81,13 @@ class WindowBatch:
                 self.known_future_covariate_names, "known_future_covariate_names"
             )
 
-        _validate_names(self.feature_names, "feature_names", feature_count)
+        _validate_names(self.input_feature_names, "input_feature_names", feature_count)
         if set(self.target_names).intersection(self.known_future_covariate_names):
             raise ValueError("target_names and known_future_covariate_names must be disjoint")
         _validate_window_ids(self.window_id, batch_size)
 
-        _validate_mask(self.x_mask, self.x, "x_mask")
-        _validate_mask(self.y_mask, self.y, "y_mask")
+        _validate_mask(self.x_observed_mask, self.x, "x_observed_mask")
+        _validate_mask(self.y_observed_mask, self.y, "y_observed_mask")
         _validate_mask(
             self.observed_covariates_mask,
             self.observed_covariates,
@@ -112,7 +112,9 @@ class WindowBatch:
         _validate_temporal_order(boundary_times, forecast_time, horizon)
         object.__setattr__(self, "window_id", _normalize_string_tuple(self.window_id, "window_id"))
         object.__setattr__(
-            self, "feature_names", _normalize_string_tuple(self.feature_names, "feature_names")
+            self,
+            "input_feature_names",
+            _normalize_string_tuple(self.input_feature_names, "input_feature_names"),
         )
         object.__setattr__(
             self, "target_names", _normalize_string_tuple(self.target_names, "target_names")

@@ -32,6 +32,24 @@ def test_contract_primitives_expose_the_versioned_str_enums() -> None:
     assert [member.value for member in RunStatus] == ["pending", "running", "completed", "failed"]
 
 
+@pytest.mark.parametrize(
+    ("current_field", "legacy_field"),
+    [
+        ("x_observed_mask", "x_mask"),
+        ("y_observed_mask", "y_mask"),
+        ("input_feature_names", "feature_names"),
+    ],
+)
+def test_window_batch_rejects_legacy_public_field_names(
+    current_field: str, legacy_field: str
+) -> None:
+    kwargs = make_valid_window_batch_kwargs()
+    kwargs[legacy_field] = kwargs.pop(current_field)
+
+    with pytest.raises(TypeError, match=legacy_field):
+        WindowBatch(**kwargs)
+
+
 def test_metadata_validation_accepts_json_values_and_preserves_tensor_identity_for_rejection() -> (
     None
 ):
@@ -118,8 +136,8 @@ def test_window_batch_preserves_every_provided_tensor_unchanged() -> None:
         "y",
         "observed_covariates",
         "known_future_covariates",
-        "x_mask",
-        "y_mask",
+        "x_observed_mask",
+        "y_observed_mask",
         "observed_covariates_mask",
         "known_future_covariates_mask",
         "regime",
@@ -169,8 +187,8 @@ def test_window_batch_rejection_preserves_every_input_tensor_unchanged() -> None
         "y",
         "observed_covariates",
         "known_future_covariates",
-        "x_mask",
-        "y_mask",
+        "x_observed_mask",
+        "y_observed_mask",
         "observed_covariates_mask",
         "known_future_covariates_mask",
         "regime",
@@ -246,7 +264,7 @@ def test_window_batch_rejects_mismatched_tensor_dimensions(overrides: dict[str, 
 def test_window_batch_derives_horizon_from_forecast_time_when_targets_are_absent() -> None:
     kwargs = make_valid_window_batch_kwargs(
         y=None,
-        y_mask=None,
+        y_observed_mask=None,
         target_names=(),
         known_future_covariates=None,
         known_future_covariates_mask=None,
@@ -261,7 +279,7 @@ def test_window_batch_rejects_missing_or_contradictory_horizon() -> None:
         WindowBatch(
             **make_valid_window_batch_kwargs(
                 y=None,
-                y_mask=None,
+                y_observed_mask=None,
                 target_names=(),
                 known_future_covariates=None,
                 known_future_covariates_mask=None,
@@ -283,7 +301,7 @@ def test_window_batch_rejects_missing_or_contradictory_horizon() -> None:
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"feature_names": ("signal_a", "signal_a")},
+        {"input_feature_names": ("signal_a", "signal_a")},
         {"target_names": ("target", "extra")},
         {"known_future_covariate_names": ("target",)},
         {"window_id": ("window-a", "window-a")},
@@ -298,20 +316,20 @@ def test_window_batch_rejects_invalid_names_and_window_ids(overrides: dict[str, 
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"x_mask": None},
-        {"x_mask": torch.ones((2, 3, 2), dtype=torch.int64)},
-        {"x_mask": torch.ones((2, 3, 1), dtype=torch.bool)},
+        {"x_observed_mask": None},
+        {"x_observed_mask": torch.ones((2, 3, 2), dtype=torch.int64)},
+        {"x_observed_mask": torch.ones((2, 3, 1), dtype=torch.bool)},
         {
             "y": None,
             "target_names": (),
-            "y_mask": torch.ones((2, 2, 1), dtype=torch.bool),
+            "y_observed_mask": torch.ones((2, 2, 1), dtype=torch.bool),
         },
     ],
 )
 def test_window_batch_enforces_mask_presence_dtype_and_shape(overrides: dict[str, object]) -> None:
-    if overrides == {"x_mask": None}:
+    if overrides == {"x_observed_mask": None}:
         batch = WindowBatch(**make_valid_window_batch_kwargs(**overrides))
-        assert batch.x_mask is None
+        assert batch.x_observed_mask is None
     else:
         with pytest.raises(ValueError, match=r"mask"):
             WindowBatch(**make_valid_window_batch_kwargs(**overrides))
@@ -324,7 +342,7 @@ def test_window_batch_rejects_nonfinite_values_even_when_masked_out() -> None:
     mask = torch.ones_like(x, dtype=torch.bool)
     mask[0, 0, 0] = False
     with pytest.raises(ValueError, match=r"x: values must be finite"):
-        WindowBatch(**make_valid_window_batch_kwargs(x=x, x_mask=mask))
+        WindowBatch(**make_valid_window_batch_kwargs(x=x, x_observed_mask=mask))
 
 
 @pytest.mark.parametrize(
