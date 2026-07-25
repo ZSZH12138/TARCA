@@ -348,6 +348,30 @@ def test_window_batch_rejects_sparse_regime_with_a_field_error_without_changing_
     ) == expected
 
 
+@pytest.mark.parametrize("field_name", ["x", "regime"])
+def test_window_batch_preserves_dense_finite_validation_backend_errors(
+    monkeypatch: pytest.MonkeyPatch, field_name: str
+) -> None:
+    kwargs = make_valid_window_batch_kwargs()
+    target = kwargs[field_name]
+    assert isinstance(target, torch.Tensor)
+    assert target.layout == torch.strided
+    sentinel = RuntimeError(f"sentinel {field_name} finite validation failure")
+    original_isfinite = torch.isfinite
+
+    def raise_for_target(tensor: torch.Tensor) -> torch.Tensor:
+        if tensor is target:
+            raise sentinel
+        return original_isfinite(tensor)
+
+    monkeypatch.setattr(torch, "isfinite", raise_for_target)
+
+    with pytest.raises(RuntimeError) as caught:
+        WindowBatch(**kwargs)
+
+    assert caught.value is sentinel
+
+
 @pytest.mark.parametrize(
     ("x", "reason"),
     [
