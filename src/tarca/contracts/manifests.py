@@ -217,7 +217,7 @@ def validate_intervention_pair_partitions(
 ) -> None:
     """Reject window or pair identities allocated across pair partitions."""
 
-    if isinstance(pairs, (str, bytes)):
+    if isinstance(pairs, str | bytes):
         raise TypeError("pairs must be an iterable of InterventionPair objects")
     try:
         normalized_pairs = tuple(pairs)
@@ -268,7 +268,7 @@ def _compute_pair_id(
 
 
 def _normalize_ids(values: Iterable[str], field_name: str) -> tuple[str, ...]:
-    if isinstance(values, (str, bytes)):
+    if isinstance(values, str | bytes):
         raise TypeError(f"{field_name} must be an iterable of IDs, not a bare string")
     try:
         normalized = tuple(values)

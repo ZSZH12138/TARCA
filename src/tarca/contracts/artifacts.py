@@ -119,7 +119,7 @@ def _coerce_filesystem_root(filesystem_root: str | os.PathLike[str]) -> Path:
         raise ValueError("filesystem_root must not be empty")
     if isinstance(filesystem_root, bytes) or not isinstance(
         filesystem_root,
-        (str, os.PathLike),
+        str | os.PathLike,
     ):
         raise TypeError("filesystem_root must be a string or path-like object")
     try:

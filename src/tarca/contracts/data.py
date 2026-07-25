@@ -256,7 +256,7 @@ def _normalize_boundary_times(
     normalized: dict[str, tuple[datetime, ...]] = {}
     for field_name in fields:
         value = getattr(batch, field_name)
-        if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        if isinstance(value, str | bytes) or not isinstance(value, Sequence):
             raise ValueError(f"{field_name}: expected a datetime sequence")
         times = tuple(value)
         if len(times) != batch_size:
@@ -268,14 +268,14 @@ def _normalize_boundary_times(
 
 
 def _normalize_forecast_time(value: object, batch_size: int) -> tuple[tuple[datetime, ...], ...]:
-    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+    if isinstance(value, str | bytes) or not isinstance(value, Sequence):
         raise ValueError("forecast_time: expected a sequence of datetime sequences")
     samples = tuple(value)
     if len(samples) != batch_size:
         raise ValueError("forecast_time: expected one sequence per batch element")
     normalized: list[tuple[datetime, ...]] = []
     for sample_index, sample_times in enumerate(samples):
-        if isinstance(sample_times, (str, bytes)) or not isinstance(sample_times, Sequence):
+        if isinstance(sample_times, str | bytes) or not isinstance(sample_times, Sequence):
             raise ValueError(f"forecast_time[{sample_index}]: expected a datetime sequence")
         times = tuple(sample_times)
         for horizon_index, time in enumerate(times):
