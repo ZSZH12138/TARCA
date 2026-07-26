@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +45,27 @@ def _latent_inputs() -> dict[str, object]:
 
 def _generate_path() -> LatentConceptPath:
     return generate_latent_concepts(**_latent_inputs())  # type: ignore[arg-type]
+
+
+def _reconstruct_path(
+    path: LatentConceptPath,
+    **overrides: object,
+) -> LatentConceptPath:
+    fields: dict[str, object] = {
+        "trend": path.trend,
+        "scale": path.scale,
+        "trend_innovations": path.trend_innovations,
+        "scale_innovations": path.scale_innovations,
+        "regime_sequence": path.regime_sequence,
+        "trend_ar_coefficients": path.trend_ar_coefficients,
+        "scale_ar_coefficients": path.scale_ar_coefficients,
+        "initial_trend": path.initial_trend,
+        "initial_scale": path.initial_scale,
+    }
+    if hasattr(path, "intervention"):
+        fields["intervention"] = path.intervention
+    fields.update(overrides)
+    return LatentConceptPath(**fields)  # type: ignore[arg-type]
 
 
 def test_generate_latent_concepts_locks_shape_index_and_regime_specific_ar() -> None:
@@ -122,6 +143,54 @@ def test_direct_latent_path_construction_also_deep_freezes_arrays() -> None:
     assert np.array_equal(reconstructed.trend, source_trend)
     assert not np.shares_memory(reconstructed.trend, source_trend)
     assert not reconstructed.trend.flags.writeable
+
+
+@pytest.mark.parametrize(
+    ("field_name", "state_index"),
+    [
+        ("trend", 1),
+        ("trend", 2),
+        ("scale", 1),
+        ("scale", 2),
+    ],
+)
+def test_direct_construction_rejects_each_broken_recurrence_step(
+    field_name: str,
+    state_index: int,
+) -> None:
+    generated = _generate_path()
+    corrupted = getattr(generated, field_name).copy()
+    corrupted[state_index] += 1.0
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{field_name}.*state index {state_index}",
+    ):
+        _reconstruct_path(generated, **{field_name: corrupted})
+
+
+@pytest.mark.parametrize(
+    ("state_field", "initial_field"),
+    [
+        ("trend", "initial_trend"),
+        ("scale", "initial_scale"),
+    ],
+)
+def test_direct_construction_rejects_signed_zero_initial_mismatch(
+    state_field: str,
+    initial_field: str,
+) -> None:
+    inputs = _latent_inputs()
+    inputs["initial_trend"] = -0.0
+    inputs["initial_scale"] = -0.0
+    generated = generate_latent_concepts(**inputs)  # type: ignore[arg-type]
+    assert np.signbit(getattr(generated, state_field)[0])
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{initial_field}.*bitwise.*{state_field}\[0\]",
+    ):
+        _reconstruct_path(generated, **{initial_field: 0.0})
 
 
 def test_generation_is_bitwise_deterministic_for_identical_supplied_inputs() -> None:
@@ -417,6 +486,140 @@ def test_scale_replacement_changes_only_scale_and_preserves_trend_truth() -> Non
     assert np.array_equal(replaced.trend, base.trend)
     assert np.array_equal(replaced.trend_innovations, base.trend_innovations)
     assert np.array_equal(replaced.regime_sequence, base.regime_sequence)
+
+
+def test_replacement_records_immutable_auditable_intervention_provenance() -> None:
+    base = _generate_path()
+
+    replaced = replace_concept_at_origin(
+        base,
+        concept="trend",
+        origin_index=1,
+        source_value=-0.0,
+    )
+    provenance = replaced.intervention
+
+    assert provenance is not None
+    assert type(provenance).__name__ == "ConceptInterventionProvenance"
+    assert provenance.concept == "trend"
+    assert provenance.origin_index == 1
+    assert np.float64(provenance.base_value).tobytes() == base.trend[1].tobytes()
+    assert np.float64(provenance.source_value).tobytes() == np.float64(-0.0).tobytes()
+    with pytest.raises(FrozenInstanceError):
+        provenance.source_value = 4.0  # type: ignore[misc]
+
+
+def test_intervention_construction_reapplies_all_public_dtype_validation() -> None:
+    replaced = replace_concept_at_origin(
+        _generate_path(),
+        concept="trend",
+        origin_index=1,
+        source_value=10.0,
+    )
+
+    with pytest.raises(TypeError, match=r"trend.*float64"):
+        _reconstruct_path(
+            replaced,
+            trend=replaced.trend.astype(np.float32),
+        )
+    with pytest.raises(TypeError, match=r"regime_sequence.*int64"):
+        _reconstruct_path(
+            replaced,
+            regime_sequence=replaced.regime_sequence.astype(np.int32),
+        )
+    with pytest.raises(TypeError, match=r"trend_ar_coefficients.*float64"):
+        _reconstruct_path(
+            replaced,
+            trend_ar_coefficients=replaced.trend_ar_coefficients.astype(np.float32),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "state_index"),
+    [("trend", 2), ("scale", 1)],
+)
+def test_intervention_provenance_cannot_hide_any_other_broken_edge(
+    field_name: str,
+    state_index: int,
+) -> None:
+    replaced = replace_concept_at_origin(
+        _generate_path(),
+        concept="trend",
+        origin_index=1,
+        source_value=10.0,
+    )
+    corrupted = getattr(replaced, field_name).copy()
+    corrupted[state_index] += 1.0
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{field_name}.*state index {state_index}",
+    ):
+        _reconstruct_path(replaced, **{field_name: corrupted})
+
+
+@pytest.mark.parametrize(
+    ("provenance_field", "replacement", "error_match"),
+    [
+        ("base_value", 999.0, r"base_value.*trend.*state index 1"),
+        ("source_value", 999.0, r"source_value.*trend.*state index 1"),
+    ],
+)
+def test_intervention_provenance_cannot_forge_base_or_source_value(
+    provenance_field: str,
+    replacement: object,
+    error_match: str,
+) -> None:
+    replaced = replace_concept_at_origin(
+        _generate_path(),
+        concept="trend",
+        origin_index=1,
+        source_value=10.0,
+    )
+    assert replaced.intervention is not None
+    forged = replace(
+        replaced.intervention,
+        **{provenance_field: replacement},
+    )
+
+    with pytest.raises(ValueError, match=error_match):
+        _reconstruct_path(replaced, intervention=forged)
+
+
+def test_intervention_provenance_cannot_move_the_only_skipped_edge() -> None:
+    replaced = replace_concept_at_origin(
+        _generate_path(),
+        concept="trend",
+        origin_index=1,
+        source_value=10.0,
+    )
+    assert replaced.intervention is not None
+    forged = replace(
+        replaced.intervention,
+        origin_index=2,
+        base_value=float(replaced.trend[2]),
+        source_value=float(replaced.trend[2]),
+    )
+
+    with pytest.raises(ValueError, match=r"trend.*state index 1"):
+        _reconstruct_path(replaced, intervention=forged)
+
+
+def test_nested_concept_replacement_is_rejected() -> None:
+    intervened = replace_concept_at_origin(
+        _generate_path(),
+        concept="trend",
+        origin_index=1,
+        source_value=10.0,
+    )
+
+    with pytest.raises(ValueError, match=r"path.*prior intervention"):
+        replace_concept_at_origin(
+            intervened,
+            concept="scale",
+            origin_index=1,
+            source_value=8.0,
+        )
 
 
 @pytest.mark.parametrize("concept", ["trend", "scale"])

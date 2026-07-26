@@ -19,6 +19,51 @@ ScaleParameter: TypeAlias = float | NDArray[np.float64]
 
 
 @dataclass(frozen=True, slots=True)
+class ConceptInterventionProvenance:
+    """Auditable provenance for one structural replacement at a state index.
+
+    ``concept`` is exactly ``"trend"`` or ``"scale"``. ``origin_index`` indexes
+    the state path, not the transition arrays. ``base_value`` records the factual
+    value replaced at that index and ``source_value`` records the installed value;
+    both are finite float64-compatible reals whose signed-zero bits are preserved.
+    The record contains no arrays or randomness and is immutable.
+    """
+
+    concept: ConceptName
+    origin_index: int
+    base_value: float
+    source_value: float
+
+    def __post_init__(self) -> None:
+        if self.concept not in ("trend", "scale"):
+            raise ValueError(
+                f"intervention.concept: expected 'trend' or 'scale', got {self.concept!r}"
+            )
+        if isinstance(self.origin_index, bool) or not isinstance(
+            self.origin_index,
+            int | np.integer,
+        ):
+            raise TypeError("intervention.origin_index: expected an integer state index")
+        origin_index = int(self.origin_index)
+        if origin_index < 0:
+            raise ValueError(
+                "intervention.origin_index: expected a non-negative state index, "
+                f"got {origin_index}"
+            )
+        base_value = _finite_real(
+            self.base_value,
+            field_name="intervention.base_value",
+        )
+        source_value = _finite_real(
+            self.source_value,
+            field_name="intervention.source_value",
+        )
+        object.__setattr__(self, "origin_index", origin_index)
+        object.__setattr__(self, "base_value", base_value)
+        object.__setattr__(self, "source_value", source_value)
+
+
+@dataclass(frozen=True, slots=True)
 class LatentConceptPath:
     """Immutable truth record for two independent regime-specific AR paths.
 
@@ -28,9 +73,12 @@ class LatentConceptPath:
     ``t`` therefore obeys ``C[t+1] = coef[regime_sequence[t]] * C[t] +
     innovation[t]``. Coefficient arrays have matching float64 shape ``[R]``.
 
-    Every array is validated, copied, and made read-only. The two state arrays may
-    contain any finite real values, including non-positive scale states. This record
-    contains no random generator and constructing it consumes no random state.
+    Direct construction validates every recurrence step bitwise, then copies and
+    makes every array read-only. The two state arrays may contain any finite real
+    values, including non-positive scale states. ``replace_concept_at_origin``
+    separately validates its one explicit structural replacement and all natural
+    past/future recurrence steps. This record contains no random generator and
+    constructing it consumes no random state.
     """
 
     trend: NDArray[np.float64]
@@ -42,6 +90,7 @@ class LatentConceptPath:
     scale_ar_coefficients: NDArray[np.float64]
     initial_trend: float
     initial_scale: float
+    intervention: ConceptInterventionProvenance | None = None
 
     def __post_init__(self) -> None:
         trend = _copy_float64_vector(self.trend, field_name="trend")
@@ -79,19 +128,53 @@ class LatentConceptPath:
             regime_sequence,
             number_of_regimes=trend_coefficients.size,
         )
+        intervention = _validate_intervention_provenance(
+            self.intervention,
+            trend=trend,
+            scale=scale,
+            trend_innovations=trend_innovations,
+            scale_innovations=scale_innovations,
+            regime_sequence=regime_sequence,
+            trend_ar_coefficients=trend_coefficients,
+            scale_ar_coefficients=scale_coefficients,
+        )
 
         initial_trend = _finite_real(self.initial_trend, field_name="initial_trend")
         initial_scale = _finite_real(self.initial_scale, field_name="initial_scale")
-        if initial_trend != float(trend[0]):
-            raise ValueError(
-                "initial_trend: expected to equal trend[0], "
-                f"got {initial_trend} and {float(trend[0])}"
-            )
-        if initial_scale != float(scale[0]):
-            raise ValueError(
-                "initial_scale: expected to equal scale[0], "
-                f"got {initial_scale} and {float(scale[0])}"
-            )
+        _validate_initial_state(
+            initial_trend,
+            trend[0],
+            initial_field="initial_trend",
+            state_field="trend",
+        )
+        _validate_initial_state(
+            initial_scale,
+            scale[0],
+            initial_field="initial_scale",
+            state_field="scale",
+        )
+        _validate_ar_recurrence(
+            trend,
+            regime_sequence,
+            trend_coefficients,
+            trend_innovations,
+            field_name="trend",
+            allowed_discontinuity=_selected_incoming_edge(
+                intervention,
+                concept="trend",
+            ),
+        )
+        _validate_ar_recurrence(
+            scale,
+            regime_sequence,
+            scale_coefficients,
+            scale_innovations,
+            field_name="scale",
+            allowed_discontinuity=_selected_incoming_edge(
+                intervention,
+                concept="scale",
+            ),
+        )
 
         object.__setattr__(self, "trend", trend)
         object.__setattr__(self, "scale", scale)
@@ -102,6 +185,7 @@ class LatentConceptPath:
         object.__setattr__(self, "scale_ar_coefficients", scale_coefficients)
         object.__setattr__(self, "initial_trend", initial_trend)
         object.__setattr__(self, "initial_scale", initial_scale)
+        object.__setattr__(self, "intervention", intervention)
 
 
 def generate_latent_concepts(
@@ -226,6 +310,8 @@ def replace_concept_at_origin(
 
     if not isinstance(path, LatentConceptPath):
         raise TypeError("path: expected a LatentConceptPath")
+    if path.intervention is not None:
+        raise ValueError("path: expected a factual path without a prior intervention")
     if concept not in ("trend", "scale"):
         raise ValueError(f"concept: expected 'trend' or 'scale', got {concept!r}")
     if isinstance(origin_index, bool) or not isinstance(origin_index, int | np.integer):
@@ -244,6 +330,7 @@ def replace_concept_at_origin(
     target = trend if concept == "trend" else scale
     coefficients = path.trend_ar_coefficients if concept == "trend" else path.scale_ar_coefficients
     innovations = path.trend_innovations if concept == "trend" else path.scale_innovations
+    base_value = float(target[state_index])
     target[state_index] = replacement
     _replay_future_in_place(
         target,
@@ -267,6 +354,12 @@ def replace_concept_at_origin(
         ),
         initial_scale=(
             replacement if concept == "scale" and state_index == 0 else path.initial_scale
+        ),
+        intervention=ConceptInterventionProvenance(
+            concept=concept,
+            origin_index=state_index,
+            base_value=base_value,
+            source_value=replacement,
         ),
     )
 
@@ -355,11 +448,131 @@ def _replay_future_in_place(
     with np.errstate(over="ignore", invalid="ignore"):
         for time_index in range(origin_index, regimes.size):
             regime = int(regimes[time_index])
-            states[time_index + 1] = (
-                coefficients[regime] * states[time_index] + innovations[time_index]
+            states[time_index + 1] = _next_ar_state(
+                coefficients[regime],
+                states[time_index],
+                innovations[time_index],
             )
     if not np.all(np.isfinite(states)):
         raise ValueError(f"{field_name}: replayed state values must be finite")
+
+
+def _validate_intervention_provenance(
+    value: object,
+    *,
+    trend: NDArray[np.float64],
+    scale: NDArray[np.float64],
+    trend_innovations: NDArray[np.float64],
+    scale_innovations: NDArray[np.float64],
+    regime_sequence: NDArray[np.int64],
+    trend_ar_coefficients: NDArray[np.float64],
+    scale_ar_coefficients: NDArray[np.float64],
+) -> ConceptInterventionProvenance | None:
+    if value is None:
+        return None
+    if not isinstance(value, ConceptInterventionProvenance):
+        raise TypeError("intervention: expected ConceptInterventionProvenance or None")
+    if value.origin_index >= regime_sequence.size:
+        raise ValueError(
+            "intervention.origin_index: expected a state index in "
+            f"[0, {regime_sequence.size - 1}], got {value.origin_index}"
+        )
+
+    if value.concept == "trend":
+        states = trend
+        innovations = trend_innovations
+        coefficients = trend_ar_coefficients
+    else:
+        states = scale
+        innovations = scale_innovations
+        coefficients = scale_ar_coefficients
+    state_index = value.origin_index
+    if not _float64_bitwise_equal(value.source_value, states[state_index]):
+        raise ValueError(
+            "intervention.source_value: expected bitwise equality with "
+            f"{value.concept} state index {state_index}"
+        )
+    if state_index > 0:
+        transition_index = state_index - 1
+        regime = int(regime_sequence[transition_index])
+        expected_base = _next_ar_state(
+            coefficients[regime],
+            states[transition_index],
+            innovations[transition_index],
+        )
+        if not _float64_bitwise_equal(value.base_value, expected_base):
+            raise ValueError(
+                "intervention.base_value: expected bitwise equality with factual "
+                f"{value.concept} state index {state_index}"
+            )
+    return value
+
+
+def _selected_incoming_edge(
+    intervention: ConceptInterventionProvenance | None,
+    *,
+    concept: ConceptName,
+) -> int | None:
+    if (
+        intervention is not None
+        and intervention.concept == concept
+        and intervention.origin_index > 0
+    ):
+        return intervention.origin_index
+    return None
+
+
+def _validate_initial_state(
+    initial_state: float,
+    state_at_zero: np.float64,
+    *,
+    initial_field: str,
+    state_field: str,
+) -> None:
+    if not _float64_bitwise_equal(initial_state, state_at_zero):
+        raise ValueError(
+            f"{initial_field}: expected bitwise equality with {state_field}[0], "
+            f"got {initial_state} and {float(state_at_zero)}"
+        )
+
+
+def _validate_ar_recurrence(
+    states: NDArray[np.float64],
+    regimes: NDArray[np.int64],
+    coefficients: NDArray[np.float64],
+    innovations: NDArray[np.float64],
+    *,
+    field_name: str,
+    allowed_discontinuity: int | None = None,
+) -> None:
+    with np.errstate(over="ignore", invalid="ignore"):
+        for time_index in range(regimes.size):
+            state_index = time_index + 1
+            if state_index == allowed_discontinuity:
+                continue
+            regime = int(regimes[time_index])
+            expected_state = _next_ar_state(
+                coefficients[regime],
+                states[time_index],
+                innovations[time_index],
+            )
+            if not _float64_bitwise_equal(expected_state, states[state_index]):
+                raise ValueError(
+                    f"{field_name}: state index {state_index} does not satisfy "
+                    f"the regime-specific AR recurrence at transition index {time_index}"
+                )
+
+
+def _next_ar_state(
+    coefficient: np.float64,
+    current_state: np.float64,
+    innovation: np.float64,
+) -> np.float64:
+    return np.float64(coefficient * current_state + innovation)
+
+
+def _float64_bitwise_equal(left: float | np.float64, right: float | np.float64) -> bool:
+    return np.float64(left).tobytes() == np.float64(right).tobytes()
 
 
 def _copy_and_validate_coefficients(
