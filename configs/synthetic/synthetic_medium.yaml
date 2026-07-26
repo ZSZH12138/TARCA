@@ -1,0 +1,31 @@
+name: synthetic_medium
+D: 8
+L: 96
+H: 24
+regimes: 3
+true_delay: [1, 4]
+root_seed: 20260726
+burn_in: 384
+total_steps: 8192
+mc_samples_smoke: 128
+oracle_pairs_smoke: 8
+snr: medium
+concept_overlap: medium
+missing_rate: 0.05
+missingness_kind: mcar
+unseen_shift_kind: parameter_shift
+generation:
+  exogenous_dimensions: 2
+  transition_persistence: 0.96
+  trend_ar: 0.90
+  scale_ar: 0.86
+  nonlinear_strength: 0.20
+  nonlinear_lag: 2
+  spectral_radius_target: 0.82
+  shock_rate: 0.004
+  shock_scale: 0.75
+  scale_floor: 0.01
+  unseen_parameter_shift: 0.45
+normalization:
+  epsilon: 1.0e-8
+  fill_value: 0.0

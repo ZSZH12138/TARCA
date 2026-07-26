@@ -1,0 +1,31 @@
+name: synthetic_hard
+D: 16
+L: 192
+H: 48
+regimes: 4
+true_delay: [0, 8]
+root_seed: 20260727
+burn_in: 512
+total_steps: 12288
+mc_samples_smoke: 64
+oracle_pairs_smoke: 4
+snr: low
+concept_overlap: high
+missing_rate: 0.15
+missingness_kind: block
+unseen_shift_kind: parameter_shift
+generation:
+  exogenous_dimensions: 3
+  transition_persistence: 0.95
+  trend_ar: 0.88
+  scale_ar: 0.84
+  nonlinear_strength: 0.25
+  nonlinear_lag: 3
+  spectral_radius_target: 0.84
+  shock_rate: 0.008
+  shock_scale: 1.00
+  scale_floor: 0.01
+  unseen_parameter_shift: 0.60
+normalization:
+  epsilon: 1.0e-8
+  fill_value: 0.0

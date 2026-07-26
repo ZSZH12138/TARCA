@@ -1,0 +1,31 @@
+name: synthetic_easy
+D: 4
+L: 48
+H: 12
+regimes: 2
+true_delay: 2
+root_seed: 20260725
+burn_in: 256
+total_steps: 4096
+mc_samples_smoke: 256
+oracle_pairs_smoke: 16
+snr: high
+concept_overlap: low
+missing_rate: 0.0
+missingness_kind: none
+unseen_shift_kind: parameter_shift
+generation:
+  exogenous_dimensions: 1
+  transition_persistence: 0.97
+  trend_ar: 0.92
+  scale_ar: 0.88
+  nonlinear_strength: 0.15
+  nonlinear_lag: 1
+  spectral_radius_target: 0.80
+  shock_rate: 0.002
+  shock_scale: 0.50
+  scale_floor: 0.01
+  unseen_parameter_shift: 0.35
+normalization:
+  epsilon: 1.0e-8
+  fill_value: 0.0
