@@ -31,6 +31,9 @@ FORBIDDEN_TOP_LEVEL_MODULES = {
 AUTHORIZED_STAGE1_DATA_MODULES = {
     "data/__init__.py",
     "data/synthetic/__init__.py",
+    "data/synthetic/_validation_core.py",
+    "data/synthetic/_validation_integrity.py",
+    "data/synthetic/_validation_persistence.py",
     "data/synthetic/counterfactual_oracle.py",
     "data/synthetic/dataset_builder.py",
     "data/synthetic/latent_concepts.py",
