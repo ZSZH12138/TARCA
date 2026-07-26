@@ -103,9 +103,9 @@ COMPLETED
    - 合同覆盖率：93.14%。
 
 6. `uv run pytest tests/contracts -q`
-   - 退出码：1
-   - 结果：427 passed，但失败原因为冻结的 Stage 0 覆盖 addopts 仍只统计 `tarca.stage0`，导致 focused 合同集 coverage=0.00%。
-   - 说明：这是现有 Stage 0 覆盖门禁与 focused Stage 1 合同测试之间的配置限制；未改动该基线配置。
+   - 退出码：0（2026-07-26 复核）
+   - 结果：427 passed，合同覆盖率 93.14%。
+   - 说明：冻结的 Stage 0 覆盖配置 `--cov=tarca.stage0` 仍会在当前 pinned toolchain 下发出 “module not imported / no data was collected” 警告，但不会使该 focused 合同命令失败；未改动该基线配置。
 
 7. `uv run pytest -q`
    - 退出码：0
@@ -161,14 +161,14 @@ COMPLETED
 - `ForecastModelAdapter` 是静态 `Protocol`，不提供运行时签名校验或真实行为保证。
 - `1.0.0` schema 目前只被测试消费，尚未被真实数据生产链路或真实 adapter 消费。
 - 本阶段只实现合同与验证，不证明 TARCA 方法本身的科学有效性、金融有效性或因果有效性。
-- `uv run pytest tests/contracts -q` 的 literal focused 命令仍受冻结 Stage 0 覆盖 addopts 影响而 exit 1；这是基线配置限制，不是合同实现失败。
+- `uv run pytest tests/contracts -q` 在 2026-07-26 复核时 exit 0，但仍会因冻结的 Stage 0 覆盖配置发出 `tarca.stage0` 未导入与无覆盖数据警告；这属于基线配置噪声，不是合同实现失败。
 
 ## H. 人工核对步骤
 
 1. 运行 `git diff --stat 383b767..HEAD`，确认修改仅限合同、测试、文档和本报告。
 2. 检查 `src/tarca/` 下不存在本阶段禁止的顶层 `data/`、`models/`、`concepts/`、`interventions/`、`localization/`、`robustness/`、`metrics/`，并确认没有新增 hooks、SCM、training、OT、DAS、DRO 或 financial 实现。
 3. 运行 `uv lock --check`。
-4. 运行字面量命令 `uv run pytest tests/contracts -q`；预期 427 个行为测试全部通过，但进程因冻结的 `--cov=tarca.stage0` 对 focused 测试收集不到覆盖数据而退出 1。
+4. 运行字面量命令 `uv run pytest tests/contracts -q`；在 2026-07-26 复核时预期 427 个行为测试全部通过、退出 0，但会看到冻结的 `--cov=tarca.stage0` 带来的 coverage warning。
 5. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`，预期 427 passed、退出 0。
 6. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`，预期 427 passed 且合同覆盖率 ≥ 80%。
 7. 运行 `uv run pytest -q`，预期 587 passed, 1 skipped。
