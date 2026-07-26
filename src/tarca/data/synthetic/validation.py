@@ -9,6 +9,7 @@ import stat
 import time
 from dataclasses import fields
 from statistics import NormalDist
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -164,7 +165,7 @@ def _available_memory() -> int:
         return 0
 
     class MemoryStatus(ctypes.Structure):
-        _fields_ = [
+        _fields_: ClassVar[list[tuple[str, object]]] = [
             ("length", ctypes.c_ulong),
             ("load", ctypes.c_ulong),
             ("total_physical", ctypes.c_ulonglong),

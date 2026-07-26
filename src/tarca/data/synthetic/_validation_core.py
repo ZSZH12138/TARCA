@@ -59,7 +59,7 @@ def _split_boundaries(total_steps: int) -> tuple[int, int, int, int, int]:
 
 
 def _number(value: object, name: str, signed: bool = False) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise TypeError(f"{name}: expected finite real")
     result = float(value)
     if not math.isfinite(result) or (result < 0.0 and not signed):
