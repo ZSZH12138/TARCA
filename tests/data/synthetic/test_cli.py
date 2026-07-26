@@ -66,6 +66,24 @@ def test_repository_path_rejects_symlink_component(tmp_path: Path) -> None:
         build_cli.resolve_repository_path("linked/output", project_root=tmp_path)
 
 
+@pytest.mark.parametrize("module", (build_cli, smoke_cli))
+def test_cleanup_never_deletes_a_swapped_staging_directory(
+    tmp_path: Path,
+    module: object,
+) -> None:
+    output = tmp_path / "result"
+    staging = tmp_path / ".result.staging-owned"
+    staging.mkdir()
+    info = staging.lstat()
+    identity = (info.st_dev, info.st_ino)
+    staging.rename(tmp_path / "original-held")
+    staging.mkdir()
+    marker = staging / "replacement.txt"
+    marker.write_text("must survive", encoding="utf-8")
+    module._cleanup_staging(staging, output, identity)
+    assert marker.read_text(encoding="utf-8") == "must survive"
+
+
 def test_build_cli_is_reproducible_and_seed_override_changes_hash(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -199,6 +217,27 @@ def test_smoke_failure_leaves_no_success_report(
     )
     assert not output.exists()
     assert not tuple(output.parent.glob(f".{output.name}.staging-*"))
+    assert json.loads(capsys.readouterr().err)["status"] == "SMOKE_ERROR"
+
+
+def test_smoke_staging_creation_failure_is_structured(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    relative = _copy_config(tmp_path)
+
+    def fail(*_: object, **__: object) -> str:
+        raise OSError("forced staging failure")
+
+    monkeypatch.setattr(smoke_cli.tempfile, "mkdtemp", fail)
+    assert (
+        smoke_cli.main(
+            ("--config", str(relative), "--output", "artifacts/staging-failed"),
+            project_root=tmp_path,
+        )
+        == 1
+    )
     assert json.loads(capsys.readouterr().err)["status"] == "SMOKE_ERROR"
 
 

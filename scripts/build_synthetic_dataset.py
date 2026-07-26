@@ -84,13 +84,19 @@ def _ensure_safe_parent(target: Path, project_root: Path) -> None:
         raise ValueError(f"output path: target already exists: {target}")
 
 
-def _cleanup_staging(staging: Path, output: Path) -> None:
+def _cleanup_staging(
+    staging: Path,
+    output: Path,
+    identity: tuple[int, int],
+) -> None:
     if not os.path.lexists(staging):
         return
+    info = staging.lstat()
     if (
         staging.parent == output.parent
         and staging.name.startswith(f".{output.name}.staging-")
         and not _is_reparse(staging)
+        and (info.st_dev, info.st_ino) == identity
     ):
         shutil.rmtree(staging)
 
@@ -160,6 +166,7 @@ def main(
         return 2
 
     staging: Path | None = None
+    staging_identity: tuple[int, int] | None = None
     try:
         dataset = build_synthetic_dataset(config)
         validation = validate_synthetic_dataset(dataset)
@@ -169,6 +176,8 @@ def main(
         staging = Path(
             tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent)
         ).resolve()
+        staging_info = staging.lstat()
+        staging_identity = (staging_info.st_dev, staging_info.st_ino)
         staged_dataset = staging / "dataset"
         persisted = persist_synthetic_dataset(dataset, staged_dataset)
         validation = validate_synthetic_dataset(dataset, persisted=persisted)
@@ -181,8 +190,8 @@ def main(
         _error("BUILD_ERROR", error)
         return 1
     finally:
-        if staging is not None:
-            _cleanup_staging(staging, output)
+        if staging is not None and staging_identity is not None:
+            _cleanup_staging(staging, output, staging_identity)
 
     print(
         json.dumps(
