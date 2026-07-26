@@ -20,7 +20,10 @@ from .nonlinear_var import RegimeDynamics, SyntheticTrajectory, rollout_nonlinea
 
 @dataclass(frozen=True, slots=True)
 class FutureNoiseBank:
-    """Read-only ``[H]``/``[H,U]``/``[H,D]`` replay sample with fixed regimes."""
+    """Explicit read-only stochastic inputs for one deterministic replay.
+
+    ``regime_path`` fixes allocation; optional uniforms are audit provenance only.
+    """
 
     regime_uniforms: NDArray[np.float64] | None
     regime_path: NDArray[np.int64]
@@ -135,7 +138,9 @@ class PairedCounterfactualResult:
         causal_delay = _causal_delay(self.causal_delay, horizon=bank.horizon)
         schedule_delay = factual_path.dynamics_schedule[0].trend_delay
         if causal_delay != schedule_delay:
-            raise ValueError("causal_delay: expected the first affected schedule horizon")
+            raise ValueError(
+                "causal_delay: expected prediction-origin regime structural delay (delta)"
+            )
         allocation = _copy_allocation(
             self.allocation_metadata,
             intervention=intervention,
@@ -225,7 +230,10 @@ def replay_paired_counterfactual(
     causal_delay: int,
     allocation_metadata: InterventionPair | None = None,
 ) -> PairedCounterfactualResult:
-    """Replay one pair; Task 4 consumes H current states from H+1 latent states."""
+    """Replay one factual/counterfactual pair without sampling.
+
+    Task 4 consumes H current states from the H+1 latent states produced by Task 3.
+    """
     bank = _copy_noise_bank(noise_bank)
     schedule, regime_labels = _validate_schedule(dynamics_schedule, bank=bank)
     validated_intervention = _copy_intervention(intervention)
@@ -290,7 +298,7 @@ def monte_carlo_oracle(
     current_scale: float,
     trend_ar_coefficients: NDArray[np.float64],
     scale_ar_coefficients: NDArray[np.float64],
-    dynamics_schedule: tuple[RegimeDynamics, ...],
+    dynamics_schedules: tuple[tuple[RegimeDynamics, ...], ...],
     noise_banks: tuple[FutureNoiseBank, ...],
     intervention: CounterfactualIntervention | None,
     trend_loading: NDArray[np.float64],
@@ -299,9 +307,16 @@ def monte_carlo_oracle(
     quantiles: NDArray[np.float64],
     allocation_metadata: InterventionPair | None = None,
 ) -> MonteCarloOracleResult:
-    """Aggregate pre-generated paired banks over the sample axis without RNG."""
+    """Aggregate pre-generated banks without sampling.
+
+    Every bank has one aligned per-step dynamics schedule and fixed regime path.
+    """
     if not isinstance(noise_banks, tuple) or not noise_banks:
         raise ValueError("noise_banks: expected a non-empty tuple")
+    if not isinstance(dynamics_schedules, tuple):
+        raise TypeError("dynamics_schedules: expected a tuple with one schedule per bank")
+    if len(dynamics_schedules) != len(noise_banks):
+        raise ValueError("dynamics_schedules: expected exactly one schedule per bank")
     levels = _quantile_levels(quantiles)
     pairs = tuple(
         replay_paired_counterfactual(
@@ -311,7 +326,7 @@ def monte_carlo_oracle(
             current_scale=current_scale,
             trend_ar_coefficients=trend_ar_coefficients,
             scale_ar_coefficients=scale_ar_coefficients,
-            dynamics_schedule=dynamics_schedule,
+            dynamics_schedule=schedule,
             noise_bank=bank,
             intervention=intervention,
             trend_loading=trend_loading,
@@ -319,7 +334,7 @@ def monte_carlo_oracle(
             causal_delay=causal_delay,
             allocation_metadata=allocation_metadata,
         )
-        for bank in noise_banks
+        for bank, schedule in zip(noise_banks, dynamics_schedules, strict=True)
     )
     aggregate = _aggregate_pairs(pairs, levels)
     return MonteCarloOracleResult(

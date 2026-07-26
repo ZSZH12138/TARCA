@@ -110,6 +110,7 @@ def _replay_arguments(
 ) -> dict[str, object]:
     maximum_state_delay = max(item.nonlinear_delay for item in schedule)
     maximum_trend_delay = max(item.trend_delay for item in schedule)
+    regime_count = max(item.regime_label for item in schedule) + 1
     state = (
         np.zeros((maximum_state_delay + 1, 1), dtype=np.float64)
         if initial_history is None
@@ -124,8 +125,8 @@ def _replay_arguments(
         "trend_history": past_trend,
         "current_trend": current_trend,
         "current_scale": current_scale,
-        "trend_ar_coefficients": np.array([0.0], dtype=np.float64),
-        "scale_ar_coefficients": np.array([0.0], dtype=np.float64),
+        "trend_ar_coefficients": np.zeros(regime_count, dtype=np.float64),
+        "scale_ar_coefficients": np.zeros(regime_count, dtype=np.float64),
         "dynamics_schedule": schedule,
         "noise_bank": bank,
         "intervention": intervention,
@@ -158,7 +159,6 @@ def test_future_noise_bank_covers_every_explicit_stochastic_input() -> None:
     shocks = np.array([[5.0], [6.0]], dtype=np.float64)
     sources = (uniforms, regimes, trend, scale, exogenous, observation, shocks)
     snapshots = tuple(array.copy() for array in sources)
-
     bank = FutureNoiseBank(
         regime_uniforms=uniforms,
         regime_path=regimes,
@@ -168,7 +168,6 @@ def test_future_noise_bank_covers_every_explicit_stochastic_input() -> None:
         observation_innovations=observation,
         shocks=shocks,
     )
-
     assert bank.horizon == 2
     for field_name, source, snapshot in zip(
         (
@@ -236,7 +235,6 @@ def test_fixed_regime_linear_shock_free_replay_matches_analytic_effect() -> None
     schedule = tuple(_dynamics(linear=0.5, trend_delay=1) for _ in range(3))
     bank = _bank(3)
     intervention = CounterfactualIntervention(concept="trend", source_value=2.0)
-
     result = replay_paired_counterfactual(
         **_replay_arguments(
             schedule,
@@ -247,7 +245,6 @@ def test_fixed_regime_linear_shock_free_replay_matches_analytic_effect() -> None
             causal_delay=1,
         )
     )
-
     np.testing.assert_array_equal(
         result.factual_path.full_values,
         np.array([[2.0], [1.0], [0.5]], dtype=np.float64),
@@ -268,7 +265,6 @@ def test_fixed_regime_linear_shock_free_replay_matches_analytic_effect() -> None
 def test_first_trend_effect_is_exactly_at_delta_plus_one() -> None:
     delta = 2
     schedule = tuple(_dynamics(trend_delay=delta) for _ in range(4))
-
     result = replay_paired_counterfactual(
         **_replay_arguments(
             schedule,
@@ -281,7 +277,6 @@ def test_first_trend_effect_is_exactly_at_delta_plus_one() -> None:
         )
     )
     nonzero_horizons = result.horizon_index[np.any(result.effect != 0.0, axis=1)]
-
     assert nonzero_horizons[0] == delta + 1
     assert estimate_effect_delay(result.effect) == delta
 
@@ -295,7 +290,6 @@ def test_no_intervention_and_source_equals_base_have_bitwise_zero_effect() -> No
         trend_innovations=np.array([0.2, -0.1, 0.4], dtype=np.float64),
         scale_innovations=np.array([-0.3, 0.5, 0.1], dtype=np.float64),
     )
-
     no_intervention = replay_paired_counterfactual(
         **_replay_arguments(schedule, bank, current_trend=-0.0)
     )
@@ -310,7 +304,6 @@ def test_no_intervention_and_source_equals_base_have_bitwise_zero_effect() -> No
             ),
         )
     )
-
     for result in (no_intervention, equal_source):
         assert result.effect.tobytes() == np.zeros((3, 1), dtype=np.float64).tobytes()
         assert (
@@ -343,7 +336,6 @@ def test_factual_self_replay_and_every_paired_bank_array_are_exact() -> None:
             ),
         )
     )
-
     replay = rollout_nonlinear_var(
         initial_history=result.factual_path.initial_history,
         trend_history=result.factual_path.trend_history,
@@ -357,7 +349,6 @@ def test_factual_self_replay_and_every_paired_bank_array_are_exact() -> None:
         trend_loading=result.factual_path.trend_loading,
         observation_scale_floor=result.factual_path.observation_scale_floor,
     )
-
     assert replay.full_values.tobytes() == result.factual_path.full_values.tobytes()
     for trajectory in (result.factual_path, result.counterfactual_path):
         assert trajectory.exogenous_inputs.tobytes() == result.noise_bank.exogenous_inputs.tobytes()
@@ -386,7 +377,6 @@ def test_trend_intervention_leaves_scale_latent_truth_bitwise_unchanged() -> Non
             ),
         )
     )
-
     assert result.factual_concepts.scale.tobytes() == result.counterfactual_concepts.scale.tobytes()
     assert (
         result.factual_concepts.scale_innovations.tobytes()
@@ -403,7 +393,6 @@ def test_mixed_delay_shifted_schedule_retains_origin_delay_and_per_step_truth() 
             initial_history=np.array([[8.0]], dtype=np.float64),
         )
     )
-
     np.testing.assert_array_equal(
         result.factual_path.full_values,
         np.array([[4.0], [1.0], [0.0]], dtype=np.float64),
@@ -442,7 +431,6 @@ def test_correct_delay_and_concept_controls_are_strictly_better() -> None:
         )
     )
     target = np.array([[0.0], [0.0], [2.0], [0.0]], dtype=np.float64)
-
     correct_error = float(np.sqrt(np.mean((correct.effect - target) ** 2)))
     wrong_error = float(np.sqrt(np.mean((wrong_delay.effect - target) ** 2)))
     random_error = float(np.sqrt(np.mean((random_concept.effect - target) ** 2)))
@@ -467,12 +455,9 @@ def test_scale_oracle_changes_std_more_than_mean_in_symmetric_fixed_case() -> No
         intervention=CounterfactualIntervention("scale", 2.0),
     )
     arguments.pop("noise_bank")
-    result = monte_carlo_oracle(
-        noise_banks=banks,
-        quantiles=np.array([0.25, 0.5, 0.75], dtype=np.float64),
-        **arguments,
-    )
-
+    arguments["dynamics_schedules"] = (arguments.pop("dynamics_schedule"),) * len(banks)
+    quantiles = np.array([0.25, 0.5, 0.75], dtype=np.float64)
+    result = monte_carlo_oracle(noise_banks=banks, quantiles=quantiles, **arguments)
     assert result.mean_effect[0, 0] == pytest.approx(0.0, abs=1e-15)
     assert result.std_effect[0, 0] > abs(result.mean_effect[0, 0])
     assert result.quantile_effects.shape == (3, 1, 1)
@@ -487,6 +472,30 @@ def test_scale_oracle_changes_std_more_than_mean_in_symmetric_fixed_case() -> No
             paired.factual_concepts.trend_innovations.tobytes()
             == paired.counterfactual_concepts.trend_innovations.tobytes()
         )
+
+
+def test_monte_carlo_uses_one_aligned_schedule_per_independent_regime_path() -> None:
+    banks = (
+        _bank(2, regime_path=np.array([0, 1], dtype=np.int64)),
+        _bank(2, regime_path=np.array([1, 0], dtype=np.int64)),
+    )
+    schedules = (
+        (_dynamics(regime_label=0, linear=0.5), _dynamics(regime_label=1, linear=0.25)),
+        (_dynamics(regime_label=1, linear=0.25), _dynamics(regime_label=0, linear=0.5)),
+    )
+    arguments = _replay_arguments(
+        schedules[0], banks[0], initial_history=np.array([[4.0]], dtype=np.float64)
+    )
+    arguments.pop("noise_bank")
+    arguments.pop("dynamics_schedule")
+    arguments["dynamics_schedules"] = schedules
+    quantiles = np.array([0.5], dtype=np.float64)
+    result = monte_carlo_oracle(noise_banks=banks, quantiles=quantiles, **arguments)
+    np.testing.assert_array_equal(
+        result.factual_paths,
+        np.array([[[2.0], [0.5]], [[1.0], [0.5]]], dtype=np.float64),
+    )
+    assert tuple(pair.factual_path.dynamics_schedule for pair in result.paired_results) == schedules
 
 
 def test_monte_carlo_retains_samples_and_deterministic_ordered_quantiles() -> None:
@@ -504,19 +513,10 @@ def test_monte_carlo_retains_samples_and_deterministic_ordered_quantiles() -> No
         intervention=CounterfactualIntervention("trend", 1.5),
     )
     common.pop("noise_bank")
+    common["dynamics_schedules"] = (common.pop("dynamics_schedule"),) * len(banks)
     quantiles = np.array([0.1, 0.5, 0.9], dtype=np.float64)
-
-    first = monte_carlo_oracle(
-        noise_banks=banks,
-        quantiles=quantiles,
-        **common,
-    )
-    second = monte_carlo_oracle(
-        noise_banks=banks,
-        quantiles=quantiles,
-        **common,
-    )
-
+    first = monte_carlo_oracle(noise_banks=banks, quantiles=quantiles, **common)
+    second = monte_carlo_oracle(noise_banks=banks, quantiles=quantiles, **common)
     assert len(first.paired_results) == 3
     assert first.factual_paths.shape == (3, 2, 1)
     assert first.counterfactual_paths.shape == (3, 2, 1)
@@ -547,7 +547,6 @@ def test_allocation_metadata_survives_paired_and_aggregate_results() -> None:
     intervention = CounterfactualIntervention("trend", 2.0)
     schedule = (_dynamics(),)
     bank = _bank(1)
-
     paired = replay_paired_counterfactual(
         **_replay_arguments(
             schedule,
@@ -563,12 +562,9 @@ def test_allocation_metadata_survives_paired_and_aggregate_results() -> None:
         allocation_metadata=allocation,
     )
     aggregate_args.pop("noise_bank")
-    aggregate = monte_carlo_oracle(
-        noise_banks=(bank,),
-        quantiles=np.array([0.5], dtype=np.float64),
-        **aggregate_args,
-    )
-
+    aggregate_args["dynamics_schedules"] = (aggregate_args.pop("dynamics_schedule"),)
+    quantiles = np.array([0.5], dtype=np.float64)
+    aggregate = monte_carlo_oracle(noise_banks=(bank,), quantiles=quantiles, **aggregate_args)
     assert paired.allocation_metadata == allocation
     assert aggregate.allocation_metadata == allocation
     assert aggregate.paired_results[0].allocation_metadata == allocation
@@ -585,7 +581,7 @@ def test_allocation_metadata_survives_paired_and_aggregate_results() -> None:
             "regime_path.*dynamics_schedule",
         ),
         ("causal_delay", 2, ValueError, "causal_delay"),
-        ("causal_delay", 1, ValueError, "causal_delay.*schedule"),
+        ("causal_delay", 1, ValueError, "causal_delay.*prediction-origin"),
         (
             "trend_ar_coefficients",
             np.array([0.0], dtype=np.float32),
@@ -602,7 +598,6 @@ def test_replay_rejects_invalid_schedules_delays_and_dtypes(
 ) -> None:
     arguments = _replay_arguments((_dynamics(), _dynamics()), _bank(2))
     arguments[field_name] = value
-
     with pytest.raises(error_type, match=message):
         replay_paired_counterfactual(**arguments)
 
@@ -623,7 +618,7 @@ def test_monte_carlo_rejects_invalid_quantiles(quantiles: object) -> None:
     bank = _bank(1)
     arguments = _replay_arguments((_dynamics(),), bank)
     arguments.pop("noise_bank")
-
+    arguments["dynamics_schedules"] = (arguments.pop("dynamics_schedule"),)
     with pytest.raises((TypeError, ValueError), match="quantiles"):
         monte_carlo_oracle(
             noise_banks=(bank,),
@@ -632,22 +627,43 @@ def test_monte_carlo_rejects_invalid_quantiles(quantiles: object) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("schedules", "error_type", "message"),
+    [
+        ([], TypeError, "dynamics_schedules"),
+        ((), ValueError, "dynamics_schedules"),
+        (((_dynamics(regime_label=1),),), ValueError, "regime_path"),
+    ],
+)
+def test_monte_carlo_rejects_invalid_per_bank_schedule_allocations(
+    schedules: object,
+    error_type: type[Exception],
+    message: str,
+) -> None:
+    bank = _bank(1)
+    arguments = _replay_arguments((_dynamics(),), bank)
+    arguments.pop("noise_bank")
+    arguments.pop("dynamics_schedule")
+    with pytest.raises(error_type, match=message):
+        monte_carlo_oracle(
+            noise_banks=(bank,),
+            dynamics_schedules=schedules,  # type: ignore[arg-type]
+            quantiles=np.array([0.5], dtype=np.float64),
+            **arguments,
+        )
+
+
 def test_oracle_rejects_empty_or_incompatible_banks() -> None:
     arguments = _replay_arguments((_dynamics(),), _bank(1))
     arguments.pop("noise_bank")
-
+    schedule = arguments.pop("dynamics_schedule")
+    arguments["dynamics_schedules"] = (schedule, schedule)
+    quantiles = np.array([0.5], dtype=np.float64)
+    banks = (_bank(1), _bank(2))
     with pytest.raises(ValueError, match="noise_banks"):
-        monte_carlo_oracle(
-            noise_banks=(),
-            quantiles=np.array([0.5], dtype=np.float64),
-            **arguments,
-        )
+        monte_carlo_oracle(noise_banks=(), quantiles=quantiles, **arguments)
     with pytest.raises(ValueError, match="horizon"):
-        monte_carlo_oracle(
-            noise_banks=(_bank(1), _bank(2)),
-            quantiles=np.array([0.5], dtype=np.float64),
-            **arguments,
-        )
+        monte_carlo_oracle(noise_banks=banks, quantiles=quantiles, **arguments)
 
 
 def test_records_reject_tampered_direct_construction() -> None:
@@ -663,7 +679,6 @@ def test_records_reject_tampered_direct_construction() -> None:
     pair_fields = {field.name: getattr(pair, field.name) for field in fields(pair)}
     tampered_effect = pair.effect.copy()
     tampered_effect[0, 0] += 1.0
-
     with pytest.raises(ValueError, match="effect"):
         PairedCounterfactualResult(**(pair_fields | {"effect": tampered_effect}))
     forged_intervention = object.__new__(CounterfactualIntervention)
@@ -681,15 +696,12 @@ def test_records_reject_tampered_direct_construction() -> None:
         intervention=CounterfactualIntervention("trend", 1.0),
     )
     oracle_args.pop("noise_bank")
-    result = monte_carlo_oracle(
-        noise_banks=(bank,),
-        quantiles=np.array([0.5], dtype=np.float64),
-        **oracle_args,
-    )
+    oracle_args["dynamics_schedules"] = (oracle_args.pop("dynamics_schedule"),)
+    quantiles = np.array([0.5], dtype=np.float64)
+    result = monte_carlo_oracle(noise_banks=(bank,), quantiles=quantiles, **oracle_args)
     result_fields = {field.name: getattr(result, field.name) for field in fields(result)}
     tampered_mean = result.mean_effect.copy()
     tampered_mean[0, 0] += 1.0
-
     with pytest.raises(ValueError, match="mean_effect"):
         MonteCarloOracleResult(**(result_fields | {"mean_effect": tampered_mean}))
     for field_name in (
@@ -716,7 +728,6 @@ def test_paired_result_revalidates_a_forged_noise_bank() -> None:
         np.zeros((1, 1), dtype=np.float32),
     )
     pair_fields = {field.name: getattr(pair, field.name) for field in fields(pair)}
-
     with pytest.raises(TypeError, match=r"observation_innovations.*float64"):
         PairedCounterfactualResult(**(pair_fields | {"noise_bank": forged}))
     wrong_path = FutureNoiseBank(
@@ -749,9 +760,8 @@ def test_oracle_never_mutates_inputs_or_accesses_any_numpy_rng(
     )
     initial_history = np.array([[1.0]], dtype=np.float64)
     trend_loading = np.array([1.0], dtype=np.float64)
-    before = tuple(
-        array.tobytes() for array in (initial_history, trend_loading, bank.trend_innovations)
-    )
+    tracked = (initial_history, trend_loading, bank.trend_innovations)
+    before = tuple(array.tobytes() for array in tracked)
 
     class RandomTrap:
         def __getattr__(self, name: str) -> object:
@@ -767,15 +777,10 @@ def test_oracle_never_mutates_inputs_or_accesses_any_numpy_rng(
     arguments["trend_loading"] = trend_loading
     replay_paired_counterfactual(**arguments)
     arguments.pop("noise_bank")
-    monte_carlo_oracle(
-        noise_banks=(bank,),
-        quantiles=np.array([0.5], dtype=np.float64),
-        **arguments,
-    )
-
-    assert before == tuple(
-        array.tobytes() for array in (initial_history, trend_loading, bank.trend_innovations)
-    )
+    arguments["dynamics_schedules"] = (arguments.pop("dynamics_schedule"),)
+    quantiles = np.array([0.5], dtype=np.float64)
+    monte_carlo_oracle(noise_banks=(bank,), quantiles=quantiles, **arguments)
+    assert before == tuple(array.tobytes() for array in tracked)
 
 
 @pytest.mark.parametrize(
@@ -787,9 +792,6 @@ def test_oracle_never_mutates_inputs_or_accesses_any_numpy_rng(
         (np.array([0.0, np.nan], dtype=np.float64), ValueError),
     ],
 )
-def test_estimate_effect_delay_rejects_invalid_effects(
-    effect: object,
-    error_type: type[Exception],
-) -> None:
+def test_effect_delay_rejects_invalid_inputs(effect: object, error_type: type[Exception]) -> None:
     with pytest.raises(error_type, match="effect"):
         estimate_effect_delay(effect)  # type: ignore[arg-type]
