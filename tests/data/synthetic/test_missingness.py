@@ -297,6 +297,33 @@ def test_block_events_broadcast_over_every_axis_after_time() -> None:
     assert np.all(mask[3:])
 
 
+def test_overlapping_block_events_form_their_union_without_mutating_inputs() -> None:
+    starts = np.array([1, 3], dtype=np.int64)
+    lengths = np.array([3, 3], dtype=np.int64)
+    starts_before = starts.copy()
+    lengths_before = lengths.copy()
+
+    mask = _block_mask(starts, lengths, shape=(7, 2))
+
+    expected = np.array(
+        [
+            [True, True],
+            [False, False],
+            [False, False],
+            [False, False],
+            [False, False],
+            [False, False],
+            [True, True],
+        ],
+        dtype=np.bool_,
+    )
+    np.testing.assert_array_equal(mask, expected)
+    np.testing.assert_array_equal(starts, starts_before)
+    np.testing.assert_array_equal(lengths, lengths_before)
+    assert mask.dtype == np.bool_
+    assert not mask.flags.writeable
+
+
 def test_empty_block_event_arrays_produce_a_fully_observed_mask() -> None:
     mask = _block_mask(
         np.empty(0, dtype=np.int64),
