@@ -56,3 +56,6 @@ artifacts/stage0/reference_smoke/plot/*
 artifacts/stage0/reference_smoke/diroca/*
 !artifacts/stage0/reference_smoke/plot/result_summary.md
 !artifacts/stage0/reference_smoke/diroca/result_summary.md
+
+# Stage 1B generated synthetic smoke data/evidence
+artifacts/stage1/synthetic_scm_smoke/
