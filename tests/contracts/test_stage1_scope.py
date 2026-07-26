@@ -7,10 +7,10 @@ from pathlib import Path, PurePosixPath
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = REPOSITORY_ROOT / "src" / "tarca"
 CONTRACT_INIT = SOURCE_ROOT / "contracts" / "__init__.py"
+DATA_ROOT = SOURCE_ROOT / "data"
 
 FORBIDDEN_TOP_LEVEL_MODULES = {
     "adapters",
-    "data",
     "data_loaders",
     "das",
     "dro",
@@ -26,6 +26,18 @@ FORBIDDEN_TOP_LEVEL_MODULES = {
     "scm",
     "training",
     "metrics",
+}
+
+AUTHORIZED_STAGE1_DATA_MODULES = {
+    "data/__init__.py",
+    "data/synthetic/__init__.py",
+    "data/synthetic/counterfactual_oracle.py",
+    "data/synthetic/dataset_builder.py",
+    "data/synthetic/latent_concepts.py",
+    "data/synthetic/missingness.py",
+    "data/synthetic/nonlinear_var.py",
+    "data/synthetic/regimes.py",
+    "data/synthetic/validation.py",
 }
 
 EXPECTED_DEFINITION_SITES = {
@@ -148,6 +160,14 @@ def test_no_forbidden_stage1_top_level_modules_exist_under_src_tarca() -> None:
     }
 
     assert not FORBIDDEN_TOP_LEVEL_MODULES.intersection(actual_modules)
+
+
+def test_data_package_contains_only_authorized_stage1_synthetic_modules() -> None:
+    actual_modules = {
+        source_file.relative_to(SOURCE_ROOT).as_posix() for source_file in DATA_ROOT.rglob("*.py")
+    }
+
+    assert actual_modules <= AUTHORIZED_STAGE1_DATA_MODULES
 
 
 def test_core_contract_definitions_have_one_expected_source_site() -> None:
