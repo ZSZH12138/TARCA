@@ -29,6 +29,7 @@ PATH_ARRAY_FIELDS = (
     "trend_ar_coefficients",
     "scale_ar_coefficients",
 )
+MISSING = object()
 
 
 def _latent_inputs() -> dict[str, object]:
@@ -61,11 +62,16 @@ def _reconstruct_path(
         "scale_ar_coefficients": path.scale_ar_coefficients,
         "initial_trend": path.initial_trend,
         "initial_scale": path.initial_scale,
+        "intervention": path.intervention,
     }
-    if hasattr(path, "intervention"):
-        fields["intervention"] = path.intervention
     fields.update(overrides)
     return LatentConceptPath(**fields)  # type: ignore[arg-type]
+
+
+def _intervened_path() -> LatentConceptPath:
+    return replace_concept_at_origin(
+        _generate_path(), concept="trend", origin_index=1, source_value=10.0
+    )
 
 
 def test_generate_latent_concepts_locks_shape_index_and_regime_specific_ar() -> None:
@@ -105,15 +111,7 @@ def test_latent_path_owns_read_only_copies_and_is_frozen() -> None:
 
     path = generate_latent_concepts(**inputs)  # type: ignore[arg-type]
 
-    output_arrays = (
-        path.trend,
-        path.scale,
-        path.trend_innovations,
-        path.scale_innovations,
-        path.regime_sequence,
-        path.trend_ar_coefficients,
-        path.scale_ar_coefficients,
-    )
+    output_arrays = tuple(getattr(path, field_name) for field_name in PATH_ARRAY_FIELDS)
     assert all(not array.flags.writeable for array in output_arrays)
     assert all(
         not np.shares_memory(output, source) for output in output_arrays for source in source_arrays
@@ -128,17 +126,7 @@ def test_direct_latent_path_construction_also_deep_freezes_arrays() -> None:
     generated = _generate_path()
     source_trend = generated.trend.copy()
 
-    reconstructed = LatentConceptPath(
-        trend=source_trend,
-        scale=generated.scale,
-        trend_innovations=generated.trend_innovations,
-        scale_innovations=generated.scale_innovations,
-        regime_sequence=generated.regime_sequence,
-        trend_ar_coefficients=generated.trend_ar_coefficients,
-        scale_ar_coefficients=generated.scale_ar_coefficients,
-        initial_trend=generated.initial_trend,
-        initial_scale=generated.initial_scale,
-    )
+    reconstructed = _reconstruct_path(generated, trend=source_trend)
 
     assert np.array_equal(reconstructed.trend, source_trend)
     assert not np.shares_memory(reconstructed.trend, source_trend)
@@ -197,15 +185,7 @@ def test_generation_is_bitwise_deterministic_for_identical_supplied_inputs() -> 
     first = _generate_path()
     second = _generate_path()
 
-    for field_name in (
-        "trend",
-        "scale",
-        "trend_innovations",
-        "scale_innovations",
-        "regime_sequence",
-        "trend_ar_coefficients",
-        "scale_ar_coefficients",
-    ):
+    for field_name in PATH_ARRAY_FIELDS:
         assert np.array_equal(
             getattr(first, field_name),
             getattr(second, field_name),
@@ -510,12 +490,7 @@ def test_replacement_records_immutable_auditable_intervention_provenance() -> No
 
 
 def test_intervention_construction_reapplies_all_public_dtype_validation() -> None:
-    replaced = replace_concept_at_origin(
-        _generate_path(),
-        concept="trend",
-        origin_index=1,
-        source_value=10.0,
-    )
+    replaced = _intervened_path()
 
     with pytest.raises(TypeError, match=r"trend.*float64"):
         _reconstruct_path(
@@ -542,12 +517,7 @@ def test_intervention_provenance_cannot_hide_any_other_broken_edge(
     field_name: str,
     state_index: int,
 ) -> None:
-    replaced = replace_concept_at_origin(
-        _generate_path(),
-        concept="trend",
-        origin_index=1,
-        source_value=10.0,
-    )
+    replaced = _intervened_path()
     corrupted = getattr(replaced, field_name).copy()
     corrupted[state_index] += 1.0
 
@@ -570,12 +540,7 @@ def test_intervention_provenance_cannot_forge_base_or_source_value(
     replacement: object,
     error_match: str,
 ) -> None:
-    replaced = replace_concept_at_origin(
-        _generate_path(),
-        concept="trend",
-        origin_index=1,
-        source_value=10.0,
-    )
+    replaced = _intervened_path()
     assert replaced.intervention is not None
     forged = replace(
         replaced.intervention,
@@ -587,12 +552,7 @@ def test_intervention_provenance_cannot_forge_base_or_source_value(
 
 
 def test_intervention_provenance_cannot_move_the_only_skipped_edge() -> None:
-    replaced = replace_concept_at_origin(
-        _generate_path(),
-        concept="trend",
-        origin_index=1,
-        source_value=10.0,
-    )
+    replaced = _intervened_path()
     assert replaced.intervention is not None
     forged = replace(
         replaced.intervention,
@@ -606,12 +566,7 @@ def test_intervention_provenance_cannot_move_the_only_skipped_edge() -> None:
 
 
 def test_nested_concept_replacement_is_rejected() -> None:
-    intervened = replace_concept_at_origin(
-        _generate_path(),
-        concept="trend",
-        origin_index=1,
-        source_value=10.0,
-    )
+    intervened = _intervened_path()
 
     with pytest.raises(ValueError, match=r"path.*prior intervention"):
         replace_concept_at_origin(
@@ -620,6 +575,48 @@ def test_nested_concept_replacement_is_rejected() -> None:
             origin_index=1,
             source_value=8.0,
         )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value", "error_type", "error_match"),
+    [
+        ("concept", "seasonal", ValueError, r"intervention\.concept"),
+        ("origin_index", -1, ValueError, r"intervention\.origin_index"),
+        ("origin_index", 1.0, TypeError, r"intervention\.origin_index"),
+        ("origin_index", True, TypeError, r"intervention\.origin_index"),
+        ("base_value", np.inf, ValueError, r"base_value.*finite real scalar"),
+        ("source_value", np.nan, ValueError, r"source_value.*finite real scalar"),
+        ("source_value", MISSING, TypeError, r"malformed.*source_value"),
+    ],
+)
+def test_forged_provenance_is_defensively_revalidated(
+    field_name: str,
+    invalid_value: object,
+    error_type: type[Exception],
+    error_match: str,
+) -> None:
+    replaced = _intervened_path()
+    assert replaced.intervention is not None
+    forged = object.__new__(latent_concepts_module.ConceptInterventionProvenance)
+    for name in ("concept", "origin_index", "base_value", "source_value"):
+        if name != field_name:
+            object.__setattr__(forged, name, getattr(replaced.intervention, name))
+    if invalid_value is not MISSING:
+        object.__setattr__(forged, field_name, invalid_value)
+
+    with pytest.raises(error_type, match=error_match):
+        _reconstruct_path(replaced, intervention=forged)
+
+
+def test_origin_zero_provenance_cannot_forge_the_factual_base() -> None:
+    replaced = replace_concept_at_origin(
+        _generate_path(), concept="trend", origin_index=0, source_value=-2.0
+    )
+    assert replaced.intervention is not None
+    forged = replace(replaced.intervention, base_value=999.0)
+
+    with pytest.raises(ValueError, match=r"base_value.*initial_trend"):
+        _reconstruct_path(replaced, intervention=forged)
 
 
 @pytest.mark.parametrize("concept", ["trend", "scale"])
@@ -662,23 +659,24 @@ def test_source_equal_to_negative_zero_preserves_every_bit(concept: str) -> None
     assert np.float64(replaced.initial_scale).tobytes() == np.float64(base.initial_scale).tobytes()
 
 
-def test_replacing_the_initial_origin_updates_the_selected_initial_state() -> None:
+@pytest.mark.parametrize(("concept", "other"), [("trend", "scale"), ("scale", "trend")])
+def test_initial_replacement_keeps_factual_initials(concept: str, other: str) -> None:
     base = _generate_path()
 
     replaced = replace_concept_at_origin(
         base,
-        concept="trend",
+        concept=concept,  # type: ignore[arg-type]
         origin_index=0,
         source_value=-2.0,
     )
 
-    assert replaced.initial_trend == -2.0
-    assert replaced.initial_scale == base.initial_scale
-    assert np.array_equal(
-        replaced.trend,
-        np.array([-2.0, 0.0, 2.0, 5.0], dtype=np.float64),
-    )
-    assert np.array_equal(replaced.scale, base.scale)
+    assert getattr(replaced, concept)[0].tobytes() == np.float64(-2.0).tobytes()
+    for initial_field in ("initial_trend", "initial_scale"):
+        assert (
+            np.float64(getattr(replaced, initial_field)).tobytes()
+            == np.float64(getattr(base, initial_field)).tobytes()
+        )
+    assert np.array_equal(getattr(replaced, other), getattr(base, other))
 
 
 @pytest.mark.parametrize(
