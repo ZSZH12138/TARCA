@@ -15,6 +15,7 @@ import yaml
 from scripts import build_synthetic_dataset as build_cli
 from scripts import run_synthetic_oracle_smoke as smoke_cli
 
+from tarca.data.synthetic import _path_safety as path_safety_module
 from tarca.data.synthetic.dataset_builder import load_synthetic_config
 
 ROOT = Path(__file__).parents[3]
@@ -66,22 +67,115 @@ def test_repository_path_rejects_symlink_component(tmp_path: Path) -> None:
         build_cli.resolve_repository_path("linked/output", project_root=tmp_path)
 
 
-@pytest.mark.parametrize("module", (build_cli, smoke_cli))
 def test_cleanup_never_deletes_a_swapped_staging_directory(
     tmp_path: Path,
-    module: object,
 ) -> None:
     output = tmp_path / "result"
-    staging = tmp_path / ".result.staging-owned"
-    staging.mkdir()
-    info = staging.lstat()
-    identity = (info.st_dev, info.st_ino)
-    staging.rename(tmp_path / "original-held")
-    staging.mkdir()
-    marker = staging / "replacement.txt"
+    parent = path_safety_module.capture_directory(tmp_path, trusted_root=tmp_path)
+    staging = path_safety_module.create_staging_directory(output, parent)
+    staging.path.rename(tmp_path / "original-held")
+    staging.path.mkdir()
+    marker = staging.path / "replacement.txt"
     marker.write_text("must survive", encoding="utf-8")
-    module._cleanup_staging(staging, output, identity)
+    assert path_safety_module.cleanup_staging_directory(staging) is False
     assert marker.read_text(encoding="utf-8") == "must survive"
+
+
+def test_build_cli_rejects_parent_identity_swap_during_staging_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    relative = _copy_config(tmp_path)
+    config = load_synthetic_config(tmp_path / relative)
+    report = SimpleNamespace(
+        status="VALIDATION_PASS",
+        config_hash="sha256:" + "1" * 64,
+        data_hash="sha256:" + "2" * 64,
+    )
+    monkeypatch.setattr(build_cli, "load_synthetic_config", lambda _: config)
+    monkeypatch.setattr(build_cli, "build_synthetic_dataset", lambda _: object())
+    monkeypatch.setattr(build_cli, "validate_synthetic_dataset", lambda *_1, **_2: report)
+
+    def persist(_: object, path: Path) -> object:
+        path.mkdir()
+        return object()
+
+    monkeypatch.setattr(build_cli, "persist_synthetic_dataset", persist)
+    original_mkdtemp = path_safety_module.tempfile.mkdtemp
+    parent = tmp_path / "runs"
+    held_parent = tmp_path / "runs-held"
+    swapped = False
+
+    def swap_parent_once(*args: object, **kwargs: object) -> str:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            parent.rename(held_parent)
+            parent.mkdir()
+        return original_mkdtemp(*args, **kwargs)
+
+    monkeypatch.setattr(path_safety_module.tempfile, "mkdtemp", swap_parent_once)
+    assert (
+        build_cli.main(
+            ("--config", str(relative), "--output", "runs/swapped"),
+            project_root=tmp_path,
+        )
+        == 1
+    )
+    assert not (parent / "swapped").exists()
+    assert not (held_parent / "swapped").exists()
+    assert json.loads(capsys.readouterr().err)["status"] == "BUILD_ERROR"
+
+
+def test_smoke_cli_rejects_parent_identity_swap_during_staging_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    relative = _copy_config(tmp_path)
+    config = load_synthetic_config(tmp_path / relative)
+    report = SimpleNamespace(
+        status="ENGINEERING_SMOKE_PASS",
+        config_hash="sha256:" + "1" * 64,
+        data_hash="sha256:" + "2" * 64,
+    )
+    monkeypatch.setattr(smoke_cli, "load_synthetic_config", lambda _: config)
+    monkeypatch.setattr(smoke_cli, "build_synthetic_dataset", lambda _: object())
+
+    def persist(_: object, path: Path) -> object:
+        path.mkdir()
+        return object()
+
+    monkeypatch.setattr(smoke_cli, "persist_synthetic_dataset", persist)
+    monkeypatch.setattr(smoke_cli, "run_e01_engineering_smoke", lambda *_1, **_2: report)
+    monkeypatch.setattr(smoke_cli, "_json_value", lambda _: {"status": report.status})
+    monkeypatch.setattr(smoke_cli, "_render_markdown", lambda _: "")
+    monkeypatch.setattr(smoke_cli, "_write_atomic", lambda *_: None)
+    original_mkdtemp = path_safety_module.tempfile.mkdtemp
+    parent = tmp_path / "artifacts"
+    held_parent = tmp_path / "artifacts-held"
+    swapped = False
+
+    def swap_parent_once(*args: object, **kwargs: object) -> str:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            parent.rename(held_parent)
+            parent.mkdir()
+        return original_mkdtemp(*args, **kwargs)
+
+    monkeypatch.setattr(path_safety_module.tempfile, "mkdtemp", swap_parent_once)
+    assert (
+        smoke_cli.main(
+            ("--config", str(relative), "--output", "artifacts/swapped"),
+            project_root=tmp_path,
+        )
+        == 1
+    )
+    assert not (parent / "swapped").exists()
+    assert not (held_parent / "swapped").exists()
+    assert json.loads(capsys.readouterr().err)["status"] == "SMOKE_ERROR"
 
 
 def test_build_cli_is_reproducible_and_seed_override_changes_hash(

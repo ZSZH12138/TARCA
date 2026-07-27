@@ -1,4 +1,4 @@
-name: Stage 0 CPU quality gates
+name: Stage 0/1 CPU quality gates
 
 'on':
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  stage0:
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -35,10 +35,10 @@ jobs:
       - name: Synchronize frozen environment
         run: uv sync --frozen --extra research --group dev
 
-      - name: Compile Stage 0 Python
+      - name: Compile TARCA Python
         run: uv run python -m compileall -q src scripts tests third_party_manifest
 
-      - name: Run Stage 0 tests
+      - name: Run Stage 0/1 tests and coverage gates
         run: uv run pytest -q
 
       - name: Run repository hooks

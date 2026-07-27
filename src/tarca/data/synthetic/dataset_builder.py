@@ -6,10 +6,8 @@ import hashlib
 import json
 import os
 import platform
-import shutil
 import stat
 import subprocess
-import tempfile
 from collections.abc import Mapping
 from dataclasses import make_dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -36,6 +34,14 @@ from tarca.contracts import (
     WindowContractSummary,
 )
 
+from ._path_safety import (
+    StagingDirectory,
+    capture_directory,
+    cleanup_staging_directory,
+    create_staging_directory,
+    publish_staging_directory,
+    verify_staging_directory,
+)
 from .latent_concepts import generate_latent_concepts
 from .missingness import generate_missing_mask
 from .nonlinear_var import RegimeDynamics, generate_regime_dynamics, rollout_nonlinear_var
@@ -618,39 +624,43 @@ def persist_synthetic_dataset(
     arrow_payloads = _validate_dataset(dataset)
     target = _validate_output_path(output_root)
     parent = target.parent
-    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.staging-", dir=parent)).resolve()
-    staging_identity = ((staging_stat := staging.lstat()).st_dev, staging_stat.st_ino)
+    parent_guard = capture_directory(parent, label="output_root parent")
+    staging_guard = create_staging_directory(target, parent_guard)
+    staging = staging_guard.path
     try:
-        _reject_reparse_components(staging)
+        verify_staging_directory(staging_guard)
         composite = _CompositeManifest(data_manifest=dataset.data_manifest,
             synthetic_provenance=dataset.synthetic_provenance)
         config_yaml = yaml.safe_dump(dataset.config.model_dump(mode="json"),
             sort_keys=True, allow_unicode=True).encode()
-        _write_bytes(staging / "config_resolved.yaml", config_yaml)
-        _write_bytes(staging / "manifest.json", composite.model_dump_json(indent=2).encode())
+        _write_bytes(staging / "config_resolved.yaml", config_yaml, staging_guard)
+        _write_bytes(
+            staging / "manifest.json",
+            composite.model_dump_json(indent=2).encode(),
+            staging_guard,
+        )
+        verify_staging_directory(staging_guard)
         np.savez(staging / "truth.npz",
             **{name: dataset.truth[name] for name in sorted(dataset.truth)})
+        verify_staging_directory(staging_guard)
         _fsync_existing(staging / "truth.npz")
         for split in dataset.physical_splits:
             payload = arrow_payloads[split.name]
-            _write_bytes(staging / f"windows_{split.name}.arrow", payload)
+            _write_bytes(staging / f"windows_{split.name}.arrow", payload, staging_guard)
         normalization = json.dumps(dataset.normalization.model_dump(mode="json"),
             ensure_ascii=False, indent=2).encode()
-        _write_bytes(staging / "normalization.json", normalization)
+        _write_bytes(staging / "normalization.json", normalization, staging_guard)
+        verify_staging_directory(staging_guard)
         checksums = {
             path.name: _digest(path.read_bytes())
             for path in sorted(staging.iterdir(), key=lambda item: item.name)
         }
         checksum_bytes = json.dumps(checksums, ensure_ascii=False,
             indent=2, sort_keys=True).encode()
-        _write_bytes(staging / "checksums.json", checksum_bytes)
-        if os.path.lexists(target):
-            raise ValueError(f"output_root: target already exists: {target}")
-        _reject_reparse_components(parent)
-        _reject_reparse_components(staging)
-        staging.rename(target)
+        _write_bytes(staging / "checksums.json", checksum_bytes, staging_guard)
+        target = publish_staging_directory(staging_guard, target)
     except BaseException:
-        _cleanup_staging(staging, parent, target.name, staging_identity)
+        cleanup_staging_directory(staging_guard)
         raise
     return PersistedSyntheticDataset(target, dataset.dataset_hash,
         {p.name: p for p in target.iterdir()}, checksums)
@@ -691,28 +701,13 @@ def _reject_reparse_components(path: Path) -> None:
                 raise ValueError(
                     f"output_root: symlink, junction, or reparse component: {current}")
 
-def _cleanup_staging(staging, parent, target_name, identity) -> None:
-    try:
-        resolved = staging.resolve(strict=True)
-    except FileNotFoundError:
-        return
-    marker = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
-    current = resolved.lstat()
-    attributes = getattr(current, "st_file_attributes", 0)
-    if (
-        resolved.parent == parent.resolve()
-        and resolved.name.startswith(f".{target_name}.staging-")
-        and not resolved.is_symlink()
-        and not attributes & marker
-        and (current.st_dev, current.st_ino) == identity
-    ):
-        shutil.rmtree(resolved)
-
-def _write_bytes(path: Path, payload: bytes) -> None:
+def _write_bytes(path: Path, payload: bytes, staging: StagingDirectory) -> None:
+    verify_staging_directory(staging)
     with path.open("xb") as handle:
         handle.write(payload)
         handle.flush()
         os.fsync(handle.fileno())
+    verify_staging_directory(staging)
 
 def _fsync_existing(path: Path) -> None:
     with path.open("r+b") as handle:

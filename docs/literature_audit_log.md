@@ -1,6 +1,7 @@
 # TARCA Stage 0 文献审计日志
 
 核查日期：`2026-07-23`
+最近一次 Stage 1 Gate 0 重开日期：`2026-07-27`
 核查范围：截至核查日可访问的正式 proceedings/期刊页、arXiv、OpenReview、机构接收记录、官方文档和作者官方仓库。
 证据规则：博客、论坛和营销页面不作为核心证据；无法由一手/官方来源核实的字段一律写 `UNVERIFIED`；没有核实到官方代码时写 `NO_OFFICIAL_CODE_FOUND`。
 
@@ -47,7 +48,40 @@
 | `PLOT-guided DAS` | PLOT OpenReview/arXiv/官方仓库 | 明确已实现；TARCA 该项为 `NOT_NOVEL` |
 | `Distributionally Robust Causal Abstractions` | arXiv、Warwick 机构记录、官方仓库 | ICML 2026 accepted/in press；generic 声明直接碰撞 |
 
-## 4. 截止本次审计的硬结论
+## 4. Stage 1 Gate 0 重开记录（2026-07-27）
+
+本次是 Stage 1 工程收口前的有限复核，不是系统综述。检索仅用于发现对冻结窄声明的直接
+覆盖或强最近邻；`NO_EXACT_DIRECT_MATCH_FOUND` 仍然只是检索结果，**不是新颖性证明**。
+
+复核查询包括：
+
+```text
+"Progressive Localization via Optimal Transport" causal abstraction
+"Distributionally Robust Causal Abstractions"
+frozen OR inference-only time-series forecaster covariates zero-shot
+streaming multivariate forecasting causal lag unseen regime no refit
+time-series foundation model regime-dependent failure
+```
+
+| 一手来源 | 2026-07-27 复核结果 | 对冻结声明的处理 |
+|---|---|---|
+| PLOT：https://arxiv.org/abs/2605.06979 | 明确覆盖 output-effect signature、OT/UOT 渐进定位和 PLOT-guided DAS；不以冻结概率时序预测器、独立 forecast horizon/causal lag 或 sequential unseen regime 为研究对象 | N3 继续为 `COLLISION_RISK`；N4 继续为 `NOT_NOVEL` |
+| DiRoCA：https://arxiv.org/abs/2510.04842 | 明确覆盖 Wasserstein ambiguity set 下的分布鲁棒 causal abstraction、环境偏移及结构/干预映射错设；不覆盖 forecasting 专用 horizon/lag 协议 | N5 继续为 `COLLISION_RISK`，不得声称 generic robust causal abstraction 新颖 |
+| Chronos-2：https://arxiv.org/abs/2510.15821 | 直接覆盖 inference-only、无需任务特定训练、multivariate/covariate-informed zero-shot forecasting | “冻结/零样本预测器、多变量和协变量支持”本身不是 TARCA 差异 |
+| COSMIC：https://arxiv.org/abs/2506.03128 | 直接覆盖带协变量的 zero-shot forecasting 和 in-context 使用协变量 | known-future/covariate 支持本身不是 TARCA 差异 |
+| TiRex-2：https://arxiv.org/abs/2607.01204 | 直接覆盖 multivariate、past/future covariates、streaming、target strict causality 和 constant-cost sequential inference | 加强 N2/N5 最近邻压力；仍需用显式 causal-lag truth、干预真值和 zero-refit abstraction 指标区分 |
+| Regime-dependent TSFM audit：https://arxiv.org/abs/2606.18367 | 显示聚合指标会隐藏 transition-regime 的误差和区间覆盖失败 | 不提供 TARCA 方法，但要求 Gate 2 必须报告 regime-stratified failure，不能假定 zero-shot 即稳健 |
+
+截至本次复核，没有在上述一手来源中核实到一个方法同时合并
+`frozen neural forecaster`、独立 `forecast horizon / causal lag`、联合干预/位置真值，以及
+`sequential unseen regime zero-refit` causal abstraction。该结论只允许保留可证伪的窄研究
+空间；它不支持“首个”“唯一”或已经新颖的确定陈述。
+
+本次 Gate 0 不改变 N1–N8 的枚举等级，但把 Chronos-2、COSMIC、TiRex-2 和
+regime-dependent failure audit 加入 N1/N2/N5 的强最近邻与失败风险。后续正式阶段仍须再次
+复核。
+
+## 5. 截止本次审计的硬结论
 
 1. `PLOT-guided DAS` 为 `NOT_NOVEL`，只能作为基线/复现对象。
 2. 泛化的“层 × 时间/位置 × 子空间渐进定位”已与 PLOT/HyperDAS 高度碰撞；TARCA 必须改为 **forecast-indexed variable × causal lag × forecast horizon × constrained subspace truth**。

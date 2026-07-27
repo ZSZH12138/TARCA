@@ -1,10 +1,18 @@
 # TARCA 从零到一具体实施计划
 
+> **文档版本**：v1.2（冻结契约审计最小修订）
 > **文档类型**：工程—实验一体化实施计划
 > **依据文件**：`TARCA_项目计划书.md`
-> **外部资料核对日期**：2026-07-23
+> **外部资料核对日期**：2026-07-27（Stage 1 Gate 0 已重开）
+> Stage 0 status: COMPLETED_AND_FROZEN
+> Stage 1A status: COMPLETED
+> Stage 1B status: COMPLETED_ENGINEERING
+> Scientific status: ENGINEERING_SMOKE_ONLY
+> Research status: PARTIALLY_COMPLETED
+> **Stage 0 边界**：Stage 0 已完成并冻结；Stage 1A 统一数据契约与 Stage 1B 合成 SCM 已完成工程实现，Stage 1B 仅有 `ENGINEERING_SMOKE_ONLY` 证据。`Research status` 指整个科研项目；Stage 2+、Gate A/1/2、正式统计实验和跨域验证尚未完成，因此仍为部分完成。
+> **契约优先级**：本计划必须服从 Stage 0 冻结的预注册、假设台账、新颖性声明和术语边界；没有明确上位修订时，后续实现不得重新定义 Gate 或证据等级。
 > **建议总周期**：39 周
-> **核心原则**：先合成真值，后真实数据；先固定位置干预，后自动定位；先证明解释不是空洞映射，后讨论跨状态鲁棒；先通用时间序列，后金融压力测试。
+> **核心原则**：先统一契约，再合成真值，后真实数据；先固定位置干预，后自动定位；先证明解释不是空洞映射，后讨论跨状态鲁棒；先通用时间序列，后金融压力测试。
 
 ---
 
@@ -14,13 +22,14 @@
 
 ```text
 研究契约与复现环境
+→ 统一数据契约与产物 Schema
 → 合成动态 SCM 与反事实真值
 → 可预测的基础模型与机制植入模型
 → 固定位置的交换干预
 → 连续输出的抽象指标与负对照
 → 层 × 时间片的渐进 OT 定位
 → 变量/通道轴与低秩子空间定位
-→ PLOT 引导的 DAS 精修
+→ PLOT-guided DAS 基线与窄化 TARCA 子空间比较
 → 状态切换与 Wasserstein-DRO
 → 通用时间序列跨域实验
 → 金融数据泄漏审计与压力测试
@@ -31,7 +40,7 @@
 
 1. **PatchTST 适合先验证“层 × 时间 patch”定位**，因为其将每个单变量序列切成 patch，并采用通道独立设计。
 2. **变量/通道定位不能只依赖 PatchTST**。变量轴应在 iTransformer 或自定义“变量 × 时间 patch”二维 token 模型上完成；iTransformer 将每个变量序列表示为 variate token，变量位置具有更清晰的语义。
-3. **PLOT、DiRoCA 和 pyvene 应作为方法与工程参考，而不是直接拼接**。TARCA 必须增加多步概率输出、时延、跨变量传播、状态切换和反信息注入协议。
+3. **PLOT、DiRoCA 和 pyvene 应作为方法与工程参考，而不是直接拼接**。PLOT-guided DAS 是 `NOT_NOVEL` 基线；DiRoCA 已覆盖一般性的 Wasserstein 鲁棒因果抽象。TARCA 只保留冻结预测器、多步概率输出中独立的 forecast horizon/causal lag、变量联合真值、sequential unseen regime zero-refit 和反信息注入协议等窄化差异。
 4. **真实金融实验不是早期调试场**。只有合成定位、负对照和跨状态解释通过门槛后，才允许进入金融数据。
 
 ---
@@ -43,9 +52,9 @@
 以下内容来自项目计划书，实施时不得随意删除：
 
 - 时序因果抽象的高层—低层交换干预；
-- 候选位置为层、变量/通道、时间片、子空间；
+- 候选位置按层 → 时间片/因果 lag → 变量/通道 → 受限子空间定位；
 - 使用渐进式 OT 进行粗到细定位；
-- 使用 DAS/IIT 对候选子空间进一步精修；
+- 使用 DAS 对候选子空间进一步精修；IIT/联合训练只作为次级模式；
 - 使用 Wasserstein 模糊集合提高跨状态抽象鲁棒性；
 - 使用冻结模型、容量限制、随机概念、随机模型和 held-out intervention pairs 防止空洞解释；
 - 证据链必须覆盖合成真值、通用时间序列和金融序列；
@@ -57,9 +66,14 @@
 - DAS 使用梯度学习分布式表示子空间，而不是只搜索单个神经元。
 - PLOT 使用 OT/UOT 从输出干预效应定位候选位置，并支持“层/时间位置 → 坐标或 PCA 子空间 → DAS”的渐进过程。
 - DiRoCA 使用 Wasserstein 模糊集合构造分布鲁棒因果抽象。
+- proper score 可对单个 forecast–outcome pair 求值后聚合；calibration 是预测与观测的联合性质，只能在 fold/horizon/subgroup 或 regime 层解释。
 - pyvene 支持对任意 PyTorch 模型的内部状态执行可组合干预。
 - POT 提供 Sinkhorn、非平衡 OT、部分 OT、PCA/子空间相关工具及 PyTorch 后端。
-- fev 支持滚动窗口、点预测和概率预测评估，可用于规范通用时间序列的评估接口。
+- fev 支持滚动窗口、点预测和概率预测评估，并在任务摘要中记录 horizon、窗口配置、协变量和数据指纹，可用于规范评估与数据 Manifest。
+- 多步预测文献明确区分静态输入、预测时已知的未来输入和只能从历史观测的输入，因此契约不能只保存无名称 Tensor，必须保存字段语义并检查目标泄漏。
+- Pydantic v2 的模型配置支持严格校验、禁止额外字段和冻结字段绑定，适合 JSON/Manifest；运行时 Tensor 则更适合由标准冻结 dataclass 保持对象身份并做显式校验。
+- Python `Protocol` 适合定义模型适配器的结构接口，但 `runtime_checkable` 只检查成员是否存在，不验证方法签名，不能替代静态检查和行为测试。
+- PyTorch 的 Normal 分布要求 `scale > 0`；Apache Arrow Schema 能固定列名、类型、nullable 属性和 metadata，因此预测分布及 Parquet 产物应进行 fail-fast Schema 校验。
 
 ### 1.3 本实施计划新增的工程化决策
 
@@ -69,7 +83,16 @@
 - 初始阶段先实现原生 PyTorch hook，再适配 pyvene，避免库适配问题阻断科学验证；
 - 首先完成层 × 时间片两轴 PLOT，再增加变量轴和子空间轴；
 - 先以精确小批量线性规划验证 Wasserstein-DRO，再实现可微分对偶近似；
-- 所有 Go/No-Go 数值阈值均作为**建议预注册阈值**，需要在首次正式实验前冻结，不能观察测试结果后修改。
+- 所有 Go/No-Go 中“显著”“接近”“可接受”“稳定”等定性词及尚无支持的数值阈值统一标记为 `TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT`，需要在首次正式实验前冻结，不能观察测试结果后修改；
+- Stage 1A 已创建 `src/tarca/contracts/`，它是唯一跨模块契约权威来源；禁止同时维护
+  `src/tarca/data/contracts.py` 等第二套定义；
+- 运行时 Tensor 契约与可序列化 Manifest 分离：前者使用冻结 dataclass 且不得隐式 clone/detach/搬移设备，后者使用严格 Pydantic 模型；
+- 缺失值通过显式布尔 mask 表达，特征/目标/协变量必须带名称，所有持久化 Schema 必须携带可比较的契约版本。
+
+### 1.4 主证据与次级训练模式
+
+- **模式 A（主证据）**：先训练预测器并冻结参数，再学习解释器、位置、受限映射和子空间；Gate A/1/2 的所有 claim-bearing 结果只能来自该模式。
+- **模式 B（探索性）**：允许联合优化预测器与抽象目标，用于 RQ4 消融或性能上界。联合训练只能作为次级证据，必须与模式 A 分表、分结论报告，不能证明模型原有机制，也不能支持 zero-refit 主张。
 
 ---
 
@@ -77,30 +100,35 @@
 
 ```mermaid
 flowchart TD
-    A[阶段0 研究契约与环境] --> B[阶段1 数据契约与合成SCM]
-    B --> C[阶段2 基础预测器]
-    C --> D[阶段3 机制植入模型]
-    D --> E[阶段4 固定位置交换干预]
-    E --> F[阶段5 指标/匹配/负对照]
-    F --> G{Gate A: 固定位置干预有效?}
-    G -- 否 --> E
-    G -- 两轮仍失败 --> X[终止或重构高层概念]
-    G -- 是 --> H[阶段6 层×时间渐进OT]
-    H --> I[阶段7 变量轴与子空间]
-    I --> J[阶段8 PLOT引导DAS]
-    J --> K{Gate 1: 合成定位与反空洞性}
-    K -- 否 --> H
-    K -- 两轮仍失败 --> X
-    K -- 是 --> L[阶段9 状态环境与DRO]
-    L --> M{Gate 2: 未见状态鲁棒性}
-    M -- 否 --> L
-    M -- 无可识别环境 --> Y[取消鲁棒性主张]
-    M -- 是 --> N[阶段10 通用时间序列]
-    N --> O{Gate 3: 跨域解释成立?}
-    O -- 否 --> N
-    O -- 是 --> P[阶段11 金融压力测试]
-    P --> Q[阶段12 全量消融与统计]
-    Q --> R[阶段13 复现发布与论文材料]
+    A[阶段0 研究契约与环境] --> A0{Gate 0: 持续新颖性复核}
+    A0 -- 直接覆盖窄声明 --> Z[收缩或终止对应方法声明]
+    A0 -- 通过 --> B[阶段1A 统一数据契约]
+    B --> C[阶段1B 合成SCM与反事实真值]
+    C --> D[阶段2 基础预测器]
+    D --> E[阶段3 机制植入模型]
+    E --> F[阶段4 固定位置交换干预]
+    F --> G[阶段5 指标/匹配/负对照]
+    G --> H{Gate A: 固定位置干预有效?}
+    H -- 否 --> F
+    H -- 两轮仍失败 --> X[终止或重构高层概念]
+    H -- 是 --> I[阶段6 层×时间渐进OT]
+    I --> J[阶段7 变量轴与子空间]
+    J --> K[阶段8 PLOT-DAS基线与窄化变体比较]
+    K --> L{Gate 1: 合成定位与反空洞性}
+    L -- 否 --> I
+    L -- 两轮仍失败 --> X
+    L -- 是 --> M[阶段9 状态环境与DRO]
+    M --> N{Gate 2: 未见状态鲁棒性}
+    N -- 否 --> M
+    N -- 无可识别环境 --> Y[取消鲁棒性主张]
+    N -- 是 --> O[阶段10 通用时间序列]
+    O --> P{跨域机制检查}
+    P -- 否 --> O
+    P -- 是 --> Q[阶段11 金融压力测试]
+    Q --> T{Gate 3: 探索性预测收益?}
+    T -- 是 --> R[阶段12 全量消融与统计]
+    T -- 否且机制成立 --> R
+    R --> S[阶段13 复现发布与论文材料]
 ```
 
 ---
@@ -109,7 +137,7 @@ flowchart TD
 
 | 周期        | 阶段                  | 主要交付物                              | 进入下一阶段的条件           |
 | --------- | ------------------- | ---------------------------------- | ------------------- |
-| 第 1–2 周   | 阶段 0：研究契约与环境        | 文献矩阵、预注册草案、仓库、CI                   | 环境可一键复现；关键定义无矛盾     |
+| 第 1–2 周   | 阶段 0：研究契约与环境（历史已完成并冻结） | 文献矩阵、预注册、仓库、CI                     | `COMPLETED_AND_FROZEN` |
 | 第 3–6 周   | 阶段 1：数据契约与合成 SCM    | 合成生成器、反事实 oracle、数据审计              | 无干预时反事实等于事实；真值可复现   |
 | 第 7–9 周   | 阶段 2：基础预测器          | 统计基线、PatchTST、概率头                  | 模型显著优于 naive；输出接口统一 |
 | 第 10–12 周 | 阶段 3：机制植入模型         | 植入位置真值、困难度配置                       | 植入机制确实控制预测且位置可审计    |
@@ -117,21 +145,22 @@ flowchart TD
 | 第 17–21 周 | 阶段 6：层 × 时间 OT      | 粗到细 PLOT、效率曲线                      | 候选定位优于随机和穷举成本       |
 | 第 22–24 周 | 阶段 7–8：变量/子空间/DAS   | iTransformer 适配、低秩子空间、DAS 精修       | Gate 1 通过           |
 | 第 25–28 周 | 阶段 9：Regime-DRO 与理论 | group-DRO、Wasserstein-DRO、初版证明     | Gate 2 通过或收缩主张      |
-| 第 29–33 周 | 阶段 10：通用时序实验        | 三域结果、跨模型结果、失败诊断                    | Gate 3 通过           |
-| 第 34–37 周 | 阶段 11：金融压力测试        | FI-2010、多资产实验、泄漏审计                 | 金融结论不依赖单一切分         |
+| 第 29–33 周 | 阶段 10：通用时序实验        | 三域结果、跨模型结果、失败诊断                    | 跨域机制检查通过（非 Gate 3） |
+| 第 34–37 周 | 阶段 11：金融压力测试        | FI-2010、多资产实验、泄漏审计、探索性预测收益汇总       | 完成金融验证后评估 Gate 3    |
 | 第 38–39 周 | 阶段 12–13：收尾         | 全消融、统计、复现包、论文图表                    | Gate 4 通过           |
 
 > 说明：理论假设台账从第 1 周开始记录，但正式证明在算法接口稳定后，即第 22 周左右集中完成。这样避免围绕不断变化的算法证明无效命题。
+> Stage 1 的任何实现还必须先获得单独授权并重开 Gate 0；若最新一手来源直接覆盖窄化声明，先更新新颖性表并收缩或终止对应主张。
 
 ---
 
 # 第一部分：基础设施与科学契约
 
-## 4. 阶段 0：研究契约、文献复核和可复现环境（第 1–2 周）
+## 4. 阶段 0：研究契约、文献复核和可复现环境（历史已完成并冻结）
 
 ### 4.1 这一阶段在做什么
 
-先把“项目究竟要证明什么、不能声称什么、所有实验如何被复现”固定下来。此阶段不训练正式模型。
+本节只回顾已经验收的 Stage 0，不是待执行清单。Stage 0 已把“项目究竟要证明什么、不能声称什么、所有实验如何被复现”固定下来，且没有训练正式模型。实际状态与操作入口以 `README.md`、`docs/stage0_scope.md`、`artifacts/stage0/STAGE0_IMPLEMENTATION_REPORT.md`、`pyproject.toml`、`uv.lock` 和现有测试为准。
 
 ### 4.2 文献审计
 
@@ -146,7 +175,7 @@ docs/
 └── preregistration_v0.md
 ```
 
-`related_work_matrix.csv` 至少包含：
+下表是最初规划时的解释性字段子集；冻结的 `docs/related_work_matrix.csv` 实际表头及其 26 个字段才是唯一权威，不得从本表反向生成第二套 schema：
 
 | 字段 | 含义 |
 |---|---|
@@ -184,16 +213,16 @@ docs/
 
 | TARCA 声明 | 最接近工作 | 实质差异 | 可证伪实验 |
 |---|---|---|---|
-| 多步时序交换误差 | IIT/DAS | 增加预测期、分布输出和延迟 | 改变 H、延迟后比较 |
-| 四轴渐进定位 | PLOT | 增加变量轴、时序概念签名 | 植入位置恢复 |
-| Regime-robust 抽象 | DiRoCA | 面向神经时序预测器和状态切换 | 未见状态干预 |
+| 多步时序交换误差 | IIT/DAS/PLOT | 冻结概率预测器，并把 forecast horizon 与 causal lag 独立索引 | 正交改变 horizon/lag 后比较 |
+| 四轴渐进定位 | PLOT/HyperDAS/DAS | forecast-indexed variable × causal lag × forecast horizon × constrained subspace 联合真值 | 四轴联合植入位置恢复 |
+| Regime-robust 抽象 | DiRoCA/TimeSAE | frozen neural forecaster + sequential unseen regime + zero-refit | 未见状态零重拟合干预 |
 | 反空洞协议 | HyperDAS/非线性困境 | 低秩、冻结、标签访问审计 | 随机模型/随机概念 |
 
-若某项只剩“用于金融”，该项不能作为方法创新。
+PLOT-guided DAS 是 `NOT_NOVEL` 基线，金融只是验证层；若某项只剩“用于金融”，该项不能作为方法创新。
 
-### 4.4 仓库初始化
+### 4.4 已冻结的仓库与环境
 
-建议目录：
+Stage 0 已交付的相关目录：
 
 ```text
 tarca/
@@ -217,43 +246,9 @@ tarca/
 └── third_party_manifest/
 ```
 
-建议依赖类别：
+依赖版本与 CPU 索引已经由 `pyproject.toml` 和 `uv.lock` 冻结。不得依据旧依赖示例重新求解环境，也不得使用裸 `uv sync` 改写锁文件；Windows/Conda 与 Linux/macOS/CI 的恢复命令统一以 `README.md` 为准，并使用 `uv sync --frozen --extra research --group dev`。
 
-```toml
-[project]
-requires-python = ">=3.11,<3.12"
-
-# 具体版本由首次可运行环境锁定
-dependencies = [
-  "torch",
-  "numpy",
-  "pandas",
-  "scipy",
-  "scikit-learn",
-  "statsmodels",
-  "pot",
-  "pyvene",
-  "hydra-core",
-  "omegaconf",
-  "pydantic",
-  "pyarrow",
-  "h5py",
-  "zarr",
-  "matplotlib",
-  "pytest",
-  "pytest-cov"
-]
-```
-
-执行：
-
-```bash
-uv sync
-uv run python scripts/doctor.py
-uv run pytest -q
-```
-
-`scripts/doctor.py` 检查：
+`scripts/doctor.py` 已检查：
 
 - Python、PyTorch、CUDA、GPU；
 - float32/float64 基本运算；
@@ -263,47 +258,25 @@ uv run pytest -q
 - 小型 Transformer forward/hook 是否正常；
 - 可用磁盘空间和写权限。
 
-### 4.5 第三方代码管理
+### 4.5 第三方代码管理（已冻结）
 
-不要把 PLOT、DiRoCA、TSLib 代码直接复制到主代码中。创建：
+PLOT、DiRoCA、TSLib 等第三方代码不得复制到主代码中。现有权威入口为：
 
 ```text
 third_party_manifest/
 ├── sources.yaml
-└── record_commits.sh
+└── record_commits.py
+scripts/
+└── run_reference_smoke.py
+src/tarca/stage0/
+└── sources.py
 ```
 
-`sources.yaml` 记录：
+`sources.yaml` 已记录官方论文/仓库、角色、许可证状态、默认分支、固定 commit、核验日期和本地 reference 路径；`src/tarca/stage0/sources.py` 负责严格解析与 commit 解析，`third_party_manifest/record_commits.py` 生成公开摘要。后续阶段只能消费这些冻结字段，第三方版本更新必须通过新的审计记录，不得手工覆盖既有证据。
 
-```yaml
-- name: pyvene
-  url: https://github.com/stanfordnlp/pyvene
-  role: intervention_reference
-- name: plot
-  url: https://github.com/jchang153/causal-abstractions-ot
-  role: progressive_ot_reference
-- name: diroca
-  url: https://github.com/yfelekis/DiRoCA
-  role: dro_reference
-- name: pot
-  url: https://github.com/PythonOT/POT
-  role: ot_solver
-- name: tslib
-  url: https://github.com/thuml/Time-Series-Library
-  role: forecasting_baselines
-```
+### 4.6 冻结预注册
 
-每次正式实验运行前记录：
-
-```bash
-git rev-parse HEAD
-uv pip freeze
-nvidia-smi
-```
-
-### 4.6 预注册草案
-
-在 `docs/preregistration_v0.md` 冻结：
+`docs/preregistration_v0.md` 已冻结：
 
 - 主要 RQ；
 - 主要指标；
@@ -316,13 +289,15 @@ nvidia-smi
 - 统计检验；
 - 失败结果如何报告。
 
-### 4.7 本阶段验收
+### 4.7 本阶段验收（已完成）
 
 - `make doctor` 成功；
-- CI 能在 CPU 上完成 smoke test；
+- Stage 0 本地测试与发布门禁通过；CI 已配置为 frozen/offline/CPU-only，但不把未实际观察的托管运行写成已通过；
 - 关键论文均已找到官方论文或官方仓库；
 - 所有创新声明有最近邻工作和可证伪实验；
 - “模型计算因果”与“真实市场因果”在术语表中明确分离。
+
+Stage 1 开始前必须基于最新一手论文和官方仓库重开 Gate 0；Stage 0 的检索截点不是后续阶段的永久新颖性保证。
 
 ---
 
@@ -332,85 +307,197 @@ nvidia-smi
 
 ### 5.1 这一阶段在做什么
 
-先规定所有数据、模型、概念、干预和结果的形状，避免后续模块各自定义接口而无法连接。
+先规定所有数据、预测输出、概念、干预位置、干预请求、模型适配器和实验产物的语义与形状，避免后续模块各自定义接口而无法连接。本阶段只实现契约、校验和测试，不生成正式数据、不训练模型、不执行内部干预。
 
-### 5.2 核心数据结构
+### 5.2 权威位置与版本边界
 
-在 `src/tarca/contracts/` 中实现 Pydantic 或 dataclass：
+所有跨模块契约统一放在：
+
+```text
+src/tarca/contracts/
+```
+
+该目录是唯一权威来源。`data`、`models`、`concepts`、`interventions`、`localization` 和 `metrics` 只能导入这些契约，不得再创建 `data/contracts.py` 或复制同名 class。
+
+定义：
 
 ```python
-@dataclass
+CONTRACT_SCHEMA_VERSION = "1.0.0"
+```
+
+所有可持久化 Manifest 和 Arrow Schema 都必须携带该版本。运行时张量对象采用 `@dataclass(frozen=True, slots=True)` 与显式校验；JSON/Parquet 元数据采用 Pydantic v2 `BaseModel`，默认 `extra="forbid"`、`frozen=True`、`strict=True`。冻结只限制字段重新绑定，不表示 Tensor 内容在物理上不可修改。
+
+### 5.3 核心运行时数据结构
+
+#### `WindowBatch`
+
+```python
+@dataclass(frozen=True, slots=True)
 class WindowBatch:
-    x: Tensor                 # [B, L, D]
-    y: Tensor                 # [B, H, Dy]
-    observed_covariates: Tensor | None
-    known_future_covariates: Tensor | None
-    regime: Tensor            # [B]
-    window_id: list[str]
-    start_time: list
-    forecast_time: list
-    metadata: dict
+    x: Tensor                         # [B, L, D]
+    y: Tensor | None                  # [B, H, Dy]；纯推理时可为 None
+    observed_covariates: Tensor | None        # [B, L, Do]
+    known_future_covariates: Tensor | None    # [B, H, Dk]
+    x_observed_mask: Tensor | None
+    y_observed_mask: Tensor | None
+    observed_covariates_mask: Tensor | None
+    known_future_covariates_mask: Tensor | None
+    regime: Tensor | None             # [B]
+    window_id: tuple[str, ...]
+    input_feature_names: tuple[str, ...]
+    target_names: tuple[str, ...]
+    observed_covariate_names: tuple[str, ...]
+    known_future_covariate_names: tuple[str, ...]
+    feature_start: tuple[datetime, ...]
+    feature_end: tuple[datetime, ...]
+    prediction_start: tuple[datetime, ...]
+    label_end: tuple[datetime, ...]
+    forecast_time: tuple[tuple[datetime, ...], ...]  # B × H
+    metadata: Mapping[str, JSONValue]
 ```
 
+必须满足：
+
+- 所有 batch 维一致，名称数量与最后一维一致；
+- `known_future_covariate_names` 与 `target_names` 不相交；
+- `window_id` 批内唯一，train/validation/test 间不重叠；
+- 时间统一为 timezone-aware UTC，且 `feature_start <= feature_end < prediction_start <= label_end`；
+- 每个样本的 `forecast_time` 严格递增并处于预测区间；
+- 数值 Tensor 保持有限，缺失性由同形状 bool mask 表达，不以 NaN 充当跨模块协议；
+- 校验不得隐式 clone、detach、改变 dtype、移动 device 或关闭 `requires_grad`。
+
+#### `ForecastDistribution`
+
 ```python
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ForecastDistribution:
-    mean: Tensor              # [B, H, Dy]
-    scale: Tensor | None      # [B, H, Dy]
-    quantiles: dict[float, Tensor]
-    logits: Tensor | None
-    samples: Tensor | None
+    mean: Tensor                      # [B, H, Dy]
+    scale: Tensor | None              # [B, H, Dy]
+    quantiles: Mapping[float, Tensor]
+    logits: Tensor | None             # [B, H, Dy, C]
+    samples: Tensor | None            # [S, B, H, Dy]
+    window_id: tuple[str, ...] | None
+    target_names: tuple[str, ...]
 ```
 
+必须验证：`scale > 0`；分位数水平位于 `(0,1)` 且逐元素单调；所有输出形状、device 和浮点 dtype 兼容；不允许通过取绝对值、排序预测值等方式静默修复错误输入。
+
+#### `ConceptBatch`
+
 ```python
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ConceptBatch:
-    values: Tensor            # [B, K]
-    valid_mask: Tensor        # [B, K]
-    names: list[str]
+    values: Tensor                    # [B, K]
+    valid_mask: Tensor                # [B, K]，bool
+    names: tuple[str, ...]
+    window_id: tuple[str, ...]
     computed_from_history_only: bool
+    definition_version: str
+```
+
+`computed_from_history_only` 必须显式给出；正式实验是否允许该概念进入干预，由后续泄漏审计决定。
+
+#### `InterventionSite` 与 `InterventionSpec`
+
+位置目录和执行请求必须分离：
+
+```python
+@dataclass(frozen=True, slots=True)
+class InterventionSite:
+    site_name: str
+    layer: int | None
+    tensor_rank: int
+    batch_axis: int
+    variable_axis: int | None
+    patch_axis: int | None
+    feature_axis: int
+    shape_template: tuple[int | None, ...]
 ```
 
 ```python
-@dataclass
+@dataclass(frozen=True, slots=True)
 class InterventionSpec:
-    layer: int
+    site_name: str
+    layer: int | None
     variable_index: int | None
     patch_index: int | None
     lag: int
     subspace_basis: Tensor | None
-    intervention_kind: str
+    intervention_kind: InterventionKind
 ```
 
-```python
-@dataclass
-class InterventionPair:
-    base_window_id: str
-    source_window_id: str
-    concept_name: str
-    regime_relation: str      # same / cross
-    matching_distance: float
-    concept_delta: float
+`site_name` 是位置的稳定主键；`layer` 仅作为可审计的冗余字段，解析后必须与对应 `InterventionSite` 一致。`SUBSPACE_SWAP` 必须提供有限、二维且满足预注册正交容差的基底；其他干预类型不得携带无意义的基底。
+
+### 5.4 可序列化契约
+
+使用严格 Pydantic 模型实现：
+
+```text
+InterventionPair
+DataManifest
+RunManifest
+MetricRecord
+ArtifactLayout
 ```
 
-### 5.3 模型适配器接口
+`InterventionPair` 至少包含：
+
+```text
+schema_version
+pair_id
+partition                 # train / validation / test
+base_window_id
+source_window_id
+concept_name
+regime_relation           # same / cross / unknown
+matching_distance
+concept_delta
+```
+
+必须满足 base/source 不同、距离有限且非负，并使用稳定哈希生成 `pair_id`。同一窗口不能跨 intervention-pair partition 泄漏。
+
+`DataManifest` 至少记录 dataset name/version/hash、split hash/count、窗口契约和来源说明；`RunManifest` 至少记录 experiment/run id、config/data hash、Git commit、contract version、创建时间和状态。本阶段只定义 Schema，不伪造正式数据或实验结果。
+
+### 5.5 模型适配器接口
 
 ```python
 class ForecastModelAdapter(Protocol):
-    def predict_distribution(self, batch: WindowBatch) -> ForecastDistribution: ...
-    def list_intervention_sites(self) -> list[InterventionSpec]: ...
-    def capture(self, batch: WindowBatch, sites: list[InterventionSpec]) -> dict: ...
+    @property
+    def adapter_name(self) -> str: ...
+
+    @property
+    def model_hash(self) -> str: ...
+
+    @property
+    def is_frozen(self) -> bool: ...
+
+    def predict_distribution(
+        self, batch: WindowBatch
+    ) -> ForecastDistribution: ...
+
+    def list_intervention_sites(
+        self
+    ) -> tuple[InterventionSite, ...]: ...
+
+    def capture(
+        self,
+        batch: WindowBatch,
+        sites: tuple[InterventionSite, ...],
+    ) -> Mapping[str, Tensor]: ...
+
     def intervene(
         self,
         base: WindowBatch,
         source: WindowBatch,
-        spec: InterventionSpec
+        spec: InterventionSpec,
     ) -> ForecastDistribution: ...
 ```
 
-### 5.4 结果目录契约
+`Protocol` 只定义结构化接口；运行时成员存在检查不能证明方法签名正确，必须结合静态类型检查、fake adapter 行为测试和后续真实 adapter 测试。本阶段不得提前实现 PatchTST/iTransformer adapter 或 hook。
 
-每次运行必须产生：
+### 5.6 结果目录与 Arrow Schema 契约
+
+每次正式运行必须产生：
 
 ```text
 artifacts/<experiment_id>/<run_id>/
@@ -426,16 +513,28 @@ artifacts/<experiment_id>/<run_id>/
 └── plots/
 ```
 
-### 5.5 契约测试
+目录验证必须拒绝绝对路径、`..` 和路径穿越。三个 Parquet 文件分别定义显式 Arrow Schema，至少固定列名、数据类型、nullable 行为和 `contract_schema_version` metadata；Schema 校验不能只比较列名。
 
-- 错误维度必须立即报错；
-- 时间戳必须单调；
-- `known_future_covariates` 不得包含目标；
-- 训练、验证、测试的 `window_id` 不得重复；
-- 概念函数必须声明是否只使用历史；
-- 所有 intervention pair 必须指向不同样本；
-- 预测分布的 `scale > 0`；
-- 分位数必须单调。
+推荐 long format：
+
+- `metrics_by_regime.parquet`：experiment/run/split/metric/value/regime/horizon/concept；
+- `predictions.parquet`：window/split/forecast_time/horizon/target/y_true/mean/scale；
+- `intervention_pairs.parquet`：完整 `InterventionPair` 字段。
+
+### 5.7 契约测试
+
+至少覆盖：
+
+- 错误 rank、shape、batch size、device 或 dtype 立即报错；
+- 特征名称数量不一致、known-future 与 target 重叠时失败；
+- naive datetime、非单调时间和时间区间越界时失败；
+- mask 形状或 dtype 错误、数值非有限时失败；
+- train/validation/test 与 intervention-pair partition 无交集；
+- `scale <= 0`、非法 quantile level 和 quantile crossing 时失败；
+- `InterventionSite` 轴重复/越界和非法子空间时失败；
+- Tensor identity、device、dtype 和 `requires_grad` 在校验后不变；
+- JSON Schema、Arrow Schema 和临时 Parquet round-trip 可复现；
+- Stage 0 全量测试继续通过，且本阶段不下载数据、不训练模型。
 
 ---
 
@@ -518,7 +617,7 @@ $$
 5. **外生影响**；
 6. **均值回复/持续性切换**。
 
-前六周只要求趋势和波动。
+Stage 1 前六个实施周的概念范围只要求趋势和波动。
 
 ### 6.4 反事实 oracle
 
@@ -1080,6 +1179,8 @@ $$
 
 所有维度使用训练 intervention pairs 估计的尺度标准化，验证/测试不重新拟合。
 
+效应签名只描述预测分布本身的变化，不加入单样本“calibration”分量。若合成 oracle 或真实目标 $y_i$ 可用，可另报逐样本 $\Delta\mathrm{NLL}_i$、$\Delta\mathrm{CRPS}_i$ 或固定分位数的 $\Delta\mathrm{pinball}_{\alpha,i}$；PIT、coverage、reliability 和 calibration error 必须在 `fold × horizon × subgroup/regime` 上聚合，且不得作为测试时定位输入。
+
 ### 11.2 TII 距离
 
 MVP：
@@ -1199,7 +1300,7 @@ probe(mapping_output) → y
 
 ### 12.4 Gate A：固定位置干预门槛
 
-建议在正式运行前冻结如下门槛：
+以下判定项全部必须满足；具体数值为 `TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT`：
 
 - oracle site 的 held-out IIC 明显高于随机 site；
 - Cause 高且 Isolation 不崩溃；
@@ -1278,13 +1379,13 @@ pi_uot = ot.unbalanced.sinkhorn_unbalanced(...)
 
 ### 13.6 选择规则
 
-同时实现三种校准：
+同时实现三种候选保留策略：
 
 1. 每个概念 Top-k；
-2. 累积 transport mass ≥ 0.8；
+2. 累积 transport mass 阈值（`0.8` 仅为待预注册的候选敏感性值）；
 3. 验证集最优阈值。
 
-正式主结果只能使用预注册的一种，其余作为敏感性分析。
+正式主结果只能使用首次正式实验前预注册的一种策略及其数值，其余作为敏感性分析。
 
 ---
 
@@ -1475,11 +1576,11 @@ $$
 
 ---
 
-## 17. 阶段 8：PLOT 引导的 DAS 精修（第 23–24 周）
+## 17. 阶段 8：PLOT-guided DAS 基线与窄化 TARCA 子空间比较（第 23–24 周）
 
 ### 17.1 这一阶段在做什么
 
-PLOT 负责快速缩小位置范围，DAS 只在候选区域学习旋转子空间，避免全模型穷举。
+PLOT 负责快速缩小位置范围，DAS 只在候选区域学习旋转子空间，避免全模型穷举。PLOT-guided DAS 是 `NOT_NOVEL` 基线，不能作为 TARCA 贡献；本阶段只检验窄化 TARCA 是否额外恢复 forecast-indexed variable、causal lag、forecast horizon 与 constrained subspace 联合真值。
 
 ### 17.2 DAS 优化变量
 
@@ -1515,7 +1616,7 @@ held-out intervention pairs
 - random-guided DAS；
 - oracle-site DAS。
 
-### 17.5 实验 E07：PLOT-DAS 效率
+### 17.5 实验 E07：PLOT-DAS 基线与窄化变体
 
 报告：
 
@@ -1532,13 +1633,14 @@ held-out intervention pairs
 
 建议判定逻辑：
 
-1. 正确概念在 easy/medium 植入设置中稳定恢复；
-2. PLOT-guided DAS 的 IIC 接近 Full DAS，但运行成本显著降低；
-3. 随机概念、随机模型、错误 SCM 显著更差；
-4. rank 增大时 IIC 上升，但高容量随机模型不能追平真实模型；
-5. held-out intervention pair 上仍有效；
-6. 位置恢复与干预保真度同时成立，不能只满足一个；
-7. 两轮修复后仍不优于随机或穷举，则终止后续真实数据实验。
+1. 在同一生成链上同时恢复 intervention truth 与四轴 location truth；
+2. forecast horizon $h$ 与 causal lag $\delta$ 可独立辨识，变量/通道轴提供独立定位信息；
+3. 窄化 TARCA 在联合真值上优于原始 PLOT、DAS 和随机定位，同时成本低于 Full DAS；
+4. PLOT-guided DAS 仅作为已知强基线报告，不以其加速结果关闭 TARCA 的新颖性缺口；
+5. 随机概念、随机模型、错误 SCM 显著更差；
+6. rank 增大时 IIC 上升，但容量前沿上的高容量随机模型不能追平真实模型；
+7. held-out intervention pair 上仍有效，且位置恢复与干预保真度同时成立；
+8. 具体成功阈值为 `TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT`；两轮修复后仍不优于随机或穷举，则停止后续真实数据定位。
 
 ---
 
@@ -1731,18 +1833,20 @@ $\rho$ 只在验证集选择：
 
 通过条件：
 
-- 未见状态最坏抽象误差稳定降低；
+- 解释器、位置、normalizer 和映射在 sequential unseen regime 上全部冻结并保持 zero-refit；
+- 未见状态最坏抽象误差相对 ERM、Group-DRO、DiRoCA-style 和随机重加权稳定降低；
 - 平均状态没有不可接受退化；
 - 改善不依赖测试状态标签；
 - 随机环境划分不能获得相同收益；
 - $\rho$ 的选择在多个种子上稳定。
+- 具体成功阈值为 `TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT`。
 
 若失败：
 
 1. 检查环境是否过细或过粗；
 2. 检查 cost 是否包含无关特征；
 3. 检查高层 SCM 是否跨状态错设；
-4. 若只能依赖测试期状态定义，则取消“状态鲁棒”主张。
+4. 若读取测试状态标签，或必须在测试期重新拟合解释器、位置、normalizer 或映射，则取消“状态鲁棒”主张；per-regime fit 只能作为 oracle 上界单独报告。
 
 ---
 
@@ -2008,15 +2112,15 @@ Captum 归因结果只回答输入重要性，不能与机制因果结论混为�
 - 匹配质量；
 - 模型预测误差。
 
-### 24.5 Gate 3
+### 24.5 跨域机制检查（非正式 Gate）
 
-至少满足：
+进入金融压力测试前至少满足：
 
 - 两个以上非金融域中，TARCA 的 held-out IIC、定位稳定性或 worst-regime 指标优于基线；
 - 结果跨随机种子和至少两个模型稳定；
 - 负对照仍失败；
 - 方法不是只在一个手工挑选概念上有效；
-- 若解释有效但预测无提升，可将论文定位为机制解释，不强行声称预测收益。
+- 本检查只确认非金融机制证据可进入验证层，不是冻结预注册中的 Gate 3，也不要求预测收益。
 
 ---
 
@@ -2042,7 +2146,7 @@ data_release_time
 
 ### 25.3 Purging
 
-若训练样本标签区间与验证/测试标签区间重叠，则删除该训练样本：
+若训练样本的信息区间（包括特征回看、标签窗口和干预后效）与验证/测试信息区间重叠，则删除该训练样本：
 
 ```python
 overlap = (
@@ -2053,7 +2157,7 @@ overlap = (
 
 ### 25.4 Embargo
 
-在验证/测试起点附近增加不可训练区间。长度依据最大标签 horizon 和数据频率预注册，而不是根据结果调整。
+在验证/测试起点附近增加不可训练区间。长度至少覆盖最大特征回看泄漏与最大标签/干预后效窗口，并依据数据频率预注册，而不是机械设为 $H-1$ 或根据结果调整。
 
 ### 25.5 拟合时序审计
 
@@ -2212,7 +2316,7 @@ test: 3–6 个月
 step: 1–3 个月
 ```
 
-实际长度按数据频率和样本量预注册。每个 fold 重新拟合 scaler、状态模型和概念阈值。
+实际长度按数据频率和样本量预注册。每个 fold 只能在该 fold 的训练段重新拟合 scaler、状态模型和概念阈值；进入 validation/test 前冻结。解释器、位置、normalizer 和映射在该 fold 的 unseen regime 评估中保持 zero-refit。
 
 ### 27.5 实验 E14：多资产机制与状态
 
@@ -2235,6 +2339,24 @@ step: 1–3 个月
 - block bootstrap CI；
 - Diebold–Mariano 或适当配对检验；
 - 多重比较校正。
+
+### 27.6 Gate 3：预测收益（探索性）
+
+Gate 3 只在 Gate A/1/2、至少两个非金融域和本阶段金融压力测试均完成后评估，不能反向为机制定位或鲁棒解释补票。
+
+金融压力测试属于 RQ5/验证层；其结果只是 Gate 3 探索性预测收益判断的一项输入，不构成方法新颖性证据，也不得反向为 Gate A/1/2 补票。
+
+通过条件：
+
+- 至少两个非金融域和一个金融任务/预注册替代域的 worst-regime prediction 或聚合 calibration 指标方向一致；
+- 结果跨多个模型与随机种子稳定；
+- 逐样本使用 NLL/CRPS/pinball 等 proper score，calibration 只在预注册的 `fold × horizon × subgroup/regime` 层聚合；
+- 所有具体阈值为 `TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT`。
+
+失败处理：
+
+- 机制解释若已通过 Gate A/1/2，仍作为纯解释结果完整报告；
+- 不隐藏预测收益失败，也不把只有金融域的改善写成通用方法主张。
 
 ---
 
@@ -2429,7 +2551,6 @@ make paper-tables
 
 ```text
 src/tarca/data/
-├── contracts.py
 ├── splits.py
 ├── normalization.py
 ├── leakage_checks.py
@@ -2438,10 +2559,12 @@ src/tarca/data/
 └── finance/
 ```
 
+`data` 模块必须从 `tarca.contracts` 导入 `WindowBatch`、Manifest 和 split 校验契约，不得重新定义同名类型。
+
 ### 核心函数
 
 ```python
-build_windows(...)
+build_windows(...) -> WindowBatch
 temporal_split(...)
 fit_transform_train_only(...)
 purge_overlapping_labels(...)
@@ -2641,32 +2764,38 @@ src/tarca/metrics/
 | E04 | 固定交换+负对照 | 阶段4–5 | IIC/Cause/Isolation | Gate A |
 | E05 | 层×时间 PLOT | 阶段6 | layer/patch/lag | Gate 1 前 |
 | E06 | 三轴定位 | 阶段7 | joint site F1 | Gate 1 前 |
-| E07 | PLOT-guided DAS | 阶段8 | 子空间、效率 | Gate 1 |
+| E07 | PLOT-DAS 基线与窄化 TARCA | 阶段8 | 联合真值、子空间、效率 | Gate 1 |
 | E08 | Regime-DRO | 阶段9 | worst-regime TII | Gate 2 |
-| E09 | 通用固定概念 | 阶段10 | 跨域机制 | Gate 3 |
-| E10 | 跨模型一致性 | 阶段10 | 架构差异 | Gate 3 |
-| E11 | 通用跨状态 | 阶段10 | OOD 解释 | Gate 3 |
-| E12 | 失败区域诊断 | 阶段10 | 失败分类 | Gate 3 |
-| E13 | FI-2010 | 阶段11 | LOB 压力测试 | Gate 4 |
-| E14 | 多资产 | 阶段11 | 金融分布预测 | Gate 4 |
+| E09 | 通用固定概念 | 阶段10 | 跨域机制 | 跨域机制检查 |
+| E10 | 跨模型一致性 | 阶段10 | 架构差异 | 跨域机制检查 |
+| E11 | 通用跨状态 | 阶段10 | OOD 解释 | 跨域机制检查 |
+| E12 | 失败区域诊断 | 阶段10 | 失败分类 | 跨域机制检查 |
+| E13 | FI-2010 | 阶段11 | LOB 压力测试 | Gate 3 输入 |
+| E14 | 多资产 | 阶段11 | 金融分布预测 | Gate 3 评估（合并 E09–E13） |
 | E15 | 全消融 | 阶段12 | 贡献分解 | Gate 4 |
 | E16 | 统计与效率 | 阶段12 | CI/显著性/成本 | Gate 4 |
 
 ---
 
-# 第十一部分：首六周的可直接执行清单
+# 第十一部分：项目累计周次清单（Stage 0 历史 + Stage 1 起步）
 
-## 39. 第 1 周
+本节使用全项目累计周次：第 1–2 周是已经完成并冻结的 Stage 0 历史记录，不得重新执行
+或改写证据；Stage 1 从累计第 3 周开始。累计第 3 周的统一契约和第 4–6 周的合成
+SCM/paired oracle 已完成工程实现；累计第 7–8 周的基础预测器仍是后续时钟。该六周范围
+严格止于统一契约、合成 SCM、paired oracle 和基础预测器，不授权提前执行内部干预、OT
+或 DRO。
 
-- 建仓库；
-- 锁定 Python 3.11 环境；
-- 跑通 PyTorch、POT、pyvene；
-- 建 related-work 表；
-- 阅读并复现 PLOT 的一个 CPU 小实验；
-- 阅读并复现 DiRoCA 的一个 synthetic 小实验；
-- 写 terminology 和 assumption ledger。
+## 39. 第 1 周（Stage 0 历史，已完成）
 
-交付：
+- 已建立仓库；
+- 已锁定 Python 3.11 环境；
+- 已跑通 PyTorch、POT、pyvene 的 CPU 基础检查；
+- 已建立 related-work 表；
+- 对 PLOT 已只执行受限组件级 smoke，未写成论文复现；
+- 对 DiRoCA 已只执行安全的 static/import 级检查，未运行正式训练；
+- 已写入 terminology 和 assumption ledger。
+
+历史交付：
 
 ```text
 make doctor
@@ -2675,32 +2804,46 @@ docs/related_work_matrix.csv
 docs/terminology.md
 ```
 
-## 40. 第 2 周
+## 40. 第 2 周（Stage 0 历史，已完成并冻结）
 
-- 定义数据、模型、概念、干预接口；
-- 写 shape tests；
-- 完成实验输出目录；
-- 建 CI；
-- 写预注册 v0；
-- 冻结 MVP：趋势、波动；D=4；L=48；H=12；2 个 regime。
+- 已完成 Stage 0 范围合同、冻结预注册、第三方固定来源和 CI 配置；
+- 已固化 Stage 0 的 `PARTIAL/COMPONENT` 与 `IMPORT_ONLY/STATIC` 证据边界；
+- 已完成 Stage 0 测试、发布边界和实施报告；
+- 未实现 Stage 1 数据契约、SCM、模型或干预占位代码。
+
+历史交付：
+
+```text
+make stage0-check
+docs/preregistration_v0.md
+artifacts/stage0/STAGE0_IMPLEMENTATION_REPORT.md
+```
+
+## 41. 第 3 周（Stage 1A 工程已完成）
+
+- 实现 `src/tarca/contracts/` 唯一权威契约；
+- 定义运行时 Tensor dataclass、Pydantic Manifest、Adapter Protocol 和 Arrow Schema；
+- 写 shape、时间、泄漏、mask、scale、quantile 和 split 测试；
+- 完成实验输出目录契约；
+- 不下载数据、不训练模型。
 
 交付：
 
 ```text
 src/tarca/contracts/
 tests/contracts/
-docs/preregistration_v0.md
+docs/stage1_unified_data_contract.md
 ```
 
-## 41. 第 3 周
+## 42. 第 4 周（Stage 1B 工程已完成）
 
 - 实现 regime Markov chain；
 - 实现 trend/scale latent state；
 - 实现 nonlinear VAR；
-- 保存 exogenous noise；
-- 完成事实 rollout。
+- 保存 exogenous noise、真实延迟和生成配置；
+- 使用统一 `WindowBatch` 完成事实 rollout。
 
-## 42. 第 4 周
+## 43. 第 5 周（Stage 1B 工程已完成）
 
 - 实现 paired counterfactual oracle；
 - 用相同未来噪声计算干预；
@@ -2708,28 +2851,22 @@ docs/preregistration_v0.md
 - 写 oracle 单元测试；
 - 生成 synthetic easy。
 
-## 43. 第 5 周
+## 44. 第 6 周（Stage 1B 工程已完成）
 
-- 实现 naive、VAR、DLinear；
-- 实现小型 PatchTST；
-- 加 Gaussian head；
-- 完成 train/val/test；
-- 记录分状态预测指标。
-
-## 44. 第 6 周
-
-- 实现固定层 hook；
-- 手工指定正确层和 patch；
-- 构造 same-regime source pairs；
-- 完成趋势和波动交换干预；
-- 加随机概念负对照；
-- 计算第一版 IIC。
+- 完成连续时间 train/validation/test 切分；
+- 验证标准化只在训练期拟合；
+- 验证趋势干预不改变尺度潜变量、尺度干预主要改变方差；
+- 运行 E01 工程 smoke：正确 SCM、错误 SCM 和随机概念对照；
+- 报告效应误差、延迟恢复和 Monte Carlo 收敛。
 
 第 6 周末只回答一个问题：
 
-> 在正确位置执行交换后，低层预测效应是否比随机位置更接近高层 SCM 的反事实效应？
+> 合成 SCM 与 paired counterfactual oracle 是否在相同未来噪声下产生可复现、可区分且无时间泄漏的真值效应？
 
-若答案为否，不进入 OT。
+若答案为否，不进入基础预测器，更不能进入内部干预或 OT。
+
+当前 easy 配置的工程 smoke 对该问题给出可复现的工程级肯定结果，因此可以进入基础预测器
+的工程准备；正式 E01 阈值、统计协议和 Gate A/1/2 仍未冻结或执行。
 
 ---
 
@@ -2862,7 +2999,7 @@ docs/preregistration_v0.md
 
 - 固定位置交换干预成立；
 - 合成位置真值可恢复；
-- PLOT-guided DAS 明显降低搜索成本；
+- 窄化 TARCA 相对预注册的 PLOT/PLOT-guided DAS/Full DAS 基线同时恢复联合真值，并保持可接受的搜索成本；
 - 随机模型和随机概念无法取得相近分数；
 - 未见状态的 worst-regime 抽象误差得到稳定改善；
 - 至少两个非金融域有效；
@@ -2968,6 +3105,35 @@ docs/preregistration_v0.md
 
 22. FRED API
     https://fred.stlouisfed.org/docs/api/fred/
+
+## 统一数据契约与可复现 Schema
+
+23. Pydantic v2：Models、Dataclasses 与 ConfigDict
+    https://docs.pydantic.dev/latest/concepts/models/
+    https://docs.pydantic.dev/latest/concepts/dataclasses/
+    https://docs.pydantic.dev/latest/api/config/
+    https://github.com/pydantic/pydantic
+
+24. Python `typing.Protocol` 与 `runtime_checkable`
+    https://docs.python.org/3.11/library/typing.html#typing.Protocol
+
+25. PyTorch `torch.distributions`
+    https://docs.pytorch.org/docs/stable/distributions.html
+
+26. Apache Arrow / PyArrow Schema 与 Parquet
+    https://arrow.apache.org/docs/python/generated/pyarrow.Schema.html
+    https://github.com/apache/arrow
+
+27. Lim et al., **Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting**
+    https://arxiv.org/abs/1912.09363
+
+## 概率评分与校准
+
+28. Gneiting & Raftery, **Strictly Proper Scoring Rules, Prediction, and Estimation**
+    https://doi.org/10.1198/016214506000001437
+
+29. Gneiting et al., **Assessing Probabilistic Forecasts of Multivariate Quantities, with an Application to Ensemble Predictions of Surface Winds**
+    https://arxiv.org/abs/0806.0813
 
 ---
 

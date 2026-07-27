@@ -1,6 +1,6 @@
 # TARCA Stage 1B Synthetic Regime-Switching SCM 实施报告
 
-> 报告日期：2026-07-26
+> 初始报告日期：2026-07-26；最后复核：2026-07-27
 > 分支：`codex/stage1-synthetic-scm`
 > 实施基线：`f376d60ccf2437494b10e04b3ce98eeebfed9b88`
 > 报告前代码提交：`fceb9aa59f46f8882dc4f80822c7498cf194a850`
@@ -43,8 +43,8 @@
 
 | 阻断项 | 结论 | 证据 |
 |---|---|---|
-| 统一数据契约缺失 | 未触发 | 428 个契约行为测试通过 |
-| Stage 0 基线失败 | 未触发 | Doctor PASS；全仓库 994 通过、2 跳过 |
+| 统一数据契约缺失 | 未触发 | 当前收集 429 个契约测试；全仓门禁通过 |
+| Stage 0/1 基线失败 | 未触发 | Doctor PASS；全仓库 999 通过、2 跳过；统一覆盖率 90.76% |
 | 无法兼容的契约冲突 | 未触发 | 两项冲突均按用户授权的最小兼容方案解决 |
 | 新增重依赖/复制第三方代码 | 未触发 | `uv.lock` 未改变；仅使用现有依赖；无复制实现 |
 | 本地资源不足 | RAM 项已由用户豁免，其余通过 | 12 逻辑核、约 169 GiB 可用磁盘、CPU PyTorch |
@@ -161,6 +161,7 @@ SCIENTIFIC_STATUS: ENGINEERING_SMOKE_ONLY
 | `src/tarca/data/synthetic/_validation_core.py` | 严格报告记录、真值与编排验证 |
 | `src/tarca/data/synthetic/_validation_integrity.py` | 独立 split/hash/manifest/oracle 完整性验证 |
 | `src/tarca/data/synthetic/_validation_persistence.py` | 独立九文件、NPZ、Arrow 和 checksum 验证 |
+| `src/tarca/data/synthetic/_path_safety.py` | 目录身份快照、复核、发布与 fail-closed 清理 |
 | `scripts/build_synthetic_dataset.py` | 安全构建、seed override、验证和原子发布 CLI |
 | `scripts/run_synthetic_oracle_smoke.py` | CPU-only smoke 与 JSON/Markdown 原子证据 CLI |
 
@@ -204,6 +205,8 @@ SCIENTIFIC_STATUS: ENGINEERING_SMOKE_ONLY
 - scale 干预污染 trend、非平凡干预被静默忽略；
 - CLI 持久化验证失败遗留输出；
 - staging 同名替换导致清理越界、staging 创建失败泄漏裸异常。
+- 输出父目录在校验后被换位仍可写入或发布；
+- manifest 中 target 与 known-future covariate 重叠仍会被接受。
 
 所有 Critical/High 审查发现均在提交前以回归测试关闭。
 
@@ -215,12 +218,14 @@ SCIENTIFIC_STATUS: ENGINEERING_SMOKE_ONLY
 | `python scripts/doctor.py` | 0 | 总状态 PASS |
 | `python -m compileall -q src scripts tests` | 0 | PASS |
 | `ruff check .` | 0 | PASS |
-| `ruff format --check .` | 0 | 75 个文件已格式化 |
-| `pytest tests/contracts -q`（原样 addopts） | 1 | 428 行为测试通过；仅因未导入 `tarca.stage0`，冻结 coverage 得到 0% |
-| `pytest tests/contracts -q -o "... --no-cov"` | 0 | 428 通过 |
-| `pytest tests/data/synthetic ... --no-cov` | 0 | 403 通过、1 跳过（安全修复前全集） |
+| `ruff format --check .` | 0 | 77 个 Python 文件格式合规 |
+| `pytest tests/contracts --collect-only -q` | 0 | 当前收集 429 个合同测试 |
+| `pytest tests/data/synthetic --collect-only -q` | 0 | 当前收集 409 个 synthetic 测试 |
+| 四个 parent-swap/manifest RED 回归 | 1 | 修复前 `4 failed` |
+| 同一批四个回归 GREEN | 0 | 修复后 `4 passed` |
+| 合同/synthetic 聚焦回归 | 0 | `133 passed, 1 skipped` |
 | `pytest tests/data/synthetic --cov=tarca.data.synthetic` | 0 | 406 通过、1 跳过；89.87% |
-| `pytest -q` | 0 | 994 通过、2 跳过；Stage 0 coverage 91.17% |
+| `pytest -q --cache-clear` | 0 | 999 通过、2 跳过；Stage 0/1 分支覆盖率 90.76% |
 | `pre_commit run --files <Stage1B files>` 第一次 | 1 | 发现 2 个 lint 问题，无安全 hook 失败 |
 | 同一 file-scoped pre-commit 修复后重跑 | 0 | 全部 hooks PASS |
 | lint 修复后的相关 record/resource 测试 | 0 | 9 通过；可用内存查询通过 |
@@ -231,6 +236,17 @@ SCIENTIFIC_STATUS: ENGINEERING_SMOKE_ONLY
 Windows 符号链接负例因当前账户不能创建测试符号链接而跳过；reparse/交换攻击仍由
 可运行的目录身份测试和 builder 安全测试覆盖。全仓库第二个 skip 是既有的 Windows
 平台条件 skip。
+
+### 6.4 2026-07-27 安全修复说明
+
+`build_synthetic_dataset.py`、`run_synthetic_oracle_smoke.py` 和
+`persist_synthetic_dataset()` 现在共用同一目录守卫。守卫记录可信根、输出父目录和
+staging 目录的 canonical path 与 `(st_dev, st_ino)`，并在 staging 创建前后、文件写入、
+发布和清理时复核。若父目录或 staging 被替换、变为 reparse point 或越出可信根，则
+停止发布；清理阶段宁可保留无法确认身份的 staging，也不跟随新路径删除。
+
+该实现降低了标准库路径操作可检测范围内的 parent-swap/TOCTOU 风险，但不声称等价于
+操作系统目录句柄相对 API，也不提供断电条件下的目录 fsync 耐久性。
 
 ### 6.3 复现证据
 

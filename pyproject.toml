@@ -49,14 +49,14 @@ testpaths = ["tests"]
 addopts = [
   "--strict-config",
   "--strict-markers",
-  "--cov=tarca.stage0",
+  "--cov",
   "--cov-report=term-missing",
   "--cov-fail-under=80",
 ]
 
 [tool.coverage.run]
 branch = true
-source = ["tarca.stage0"]
+source = ["tarca.stage0", "tarca.contracts", "tarca.data.synthetic"]
 
 [tool.coverage.report]
 fail_under = 80

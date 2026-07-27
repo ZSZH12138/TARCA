@@ -5,10 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import stat
 import sys
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -19,6 +17,14 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from tarca.data.synthetic._path_safety import (  # noqa: E402
+    DirectorySnapshot,
+    StagingDirectory,
+    capture_directory,
+    cleanup_staging_directory,
+    create_staging_directory,
+    publish_staging_child,
+)
 from tarca.data.synthetic.dataset_builder import (  # noqa: E402
     SyntheticConfig,
     build_synthetic_dataset,
@@ -69,7 +75,7 @@ def resolve_repository_path(
     return resolved
 
 
-def _ensure_safe_parent(target: Path, project_root: Path) -> None:
+def _ensure_safe_parent(target: Path, project_root: Path) -> DirectorySnapshot:
     root = project_root.resolve(strict=True)
     relative = target.relative_to(root)
     current = root
@@ -82,23 +88,7 @@ def _ensure_safe_parent(target: Path, project_root: Path) -> None:
             current.mkdir()
     if os.path.lexists(target):
         raise ValueError(f"output path: target already exists: {target}")
-
-
-def _cleanup_staging(
-    staging: Path,
-    output: Path,
-    identity: tuple[int, int],
-) -> None:
-    if not os.path.lexists(staging):
-        return
-    info = staging.lstat()
-    if (
-        staging.parent == output.parent
-        and staging.name.startswith(f".{output.name}.staging-")
-        and not _is_reparse(staging)
-        and (info.st_dev, info.st_ino) == identity
-    ):
-        shutil.rmtree(staging)
+    return capture_directory(target.parent, trusted_root=root, label="output parent")
 
 
 def _with_seed(config: SyntheticConfig, seed: int | None) -> SyntheticConfig:
@@ -165,33 +155,26 @@ def main(
         _error("INPUT_ERROR", error)
         return 2
 
-    staging: Path | None = None
-    staging_identity: tuple[int, int] | None = None
+    staging_guard: StagingDirectory | None = None
     try:
         dataset = build_synthetic_dataset(config)
         validation = validate_synthetic_dataset(dataset)
         if validation.status != "VALIDATION_PASS":
             raise RuntimeError("in-memory synthetic validation failed")
-        _ensure_safe_parent(output, project_root)
-        staging = Path(
-            tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent)
-        ).resolve()
-        staging_info = staging.lstat()
-        staging_identity = (staging_info.st_dev, staging_info.st_ino)
-        staged_dataset = staging / "dataset"
+        output_parent = _ensure_safe_parent(output, project_root)
+        staging_guard = create_staging_directory(output, output_parent)
+        staged_dataset = staging_guard.path / "dataset"
         persisted = persist_synthetic_dataset(dataset, staged_dataset)
         validation = validate_synthetic_dataset(dataset, persisted=persisted)
         if validation.status != "VALIDATION_PASS":
             raise RuntimeError("persisted synthetic validation failed")
-        if os.path.lexists(output):
-            raise ValueError(f"output path: target already exists: {output}")
-        staged_dataset.rename(output)
+        publish_staging_child(staging_guard, "dataset", output)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
         _error("BUILD_ERROR", error)
         return 1
     finally:
-        if staging is not None and staging_identity is not None:
-            _cleanup_staging(staging, output, staging_identity)
+        if staging_guard is not None:
+            cleanup_staging_directory(staging_guard)
 
     print(
         json.dumps(

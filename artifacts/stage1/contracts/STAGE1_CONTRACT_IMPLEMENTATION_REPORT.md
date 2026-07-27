@@ -1,6 +1,6 @@
 # TARCA Stage 1A Unified Contract Implementation Report
 
-生成时间：2026-07-25
+初始生成时间：2026-07-25；最后复核：2026-07-27
 
 ## A. 状态
 
@@ -36,6 +36,8 @@ COMPLETED
 
 - 实现 `DataSplitSummary`、`WindowContractSummary`、`InterventionPair`、`DataManifest`、`RunManifest`、`MetricRecord`。
 - 实现 `validate_disjoint_window_partitions` 与 `validate_intervention_pair_partitions`，阻止 split/pair 泄漏。
+- `WindowContractSummary` 强制 `target_names` 与 `known_future_covariate_names` 不相交，
+  与运行时 `WindowBatch` 的防泄漏语义一致。
 - `pair_id` 为稳定 `sha256:` 前缀的 64 位小写十六进制哈希，只基于规定字段生成，不混入诊断浮点和 partition。
 
 ### 6) Adapter 静态协议
@@ -73,7 +75,8 @@ COMPLETED
 ## D. 依赖变化
 
 - 未新增、移除或升级任何直接依赖或传递依赖。
-- `pyproject.toml`：无变更。
+- `pyproject.toml`：仅把既有 80% 分支覆盖门禁扩展到
+  `tarca.stage0`、`tarca.contracts` 与 `tarca.data.synthetic`；没有依赖变化。
 - `uv.lock`：无变更。
 - 无下载新数据、无联网拉包、无外部 LLM 调用。
 
@@ -147,6 +150,22 @@ COMPLETED
     - Stage 1 合同源码、测试、文档和本报告均已提交，无 Stage 1 未提交文件。
     - 仅保留任务开始前已有的用户工作区变更：`README.md`、`artifacts/stage0/STAGE0_IMPLEMENTATION_REPORT.md`、`docs/TARCA_具体实施计划.md`、已删除的 `docs/TARCA_项目汇报书.md`、`docs/TARCA_项目计划书.md`、`docs/stage0_scope.md`、`tests/test_operator_docs.py`；这些文件未被本阶段提交。
 
+### 2026-07-27 修复与重新验收
+
+- TDD RED：新增的 manifest 回归首先证明 target 与 known-future 重叠仍会被接受；
+  同批四个安全/契约回归共 `4 failed`。
+- TDD GREEN：加入跨字段 validator 和共享目录身份守卫后，同一批回归 `4 passed`；
+  合同与 synthetic 聚焦回归 `133 passed, 1 skipped`。
+- 当前合同测试收集数：`429`；这些测试已包含在全仓通过结果中。
+- `python -m pytest -q --cache-clear`：退出码 0，`999 passed, 2 skipped`，
+  Stage 0/1 统一分支覆盖率 `90.76%`，高于 80% 门禁。
+- 文档、Gate 0 与质量门禁聚焦测试：`16 passed, 1 skipped`。
+- `uv lock --check`、`compileall`、`ruff check .`、`ruff format --check .`、
+  `pre-commit run --all-files` 均退出 0；Doctor 总状态 `PASS`，CPU-only 的 GPU/CUDA
+  项按预期 `SKIP`。
+- 原先 focused contracts 被 Stage 0-only coverage 配置误判的问题已消除：仓库现在使用裸
+  `--cov` 和多包 `coverage.run.source`，CI 的单一 `pytest -q` 同时约束 Stage 0/1。
+
 ## F. 算力结论
 
 - 实际执行环境：Windows 10，CPython 3.11.15，CPU-only PyTorch，12 logical cores / 6 physical cores，15.75 GiB（约 16.9 GB）RAM，无 CUDA GPU，验证时 C 盘可用约 170 GiB。
@@ -161,17 +180,24 @@ COMPLETED
 - `ForecastModelAdapter` 是静态 `Protocol`，不提供运行时签名校验或真实行为保证。
 - `1.0.0` schema 目前只被测试消费，尚未被真实数据生产链路或真实 adapter 消费。
 - 本阶段只实现合同与验证，不证明 TARCA 方法本身的科学有效性、金融有效性或因果有效性。
-- `uv run pytest tests/contracts -q` 的 literal focused 命令在 2026-07-26 串行复核时仍受冻结 Stage 0 覆盖 addopts 影响而 exit 1；这是基线配置限制，不是合同实现失败。
+- `1.0.0` 仍是工程 schema，不因本次增加既有文档已经要求的防泄漏校验而升级；
+  若未来改变字段或语义，必须按版本策略处理。
 
 ## H. 人工核对步骤
 
 1. 运行 `git diff --stat 383b767..HEAD`，确认修改仅限合同、测试、文档和本报告。
-2. 检查 `src/tarca/` 下不存在本阶段禁止的顶层 `data/`、`models/`、`concepts/`、`interventions/`、`localization/`、`robustness/`、`metrics/`，并确认没有新增 hooks、SCM、training、OT、DAS、DRO 或 financial 实现。
+2. 检查 Stage 1A 提交 `0863d86` 本身没有提前创建后续模块；当前仓库只因后续单独授权的
+   Stage 1B 放行 `src/tarca/data/synthetic/`，仍不得出现 `models/`、`localization/`、
+   `robustness/`、真实 hooks/training、OT、DAS、DRO 或 financial 实现。
 3. 运行 `uv lock --check`。
-4. 运行字面量命令 `uv run pytest tests/contracts -q`；预期 427 个行为测试全部通过，但进程因冻结的 `--cov=tarca.stage0` 对 focused 测试收集不到覆盖数据而退出 1。
-5. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`，预期 427 passed、退出 0。
-6. 运行 `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --cov=tarca.contracts --cov-report=term-missing --cov-fail-under=80'`，预期 427 passed 且合同覆盖率 ≥ 80%。
-7. 运行 `uv run pytest -q`，预期 587 passed, 1 skipped。
+4. 运行 `uv run pytest tests/contracts -q`；当前应收集并通过 429 个合同测试，且不再受
+   Stage 0-only coverage 配置误判。
+5. 若只核对行为，运行
+   `uv run pytest tests/contracts -q -o addopts='--strict-config --strict-markers --no-cov'`。
+6. 运行 `uv run pytest -q`；当前重新验收基线为 `999 passed, 2 skipped`，
+   Stage 0/1 统一分支覆盖率至少 80%。
+7. 检查 `pyproject.toml` 的 coverage source 同时包含 `tarca.stage0`、
+   `tarca.contracts` 与 `tarca.data.synthetic`。
 8. 运行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pre-commit run --all-files`、`uv run python scripts/doctor.py`，预期全部通过或按 Stage 0 CPU-only 显示 GPU/CUDA SKIP。
 9. 打开 `docs/stage1_unified_data_contract.md`，逐项核对字段名、`sha256:` 哈希格式、`strict=True`、Arrow schema、ArtifactLayout 边界。
 10. 在 Python REPL 构造一个合法 `WindowBatch`，记录每个输入 tensor 的 `id`、`is`、device、dtype、shape、stride、`requires_grad`，再分别注入 NaN、naive datetime、错误 mask、`meta` tensor、后端不支持 finite-validation 的 sparse tensor；确认立即 `ValueError` 且输入属性未变化。

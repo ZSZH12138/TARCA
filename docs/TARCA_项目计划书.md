@@ -1,7 +1,16 @@
 # TARCA：面向状态切换的时序因果抽象与分布鲁棒机制定位研究计划
 
-> **计划版本**：v1.0
-> **检索截点**：2026-07-14
+> **计划版本**：v1.2（冻结契约审计最小修订）
+> **原始检索截点**：2026-07-14
+> **契约修订核对日期**：2026-07-25
+> **Stage 1 Gate 0 重开日期**：2026-07-27
+> Stage 0 status: COMPLETED_AND_FROZEN
+> Stage 1A status: COMPLETED
+> Stage 1B status: COMPLETED_ENGINEERING
+> Scientific status: ENGINEERING_SMOKE_ONLY
+> Research status: PARTIALLY_COMPLETED
+> **实施状态边界**：Stage 0 已完成并冻结；Stage 1A 统一数据契约与 Stage 1B 合成 SCM 已完成工程实现，Stage 1B 证据等级仅为 `ENGINEERING_SMOKE_ONLY`。`Research status` 指整个 TARCA 科研项目；由于 Stage 2+、Gate A/1/2、正式统计实验和跨域验证尚未完成，仍为部分完成。
+> **契约优先级**：Stage 1+ 必须服从 Stage 0 冻结的 `preregistration_v0.md`、`assumption_ledger.md`、`novelty_claims.md`、`terminology.md`；没有明确、可追溯的上位修订时，不得静默改写其 Gate、证据等级或创新边界。
 > **目标**：形成一个以通用时间序列方法为主体、金融序列为高难度验证场景。
 
 ---
@@ -12,7 +21,7 @@
 
 本计划建议研究：
 
-> **将神经因果抽象、渐进式最优传输机制定位和分布鲁棒优化统一到非平稳多变量时间序列中，构造可被干预验证、可定位到“层 × 变量 × 时间片 × 子空间”、并在状态切换下保持稳定的预测解释。**
+> **将神经因果抽象、渐进式最优传输机制定位和分布鲁棒优化统一到非平稳多变量时间序列中，构造可被干预验证、可定位到“层 × 时间片/因果时延 × 变量/通道 × 受限子空间”、并在状态切换下保持稳定的预测解释。**
 ### 0.2 CCF-A 级别判断
 
 结论为：**条件性可行**。
@@ -27,12 +36,12 @@
 
 要形成有竞争力的论文，必须同时完成：
 
-1. **新的通用形式化**：定义面向序列到分布预测器的、随预测期变化的时序因果抽象；
-2. **新的算法**：在层、变量、时间片、子空间四个维度上做渐进式机制定位；
-3. **新的鲁棒性机制**：优化最坏状态/环境下的抽象误差，而非只优化平均解释保真度；
+1. **窄化后的形式化候选**：在冻结神经时序预测器上，定义按 forecast horizon 分解且与 causal lag 独立索引的概率干预抽象；
+2. **窄化后的算法候选**：围绕预测期、因果时延、变量/通道与受限子空间联合真值做渐进式机制定位；
+3. **窄化后的鲁棒性候选**：在冻结神经时序预测器上，优化 sequential unseen regime 的最坏抽象误差并保持 zero-refit；
 4. **理论结果**：至少给出近似抽象误差或最坏环境误差上界；
 5. **反空洞性设计**：限制对齐映射容量，设置冻结模型、安慰剂概念和反信息注入实验；
-6. **通用实证**：合成真值、非金融时间序列、金融时间序列三层证据；
+6. **通用实证**：合成真值、非金融时间序列和作为验证层的金融压力测试三层证据；
 7. **严格金融协议**：滚动切分、purging/embargo、发布时间对齐、交易成本和统计显著性检验；
 8. **开源可复现基准**：公开代码、配置、数据处理脚本和主要实验日志。
 
@@ -55,7 +64,7 @@
 3. 替换该内部机制后，输出是否按高层概念模型的干预语义变化；
 4. 该解释在牛市、熊市、高波动、低流动性或结构突变环境下是否仍成立；
 5. 解释模块是否偷偷向模型注入了新信息，而不是发现原有机制；
-6. 解释约束是否能改善分布外预测，而非只产生事后图表。
+6. 在主机制证据成立后，解释约束是否可能改善分布外预测（探索性问题，不是主方法成立的前提）。
 
 TARCA 的研究空白是：
 
@@ -124,10 +133,10 @@ $$
 候选神经位置定义为：
 
 $$
-s=(\ell,d,p,U),
+s=(\ell,p/\delta,d,U),
 $$
 
-分别表示层 $\ell$、变量/通道 d、 patch 或时间位置 p、表示子空间 U。
+分别表示层 $\ell$、时间 patch/因果时延 $p/\delta$、变量/通道 $d$、受限表示子空间 $U$。预测期 $h$ 属于输出效应索引，必须与因果时延 $\delta$ 独立定义和验证，不能合并为泛化的 timestep。
 
 **H2**：从粗到细的最优传输定位比穷举 DAS 更高效，并能恢复合成模型中的已植入机制。
 
@@ -135,9 +144,9 @@ $$
 
 **H3**：在 Wasserstein 模糊集合上最小化最坏环境抽象误差，可提高未见状态下的干预保真度。
 
-### RQ4：解释约束能否改善分布外预测？(由于风险较大 后续不再深入探究 只当作是一个可以考虑的方向)
+### RQ4：解释约束能否改善分布外预测？（探索性）
 
-**H4**：当高层概念是任务相关、低容量且干预语义正确时，因果抽象正则能抑制状态特异的伪相关，提高最坏状态预测、校准和稳定性。
+**H4（探索性）**：当高层概念是任务相关、低容量且干预语义正确时，因果抽象正则可能抑制状态特异的伪相关，提高最坏状态预测、校准和稳定性。H4 只在 Gate A/1/2 通过后评估；不成立不否定 RQ1–RQ3 的机制解释结果。
 
 ---
 
@@ -225,10 +234,10 @@ $$
 第一阶段在粗粒度位置上寻找概念：
 
 ```text
-模型族 → 层 → 变量/通道 → 时间 patch → 表示子空间
+模型族单独审计 → 层 → 时间 patch/因果 lag → 变量/通道 → 受限表示子空间
 ```
 
-为每个高层概念计算干预效应签名：
+模型家族不是位置轴；四轴定位按上述固定顺序逐级缩小候选集合。为每个高层概念计算干预效应签名：
 
 $$
 e_k^{H}
@@ -236,10 +245,11 @@ e_k^{H}
 \left[
 \Delta\mu_{1:H},
 \Delta\sigma_{1:H},
-\Delta q_{\alpha,1:H},
-\Delta \mathrm{calibration}
+\Delta q_{\alpha,1:H}
 \right].
 $$
+
+校准是预测分布与真实观测的联合、聚合性质，不能作为单个干预 pair 的可加签名分量。只有在合成 oracle 或真实目标 $y_i$ 可用时，才可另报逐样本 $\Delta\mathrm{NLL}_i$、$\Delta\mathrm{CRPS}_i$ 或固定分位数的 $\Delta\mathrm{pinball}_{\alpha,i}$；PIT、coverage、reliability 与 calibration error 必须在 `fold × horizon × subgroup/regime` 层聚合，且不得作为测试时定位输入。
 
 为每个候选神经位置计算低层效应签名 $e_s^L$，构造代价矩阵：
 
@@ -262,7 +272,7 @@ $$
 +\varepsilon\operatorname{KL}(\pi\Vert a\otimes b).
 $$
 
-高传输质量（mass）的候选区域进入下一层细化，最终再用 DAS/IIT 优化低维干预子空间。
+高传输质量（mass）的候选区域进入下一层细化，最终用 DAS 优化低维干预子空间。IIT 只属于后述联合训练的次级模式，不是冻结模型主线的定位搜索器。
 
 ### 7.3 时延感知交换干预
 
@@ -287,13 +297,12 @@ $$
 - 不同市场/资产；
 - 合成 SCM 中的已知机制状态。
 
-联合目标：
+模式 A 的主目标在冻结预测器 $F_\theta$ 上优化解释参数与传输计划：
 
 $$
 \begin{aligned}
-\min_{\theta,\alpha,\pi}\quad
-&\mathcal{L}_{\text{forecast}}
-+\lambda\,\mathcal{L}_{\text{TII}}\\
+\min_{\alpha,\pi}\quad
+&\lambda\,\mathcal{L}_{\text{TII}}\\
 &+\beta
 \sup_{Q:W_c(Q,\widehat{P})\le \rho}
 \mathbb{E}_{Q}
@@ -305,7 +314,6 @@ $$
 $$
 其中：
 
-- $\mathcal{L}_{\text{forecast}}$：预测损失；
 - $\mathcal{L}_{\text{TII}}$：平均时序交换干预误差；
 - DRO 项：最坏分布邻域下的抽象误差；
 - isolation：干预非目标概念时目标输出不应错误改变；
@@ -320,6 +328,12 @@ $$
 - 只学习位置、低秩子空间和高层映射；
 - 用于验证模型原有机制；
 - 作为论文的主要可解释性证据。
+
+### 模式 B：联合训练（探索性/次级）
+
+- 可在独立实验中优化 $\theta$、$\alpha$ 与 $\pi$，并加入预测损失；
+- 联合训练只能作为次级证据、消融或性能上界，必须与模式 A 分表、分结论报告；
+- 该模式只能回答 abstraction-regularized forecasting 是否有用，不能证明冻结预测器原本已经实现该机制，也不能用于关闭 Gate A/1/2 或支持 zero-refit 主张。
 
 ---
 
@@ -395,7 +409,7 @@ $$
 
 在高层概念对预测目标具有充分性、且状态变化主要作用于非因果/伪相关特征的假设下，分析抽象正则如何限制状态敏感表示，给出最坏环境风险差异界。
 
-若无法得到第三个理论结果，前两个结果仍可构成主理论；但必须通过强实验证明预测收益。
+若无法得到第三个理论结果，前两个结果仍可构成主理论；只要 Gate A/1/2 闭合，机制解释结果仍可独立成立。预测收益只在 Gate 3 中作为探索性附加证据，不能反向为前述 Gate 补票。
 
 ---
 
@@ -575,6 +589,8 @@ $$
 - 原始 DiRoCA；
 - PLOT-guided DAS。
 
+PLOT-guided DAS 是 `NOT_NOVEL` 基线：PLOT 已明确提出这一组合。TARCA 只能比较其窄化变体在 forecast-indexed variable、causal lag、forecast horizon 与 constrained subspace 联合真值上的恢复，不得把候选缩减加速本身写成贡献。
+
 所有基线必须使用相同预测器、数据切分、概念标签和干预对，以隔离解释算法差异。
 
 ---
@@ -592,6 +608,8 @@ $$
 - 最坏状态风险；
 - 跨市场/跨年份性能下降；
 - 经济指标只作为次级结果：净收益、Sharpe、最大回撤、换手率和交易成本敏感性。
+
+逐样本 proper score 用于预测误差或单样本 score-delta 诊断；coverage、PIT、reliability 与 calibration error 只在 `fold × horizon × subgroup/regime` 上聚合解释，不能从单个样本宣称“已校准”。
 
 ### 14.2 解释与机制
 
@@ -634,7 +652,7 @@ $$
 ## 15. 金融数据泄漏与统计协议
 
 1. 采用 rolling-origin 或 expanding-window；
-2. 对标签重叠任务使用 purging 与 embargo；
+2. 对标签或干预后效跨区间定义的任务，按信息区间重叠执行 purging；gap/embargo 至少覆盖最大特征回看泄漏与最大标签/干预后效窗口，具体长度须预注册，不能只机械设为 $H-1$；
 3. 标准化器、PCA、状态模型和概念阈值只在训练期拟合；
 4. 宏观数据按实际发布日期和修订版本对齐；
 5. 处理退市、成分股变更和幸存者偏差；
@@ -660,7 +678,7 @@ $$
 - 去掉跨变量维度；
 - 去掉 DRO；
 - 固定状态与动态状态；
-- 冻结模型与联合训练；
+- 冻结模型主证据与联合训练次级消融（分表、分结论，后者不得关闭 Gate A/1/2）；
 - 线性、低秩和非线性对齐；
 - 单一高层 SCM 与状态混合 SCM；
 - 不同概念子空间维度。
@@ -696,13 +714,13 @@ $$
 
 论文贡献必须写成以下层级，而不是“首次用于金融”：
 
-1. **Temporal Causal Abstraction**：首次系统定义适用于多步概率预测的、预测期与时延索引的神经因果抽象；
-2. **Multi-axis Progressive Localization**：在层、变量、时间片和子空间上进行渐进 OT 机制定位；
-3. **Regime-Robust Abstraction**：在环境/状态变化下最小化最坏抽象误差；
+1. **Temporal Causal Abstraction（候选贡献）**：在冻结神经时序预测器上，检验按 forecast horizon 分解且与 causal lag 独立索引的概率干预抽象；
+2. **Multi-axis Progressive Localization（窄化候选贡献）**：检验 forecast-indexed variable × causal lag × forecast horizon × constrained subspace 联合真值，而不是把通用渐进定位重新命名；
+3. **Regime-Robust Abstraction（窄化候选贡献）**：检验 frozen forecaster + sequential unseen regime + zero-refit 下的最坏抽象误差，而不是声称提出一般性的 Wasserstein causal abstraction；
 4. **Anti-vacuity Protocol**：用容量限制、冻结模式和负对照防止空洞对齐与信息注入；
-5. **Abstraction-Regularized Forecasting**：验证机制一致性约束能否改善分布外预测；
+5. **Abstraction-Regularized Forecasting（探索性）**：仅在 Gate 3 通过时作为附加贡献；失败不否定机制解释主线；
 6. **Benchmark**：提供有干预真值、位置真值和状态切换的合成基准；
-7. **Financial Stress Test**：在订单簿和多资产预测中验证方法对强非平稳场景的价值。
+7. **Financial Stress Test（验证层）**：在订单簿和多资产预测中检验方法的强非平稳边界，不作为方法新颖性。
 
 ---
 
@@ -711,7 +729,7 @@ $$
 | 维度 | 当前潜力 | 达标条件 | 否决条件 |
 |---|---:|---|---|
 | 问题重要性 | 8/10 | 解释保真度与状态鲁棒性被统一 | 只讨论金融可视化 |
-| 方法新颖性 | 8/10 | 时序形式化、多轴定位、DRO 三者形成不可分割方法 | 仅拼接 PLOT 与 DiRoCA |
+| 方法新颖性 | 6/10（待 Gate 0 持续复核） | 冻结预测器、horizon/lag、变量联合真值与 unseen-regime zero-refit 形成不可分割的窄化方法 | 仅拼接 PLOT 与 DiRoCA |
 | 理论深度 | 7/10（条件性） | 至少两个非平凡结果及清晰假设 | 只有直观描述 |
 | 实证强度 | 9/10（工作量高） | 合成真值、通用 TS、金融三层验证 | 单一股票数据集 |
 | 可解释性可信度 | 8/10 | cause/isolation、负对照、反注入 | 只报 attribution 图 |
@@ -730,50 +748,70 @@ $$
 
 ## 19. 阶段性 Go/No-Go 门槛
 
+本节中的“明显”“接近”“可接受”“稳定”等定性词都不是可执行阈值。所有尚无支持的主要/次要成功阈值统一标记为 `TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT`，必须在首次正式实验前写入预注册，且不得观察测试结果后修改。
+
 ### Gate 0：新颖性复核
 
 通过条件：
 
-- 没有直接覆盖“时序多轴 PLOT + regime-DRO causal abstraction”的新论文；
-- 与最新工作有至少两项实质差异。
+- 使用论文与官方仓库复核 N1–N8；PLOT-guided DAS 和金融应用继续分别按 N4、N8 的 `NOT_NOVEL` 边界管理；
+- 仅保留冻结预测器、forecast horizon/causal lag 独立索引、变量轴联合真值、sequential unseen regime zero-refit 等仍有可证伪空间的窄声明。
 
 失败处理：
 
-- 若仅剩金融数据集差异，终止本方向。
+- 若直接工作覆盖窄声明，更新新颖性表并收缩或终止对应主张；若仅剩金融数据集差异，终止方法创新方向。
+
+### Gate A：固定位置干预
+
+通过条件：
+
+- 在冻结预测器和 held-out intervention pairs 上，oracle site 同时满足 Cause 与 Isolation；
+- `source=base` 效应接近零，true lag 优于 wrong lag；
+- 随机 site、随机模型和随机概念不能接近真实机制；
+- 训练与 held-out pair 的差距在预注册范围内。
+
+失败处理：
+
+- 两轮概念/SCM 修复后仍失败，暂停自动定位并重构高层概念或 SCM。
 
 ### Gate 1：合成定位
 
 通过条件：
 
-- 在已植入机制上，定位 F1/IIC 明显优于原始 PLOT、DAS 和随机定位；
-- 计算成本低于穷举 DAS；
-- 随机模型和随机概念不能获得高分。
+- 在同一合成生成链上同时恢复 intervention truth 与四轴 location truth；
+- 独立辨识 forecast horizon $h$ 与 causal lag $\delta$，并证明变量/通道轴提供独立信息；
+- 窄化 TARCA 在联合真值上优于原始 PLOT、DAS 和随机定位，且成本低于 Full DAS；
+- held-out pairs 保持有效；容量前沿增大时，随机模型和随机概念仍不能追平真实机制。
 
 失败处理：
 
-- 优先修复干预签名和容量限制；两轮后仍失败则终止。
+- 优先修复干预签名、联合真值和容量限制；两轮后仍失败则停止真实数据定位。
 
 ### Gate 2：跨状态解释
 
 通过条件：
 
-- DRO 版本在未见状态的最坏抽象误差上稳定优于 ERM；
+- 解释器、位置、normalizer 和映射在 sequential unseen regime 上全部保持 zero-refit；
+- DRO 版本的未见状态最坏抽象误差稳定优于 ERM、Group-DRO、DiRoCA-style 和随机重加权；
 - 平均性能不出现不可接受退化。
 
 失败处理：
 
-- 检查环境定义是否可识别；若只能依赖测试状态标签，终止鲁棒性主张。
+- 检查环境定义是否可识别；若读取测试状态标签或需要测试期 refit，终止鲁棒性主张。按状态单独拟合只能作为 oracle 上界，不能混入主证据。
 
-### Gate 3：预测收益
+### Gate 3：预测收益（探索性）
 
 通过条件：
 
+- 只在 Gate A/1/2 已通过后评估，且不参与关闭前述任何 Gate；
 - 至少两个非金融域和一个金融任务上，最坏状态预测或校准有一致改善；
 - 结果跨模型与随机种子稳定。
 
+金融压力测试属于 RQ5/验证层；其结果只是 Gate 3 探索性预测收益判断的一项输入，不构成方法新颖性证据，也不得反向为 Gate A/1/2 补票。
+
 失败处理：
 
-- 若解释有效但预测无收益，可改投纯解释论文，但降低目标；
+- 若解释有效但预测无收益，保留并诚实报告纯机制解释结果，不强行声称预测收益；
 - 若只有金融收益，不能支撑通用方法主张。
 
 ### Gate 4：论文完整性
@@ -789,36 +827,46 @@ $$
 
 | 月份 | 工作包 | 交付物 |
 |---|---|---|
-| 1 | 文献审计、问题形式化、数据协议 | related-work 矩阵；预注册实验协议；数据加载器 |
+| 1 | 文献审计、问题形式化、统一数据契约与数据协议 | related-work 矩阵；预注册实验协议；契约测试；只消费 `src/tarca/contracts/` 的最小数据加载器 |
 | 2 | 合成 SCM 与机制植入网络 | 可控生成器；真值干预与定位测试 |
 | 3 | 冻结模型时序交换干预 | pyvene 适配；IIC/cause/isolation 指标 |
-| 4 | 多轴渐进 OT 定位 | 层→变量→时间→子空间算法；效率实验 |
+| 4 | 多轴渐进 OT 定位 | 层→时间/lag→变量→受限子空间算法；效率实验 |
 | 5 | Regime-DRO 与理论 | 鲁棒目标；初版定理与证明 |
 | 6 | 通用时间序列实验 | 至少三域结果；完整消融 |
 | 7 | 订单簿与多资产实验 | 严格滚动协议；金融结果 |
 | 8 | 负对照、统计检验、扩展性 | 反注入证据；置信区间；效率曲线 |
 | 9 | 论文、代码与复现材料 | 投稿稿件；匿名仓库；实验清单 |
 
-### 最小可行原型：前六周
+### Stage 0 完成后的最小可行原型：前六个实施周（Stage 1 四周 + Stage 2 两周）
 
-第 1–2 周：
+> Stage 0 的既有实现与证据保持不变。以下六周时钟横跨 Stage 1A/1B 和 Stage 2 起步：
+> 前四周属于 Stage 1，后两周属于 Stage 2。当前仓库已经完成统一契约、合成 SCM、
+> paired oracle 与工程 smoke，但不包含 Stage 2 预测器或正式 Gate 结果。任何后续模块
+> 都必须消费统一契约，不得自行定义第二套跨模块数据结构。
 
-- PatchTST/iTransformer 基线；
-- 合成 regime-switching 数据；
+第 1 周（Stage 1A）：
+
+- 实现统一数据契约、模型适配器静态协议和实验产物 Schema；
+- 固定张量形状、特征名称、缺失掩码、UTC 时间边界和 split 泄漏规则；
+- 完成契约测试，不下载数据、不训练模型。
+
+第 2–3 周（Stage 1B）：
+
+- 实现合成 regime-switching SCM 与事实 rollout；
 - 定义两个概念：趋势、波动；
-- 在一个固定层做交换干预。
+- 保存状态、未来噪声、真实延迟和生成配置。
 
-第 3–4 周：
+第 4 周（Stage 1B）：
 
-- 用 OT 在层和时间 patch 上定位；
-- 与穷举搜索比较；
-- 加入随机概念负对照。
+- 实现 paired counterfactual oracle；
+- 使用相同未来噪声验证事实与反事实效应；
+- 完成 synthetic easy 和 E01 工程真值 smoke。
 
-第 5–6 周：
+第 5–6 周（Stage 2）：
 
-- 加入两个环境；
-- 比较 ERM 与简单 Wasserstein-DRO；
-- 根据 Gate 1 决定是否继续。
+- 实现 naive、VAR/DLinear 和小型概率预测器；
+- 统一输出 `ForecastDistribution`；
+- 只在预测有效后进入机制植入与固定位置交换干预，OT 和 DRO 仍不得提前。
 
 ---
 
@@ -830,48 +878,70 @@ tarca/
 │   ├── synthetic/
 │   ├── generic_ts/
 │   └── finance/
-├── data/
-│   ├── synthetic_scm.py
-│   ├── generic_loaders.py
-│   ├── lob_loader.py
-│   ├── multi_asset_loader.py
-│   └── leakage_checks.py
-├── models/
-│   ├── patchtst_adapter.py
-│   ├── itransformer_adapter.py
-│   ├── chronos_adapter.py
-│   └── planted_teacher.py
-├── concepts/
-│   ├── temporal_concepts.py
-│   ├── finance_concepts.py
-│   ├── high_level_scm.py
-│   └── concept_capacity.py
-├── interventions/
-│   ├── temporal_swap.py
-│   ├── lag_alignment.py
-│   ├── source_matching.py
-│   └── pyvene_adapter.py
-├── localization/
-│   ├── effect_signatures.py
-│   ├── progressive_ot.py
-│   ├── subspace_search.py
-│   └── das_refinement.py
-├── robustness/
-│   ├── environments.py
-│   ├── wasserstein_dro.py
-│   └── worst_regime.py
-├── metrics/
-│   ├── forecasting.py
-│   ├── abstraction.py
-│   ├── localization.py
-│   └── statistical_tests.py
+├── docs/
+├── src/tarca/
+│   ├── stage0/                    # 已完成的 Stage 0，实现与证据保持不变
+│   ├── contracts/                 # 唯一跨模块契约权威来源
+│   │   ├── data.py
+│   │   ├── forecast.py
+│   │   ├── concepts.py
+│   │   ├── interventions.py
+│   │   ├── adapters.py
+│   │   ├── artifacts.py
+│   │   └── arrow_schemas.py
+│   ├── data/
+│   │   ├── synthetic_scm.py
+│   │   ├── generic_loaders.py
+│   │   ├── lob_loader.py
+│   │   ├── multi_asset_loader.py
+│   │   └── leakage_checks.py
+│   ├── models/
+│   │   ├── patchtst_adapter.py
+│   │   ├── itransformer_adapter.py
+│   │   ├── chronos_adapter.py
+│   │   └── planted_teacher.py
+│   ├── concepts/
+│   │   ├── temporal_concepts.py
+│   │   ├── finance_concepts.py
+│   │   ├── high_level_scm.py
+│   │   └── concept_capacity.py
+│   ├── interventions/
+│   │   ├── temporal_swap.py
+│   │   ├── lag_alignment.py
+│   │   ├── source_matching.py
+│   │   └── pyvene_adapter.py
+│   ├── localization/
+│   │   ├── effect_signatures.py
+│   │   ├── progressive_ot.py
+│   │   ├── subspace_search.py
+│   │   └── das_refinement.py
+│   ├── robustness/
+│   │   ├── environments.py
+│   │   ├── wasserstein_dro.py
+│   │   └── worst_regime.py
+│   └── metrics/
+│       ├── forecasting.py
+│       ├── abstraction.py
+│       ├── localization.py
+│       └── statistical_tests.py
 ├── experiments/
 │   ├── synthetic/
 │   ├── generic_ts/
 │   └── finance/
+├── artifacts/
 ├── tests/
 └── README.md
 ```
+
+### 21.1 统一数据契约原则
+
+- Stage 1A 已创建 `src/tarca/contracts/`，它现在是数据、预测输出、概念、干预、模型适配器
+  和实验产物的唯一权威契约来源；`data`、后续 `models` 等模块只能导入，不得复制定义。
+- 运行时张量载荷采用冻结 dataclass 与显式 shape/device/dtype 校验；JSON/Parquet 元数据采用严格、禁止额外字段的 Pydantic 模型。
+- `WindowBatch` 必须包含特征名称、目标名称、显式缺失掩码和可审计时间边界，才能实际检查 known-future 目标泄漏和切分重叠。
+- 可持久化契约必须携带语义版本；Parquet 文件使用 Arrow Schema 固定字段、类型、nullable 行为和契约版本 metadata。
+- 模型适配器必须区分“可干预位置描述 `InterventionSite`”与“单次干预请求 `InterventionSpec`”，避免把位置目录和执行参数混为一类。
+- 本修订只同步 Stage 0 的完成/冻结交付状态并消除直接矛盾，不改变其实现、实验边界、依赖锁或科学证据；统一契约属于 Stage 1 工程基础设施，不作为 TARCA 方法创新。
 
 ---
 
@@ -927,11 +997,11 @@ tarca/
 
 ### 一句话方法
 
-TARCA 用高层动态 SCM 定义概念干预，以渐进最优传输在层、变量、时间和子空间中定位对应机制，并用分布鲁棒目标优化最坏环境的干预一致性。
+TARCA 用高层动态 SCM 定义概念干预，以渐进最优传输按层、时间/lag、变量和受限子空间定位对应机制，并用分布鲁棒目标优化最坏环境的干预一致性。
 
 ### 一句话证据
 
-在具有机制真值的合成模型、多个非金融序列域及订单簿/多资产金融任务上，TARCA 应同时证明定位准确、解释稳定、计算可扩展，并改善分布外预测或校准。
+在具有机制真值的合成模型和多个非金融序列域上，TARCA 的主要证据应证明定位准确、解释稳定且计算可扩展；订单簿/多资产任务用于金融压力测试。只有探索性 Gate 3 通过时，才附加声称分布外预测或聚合校准得到改善。
 
 ---
 
@@ -968,6 +1038,12 @@ TARCA 用高层动态 SCM 定义概念干预，以渐进最优传输在层、变
 
 10. Esponera & Cinnà, **Inducing Causal Structure for Interpretable Neural Networks Applied to Glucose Prediction for T1DM Patients**
     https://arxiv.org/abs/2503.14442
+
+11. Gneiting & Raftery, **Strictly Proper Scoring Rules, Prediction, and Estimation**
+    https://doi.org/10.1198/016214506000001437
+
+12. Gneiting et al., **Assessing Probabilistic Forecasts of Multivariate Quantities, with an Application to Ensemble Predictions of Surface Winds**
+    https://arxiv.org/abs/0806.0813
 
 ### 25.2 已排重方向示例
 
@@ -1018,11 +1094,17 @@ TARCA 用高层动态 SCM 定义概念干预，以渐进最优传输在层、变
 6. **Darts：预测与数据管线参考**
    https://github.com/unit8co/darts
 
+7. **PLOT 官方实现：包含 PLOT-DAS 与 Full DAS 比较**
+   https://github.com/jchang153/causal-abstractions-ot
+
+8. **DiRoCA 官方实现：Wasserstein 鲁棒因果抽象参考**
+   https://github.com/yfelekis/DiRoCA
+
 ---
 
-## 26. 立项后的首个决策
+## 26. 立项后的首个完整科学验证里程碑（不是前六周 MVP）
 
-第一阶段不应立即抓取大量股票数据，而应先完成以下最小科学验证：
+Stage 1 完成统一契约、合成 SCM 和 paired counterfactual oracle；Stage 2 随后实现基础预测器。前六周 MVP 不提前执行内部干预、OT 或 DRO。随后按 Gate A/1/2 的顺序完成以下最小科学验证：
 
 1. 一个有状态切换的合成 SCM；
 2. 一个带已知机制位置的教师 Transformer；
@@ -1032,4 +1114,4 @@ TARCA 用高层动态 SCM 定义概念干预，以渐进最优传输在层、变
 6. 随机概念和随机模型负对照；
 7. 简单两环境 DRO。
 
-只有在合成定位和反空洞性检验通过后，才进入真实金融数据。这样可以在六周内判断该方向是具有方法学潜力，还是仅能产生表面可视化。
+只有 Gate A、Gate 1 和 Gate 2 依次通过后，才进入真实金融数据。完成这些门后再判断该方向是否具有方法学潜力；不得把这一完整科学验证错误压缩为前六周任务。

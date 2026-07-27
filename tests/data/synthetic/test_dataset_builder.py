@@ -28,6 +28,7 @@ from tarca.contracts import (  # noqa: E402
     WindowBatch,
     validate_disjoint_window_partitions,
 )
+from tarca.data.synthetic import _path_safety as path_safety_module  # noqa: E402
 from tarca.data.synthetic.dataset_builder import (  # noqa: E402
     PersistedSyntheticDataset,
     PhysicalSplit,
@@ -750,6 +751,33 @@ def test_persistence_failure_cleans_only_owned_staging_and_publishes_nothing(
         persist_synthetic_dataset(easy_dataset, tmp_path / "swapped")
     assert (swapped["staging"] / "sentinel").read_text() == "attacker-owned"
     assert swapped["original"].is_dir() and not (tmp_path / "swapped").exists()
+
+
+def test_persistence_rejects_parent_identity_swap_during_staging_creation(
+    easy_dataset: SyntheticDataset,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    held_parent = tmp_path / "parent-held"
+    original_mkdtemp = path_safety_module.tempfile.mkdtemp
+    swapped = False
+
+    def swap_parent_once(*args: object, **kwargs: object) -> str:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            parent.rename(held_parent)
+            parent.mkdir()
+        return original_mkdtemp(*args, **kwargs)
+
+    monkeypatch.setattr(path_safety_module.tempfile, "mkdtemp", swap_parent_once)
+    with pytest.raises(ValueError, match=r"parent.*(?:identity|changed|replaced)"):
+        persist_synthetic_dataset(easy_dataset, parent / "dataset")
+
+    assert not (parent / "dataset").exists()
+    assert not (held_parent / "dataset").exists()
 
 
 def test_persistence_rejects_existing_parent_missing_dotdot_and_reparse_paths(

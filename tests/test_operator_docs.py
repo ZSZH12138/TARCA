@@ -6,6 +6,12 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 README_PATH = PROJECT_ROOT / "README.md"
+STAGE0_SCOPE_PATH = PROJECT_ROOT / "docs" / "stage0_scope.md"
+PROJECT_PLAN_PATH = PROJECT_ROOT / "docs" / "TARCA_项目计划书.md"
+IMPLEMENTATION_PLAN_PATH = PROJECT_ROOT / "docs" / "TARCA_具体实施计划.md"
+PREREGISTRATION_PATH = PROJECT_ROOT / "docs" / "preregistration_v0.md"
+ASSUMPTION_LEDGER_PATH = PROJECT_ROOT / "docs" / "assumption_ledger.md"
+NOVELTY_CLAIMS_PATH = PROJECT_ROOT / "docs" / "novelty_claims.md"
 CURATED_ARTIFACTS = (
     PROJECT_ROOT / "artifacts" / "stage0" / "STAGE0_IMPLEMENTATION_REPORT.md",
     PROJECT_ROOT / "artifacts" / "stage0" / "third_party_commits.json",
@@ -107,7 +113,9 @@ def test_readme_states_hardware_third_party_and_stage1_limits() -> None:
 
 
 def test_readme_does_not_direct_operators_to_local_manual() -> None:
-    assert "MANUAL_VERIFICATION_STAGE0.md" not in _read(README_PATH)
+    readme = _read(README_PATH)
+    assert "MANUAL_VERIFICATION_STAGE0.md" not in readme
+    assert "TARCA_项目汇报书.md" not in readme
 
 
 def test_curated_public_artifacts_exist_and_are_non_empty() -> None:
@@ -117,24 +125,99 @@ def test_curated_public_artifacts_exist_and_are_non_empty() -> None:
 
 
 def test_public_status_is_honest_and_consistent() -> None:
-    required_field = "Research status: PARTIALLY_COMPLETED"
+    required_stage_field = "Stage 0 status: COMPLETED_AND_FROZEN"
+    required_research_field = "Research status: PARTIALLY_COMPLETED"
 
-    readme_status_lines = [
-        line.strip() for line in _read(README_PATH).splitlines() if line.strip() == required_field
-    ]
-    assert readme_status_lines == [required_field], (
-        "README must contain exactly one formal Research status field with the approved "
-        "incomplete Stage 0 value."
+    report_path = CURATED_ARTIFACTS[0]
+    for path in (README_PATH, STAGE0_SCOPE_PATH, report_path):
+        stage_status_lines = [
+            line.strip()
+            for line in _read(path).splitlines()
+            if line.strip().startswith("Stage 0 status:")
+        ]
+        assert stage_status_lines == [required_stage_field], (
+            f"{path.relative_to(PROJECT_ROOT)} must contain exactly one formal completed-and-"
+            "frozen Stage 0 delivery status."
+        )
+
+    for path in (README_PATH, report_path):
+        research_status_lines = [
+            line.strip()
+            for line in _read(path).splitlines()
+            if line.strip().startswith("Research status:")
+        ]
+        assert research_status_lines == [required_research_field], (
+            f"{path.relative_to(PROJECT_ROOT)} must contain exactly one formal overall "
+            "Research status field; later scientific stages remain incomplete."
+        )
+
+
+def test_stage1_engineering_status_is_honest_and_consistent() -> None:
+    readme = _read(README_PATH)
+    project_plan = _read(PROJECT_PLAN_PATH)
+    implementation_plan = _read(IMPLEMENTATION_PLAN_PATH)
+    required_statuses = (
+        "Stage 1A status: COMPLETED",
+        "Stage 1B status: COMPLETED_ENGINEERING",
+        "Scientific status: ENGINEERING_SMOKE_ONLY",
     )
 
-    report = CURATED_ARTIFACTS[0]
-    report_status_lines = [
-        line.strip() for line in _read(report).splitlines() if line.strip() == required_field
-    ]
-    assert report_status_lines == [required_field], (
-        "The public implementation report must contain exactly one matching formal "
-        "Research status field."
+    for document in (readme, project_plan, implementation_plan):
+        assert all(status in document for status in required_statuses)
+        assert "Stage 1+ 尚未实施" not in document
+
+    assert "Gate A/1/2" in readme
+    assert "不构成正式科学验证" in readme
+
+
+def test_stage1_plans_preserve_frozen_contract_boundaries() -> None:
+    project_plan = _read(PROJECT_PLAN_PATH)
+    implementation_plan = _read(IMPLEMENTATION_PLAN_PATH)
+    preregistration = _read(PREREGISTRATION_PATH)
+    assumption_ledger = _read(ASSUMPTION_LEDGER_PATH)
+    novelty_claims = _read(NOVELTY_CLAIMS_PATH)
+    required_shared_contracts = (
+        "Stage 0 status: COMPLETED_AND_FROZEN",
+        "Research status: PARTIALLY_COMPLETED",
+        "Gate A",
+        "Gate 3：预测收益（探索性）",
+        "联合训练只能作为次级证据",
+        "zero-refit",
+        "TO_BE_FROZEN_BEFORE_FIRST_FORMAL_EXPERIMENT",
     )
+
+    for plan in (project_plan, implementation_plan):
+        assert all(contract in plan for contract in required_shared_contracts)
+        assert (
+            "金融压力测试属于 RQ5/验证层；其结果只是 Gate 3 探索性预测收益判断的一项输入"
+        ) in plan
+
+    assert "首次系统定义" not in project_plan
+    assert "PLOT-guided DAS 是 `NOT_NOVEL` 基线" in project_plan
+    assert "PLOT-guided DAS 是 `NOT_NOVEL` 基线" in implementation_plan
+    assert implementation_plan.index("# 第七部分：金融压力测试") < implementation_plan.index(
+        "Gate 3：预测收益（探索性）"
+    )
+    assert (
+        project_plan.index("### Gate A：固定位置干预")
+        < project_plan.index("### Gate 1：合成定位")
+        < project_plan.index("### Gate 2：跨状态解释")
+        < project_plan.index("### Gate 3：预测收益（探索性）")
+        < project_plan.index("### Gate 4：论文完整性")
+    )
+    assert (
+        implementation_plan.index("### 12.4 Gate A：固定位置干预门槛")
+        < implementation_plan.index("### 17.6 Gate 1：合成定位与反空洞性")
+        < implementation_plan.index("### 20.6 Gate 2")
+        < implementation_plan.index("### 27.6 Gate 3：预测收益（探索性）")
+        < implementation_plan.index("### 30.4 Gate 4")
+    )
+
+    assert "### Gate 3：预测收益（探索性）" in preregistration
+    assert "联合训练只能作为次要模式另报" in assumption_ledger
+    assert "解释器、位置、normalizer 和映射保持 zero-refit" in assumption_ledger
+    assert "| N4 | PLOT 引导的 DAS | `NOT_NOVEL`" in novelty_claims
+    assert "| N8 | 金融序列作为强非平稳压力测试 | `NOT_NOVEL`" in novelty_claims
 
 
 def test_operator_docs_do_not_claim_unperformed_scientific_success() -> None:

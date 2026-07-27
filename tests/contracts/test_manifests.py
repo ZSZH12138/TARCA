@@ -329,6 +329,17 @@ def test_window_name_tuples_are_strict_non_empty_and_unique(
         _window_contract(**{field_name: names})
 
 
+def test_window_summary_rejects_target_known_future_overlap() -> None:
+    with pytest.raises(
+        ValidationError,
+        match=r"target_names.*known_future_covariate_names",
+    ):
+        _window_contract(
+            target_names=("shared",),
+            known_future_covariate_names=("shared",),
+        )
+
+
 def test_window_summary_requires_literal_utc_and_a_missingness_protocol() -> None:
     with pytest.raises(ValidationError, match="timezone"):
         _window_contract(timezone="Asia/Shanghai")

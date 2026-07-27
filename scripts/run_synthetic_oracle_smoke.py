@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import stat
 import sys
 import tempfile
@@ -21,6 +20,15 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from tarca.data.synthetic._path_safety import (  # noqa: E402
+    DirectorySnapshot,
+    StagingDirectory,
+    capture_directory,
+    cleanup_staging_directory,
+    create_staging_directory,
+    publish_staging_directory,
+    verify_staging_directory,
+)
 from tarca.data.synthetic.dataset_builder import (  # noqa: E402
     SyntheticConfig,
     build_synthetic_dataset,
@@ -68,7 +76,7 @@ def resolve_repository_path(
     return resolved
 
 
-def _ensure_safe_parent(target: Path, project_root: Path) -> None:
+def _ensure_safe_parent(target: Path, project_root: Path) -> DirectorySnapshot:
     root = project_root.resolve(strict=True)
     relative = target.relative_to(root)
     current = root
@@ -81,6 +89,7 @@ def _ensure_safe_parent(target: Path, project_root: Path) -> None:
             current.mkdir()
     if os.path.lexists(target):
         raise ValueError(f"output path: target already exists: {target}")
+    return capture_directory(target.parent, trusted_root=root, label="output parent")
 
 
 def _require_easy_smoke(config: SyntheticConfig) -> None:
@@ -165,23 +174,6 @@ def _write_atomic(path: Path, content: str) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
-def _cleanup_staging(
-    staging: Path,
-    output: Path,
-    identity: tuple[int, int],
-) -> None:
-    if not os.path.lexists(staging):
-        return
-    info = staging.lstat()
-    if (
-        staging.parent == output.parent
-        and staging.name.startswith(f".{output.name}.staging-")
-        and not _is_reparse(staging)
-        and (info.st_dev, info.st_ino) == identity
-    ):
-        shutil.rmtree(staging)
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the fixed Stage 1B synthetic oracle engineering smoke on CPU."
@@ -213,24 +205,19 @@ def main(
         output = resolve_repository_path(arguments.output, project_root=project_root)
         config = load_synthetic_config(config_path)
         _require_easy_smoke(config)
-        _ensure_safe_parent(output, project_root)
+        output_parent = _ensure_safe_parent(output, project_root)
     except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
         _error("INPUT_ERROR", error)
         return 2
 
-    staging: Path | None = None
-    staging_identity: tuple[int, int] | None = None
+    staging_guard: StagingDirectory | None = None
     previous_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     try:
         try:
-            staging = Path(
-                tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent)
-            ).resolve()
-            staging_info = staging.lstat()
-            staging_identity = (staging_info.st_dev, staging_info.st_ino)
+            staging_guard = create_staging_directory(output, output_parent)
             dataset = build_synthetic_dataset(config)
-            persisted = persist_synthetic_dataset(dataset, staging / "dataset")
+            persisted = persist_synthetic_dataset(dataset, staging_guard.path / "dataset")
             report = run_e01_engineering_smoke(dataset, persisted=persisted)
             if report.status != "ENGINEERING_SMOKE_PASS":
                 raise RuntimeError("engineering smoke validation failed")
@@ -238,17 +225,17 @@ def main(
             if not isinstance(payload, dict):
                 raise TypeError("engineering smoke report: expected a record")
             payload = {**payload, "research_status": "ENGINEERING_SMOKE_ONLY"}
+            verify_staging_directory(staging_guard)
             _write_atomic(
-                staging / "e01_engineering_smoke.json",
+                staging_guard.path / "e01_engineering_smoke.json",
                 json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             )
+            verify_staging_directory(staging_guard)
             _write_atomic(
-                staging / "e01_engineering_smoke.md",
+                staging_guard.path / "e01_engineering_smoke.md",
                 _render_markdown(payload),
             )
-            if os.path.lexists(output):
-                raise ValueError(f"output path: target already exists: {output}")
-            staging.rename(output)
+            publish_staging_directory(staging_guard, output)
         except (OSError, RuntimeError, TypeError, ValueError) as error:
             _error("SMOKE_ERROR", error)
             return 1
@@ -257,8 +244,8 @@ def main(
             os.environ.pop("CUDA_VISIBLE_DEVICES", None)
         else:
             os.environ["CUDA_VISIBLE_DEVICES"] = previous_cuda
-        if staging is not None and staging_identity is not None:
-            _cleanup_staging(staging, output, staging_identity)
+        if staging_guard is not None:
+            cleanup_staging_directory(staging_guard)
 
     print(
         json.dumps(

@@ -2,6 +2,10 @@
 
 冻结日期：`2026-07-23`
 
+Stage 0 status: COMPLETED_AND_FROZEN
+
+最终裁决日期：`2026-07-25`。Stage 0 已通过范围与交付验收；下述禁止项未在 Stage 0 实现中发现。该裁决只确认本阶段基线完成，不表示 TARCA 方法已经得到科学验证。
+
 ## 目标
 
 Stage 0 只建立可审计研究契约、可恢复 CPU 环境、诊断/测试基础设施、第三方来源清单与资源受限 reference smoke 证据。Stage 0 不产生论文方法结果。
@@ -42,4 +46,4 @@ Stage 0 合规需要同时满足：
 - `src/tarca` 不含 SCM、intervention、localization、DAS、DRO、finance pipeline。
 - 没有“已完成定位/鲁棒抽象/真实市场因果/服务器必需”的越界陈述。
 
-发现任一禁止项时，状态只能是 `SCOPE_VIOLATION` 或 `PARTIALLY_COMPLETED`，不能宣布 Stage 0 完成。
+若后续发现 Stage 0 实际包含任一禁止项，则当前 `COMPLETED_AND_FROZEN` 裁决立即失效，阶段状态应改为 `SCOPE_VIOLATION`，修复并重新验收后方可恢复。`PARTIALLY_COMPLETED` 仅用于整个科研项目的 `Research status`，不再与 Stage 0 交付状态混用。

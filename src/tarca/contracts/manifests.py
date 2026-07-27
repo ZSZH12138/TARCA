@@ -81,6 +81,12 @@ class WindowContractSummary(StrictContractModel):
             raise ValueError("names must be unique")
         return names
 
+    @model_validator(mode="after")
+    def _reject_target_known_future_overlap(self) -> Self:
+        if set(self.target_names).intersection(self.known_future_covariate_names):
+            raise ValueError("target_names and known_future_covariate_names must be disjoint")
+        return self
+
 
 class InterventionPair(StrictContractModel):
     """One deterministic intervention pairing with allocation metadata."""

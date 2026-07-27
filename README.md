@@ -2,18 +2,29 @@
 
 TARCA（Temporal Abstract Robust Causal Alignment）研究模型内部的时序机制：高层概念干预能否与神经网络内部干预对齐，以及这种对齐在分布变化下是否稳健。它不是股票预测器，也不把模型内部实验外推为真实市场因果关系。
 
-当前仓库只实施 **Stage 0：研究契约、文献审计与可复现基础设施**。
+当前仓库已完成并冻结 **Stage 0：研究契约、文献审计与可复现基础设施**，并完成
+**Stage 1A：统一数据契约**与 **Stage 1B：合成 regime-switching SCM** 的工程实现和验证。
 
+Stage 0 status: COMPLETED_AND_FROZEN
+Stage 1A status: COMPLETED
+Stage 1B status: COMPLETED_ENGINEERING
+Scientific status: ENGINEERING_SMOKE_ONLY
 Research status: PARTIALLY_COMPLETED
 
 ## 当前阶段与因果边界
 
-Stage 0 建立术语、假设、预注册、文献与新颖性审计、Python 3.11 锁定环境、CPU 诊断、第三方来源清单、受限 reference smoke、测试和质量入口。Stage 1 的数据、模型训练、机制干预、定位和鲁棒优化内容当前 `不实现`。
+Stage 0 的交付状态、Stage 1 的工程状态与整个项目的科研完成度是三个独立字段。
+Stage 0 已验收并冻结；Stage 1A/1B 已交付统一契约、合成真值、paired counterfactual
+oracle 和 E01 工程 smoke；整个科研项目仍为 `PARTIALLY_COMPLETED`，因为 Stage 2 预测器及
+Gate A/1/2、正式统计实验、跨域实验和金融压力测试尚未实施。当前
+`ENGINEERING_SMOKE_PASS` 只表示工程不变量和受限 CPU smoke 通过，**不构成正式科学验证**。
 
 TARCA 首篇研究只能对模型内部计算机制提出因果陈述。
 模型内部干预一致性不能自动推出真实金融市场中的因果关系。
 
-三份中文项目文档 `docs/TARCA_项目计划书.md`、`docs/TARCA_项目汇报书.md` 和 `docs/TARCA_具体实施计划.md` 描述完整研究构想，其中 Stage 1+ 内容是**未来路线图**，不是本仓库已经实现的代码或实验结果。当前实现边界以本 README、`docs/stage0_scope.md` 和测试合同为准。
+两份中文项目文档 `docs/TARCA_项目计划书.md` 和 `docs/TARCA_具体实施计划.md` 描述完整
+研究构想。Stage 1A/1B 已按各自权威合同实现；Stage 2+ 仍是**未来路线图**。当前边界同时
+受冻结研究契约、两份 Stage 1 设计文档、实施报告和测试合同约束。
 
 ## 目录与模块连接
 
@@ -21,18 +32,23 @@ TARCA 首篇研究只能对模型内部计算机制提出因果陈述。
 .
 ├── docs/                         # 术语、假设、预注册、文献、新颖性与范围契约
 ├── src/tarca/stage0/             # 诊断、来源解析、资源门禁与安全 smoke 框架
-├── scripts/                      # doctor 和 reference-smoke 命令入口
-├── tests/                        # Stage 0 合同、单元、集成与安全测试
+├── src/tarca/contracts/          # Stage 1A 唯一跨模块数据与产物契约
+├── src/tarca/data/synthetic/     # Stage 1B 合成 SCM、oracle、持久化与验证
+├── scripts/                      # doctor、reference smoke、合成构建和 oracle smoke
+├── tests/                        # Stage 0/1 合同、单元、集成与安全测试
 ├── third_party_manifest/         # 官方来源、固定 commit 与许可证状态
 ├── artifacts/stage0/             # 四项公开摘要；原始运行证据仅保留在本地
-├── configs/                      # Stage 1+ 空边界；当前没有算法配置
-├── data/                         # 数据空边界；当前没有数据载荷
-├── experiments/                  # Stage 1+ 空边界；当前没有正式实验
+├── artifacts/stage1/             # Stage 1A/1B 工程实施报告与小型 smoke 摘要
+├── configs/synthetic/            # easy/medium/hard 合成配置
+├── data/                         # 生成载荷不入 Git，仅保留边界 README
+├── experiments/                  # Stage 2+ 空边界；当前没有正式实验
 ├── pyproject.toml
 └── uv.lock
 ```
 
-文献与术语契约约束 `src/tarca/stage0/` 的实现；manifest 为 reference smoke 提供可信来源和固定 commit；两个 `scripts/` 入口调用 Stage 0 模块并产生本地证据；测试、pre-commit 和 CPU-only CI 检查这些边界。公开仓库只保留实施报告、commit 解析结果及 PLOT/DiRoCA 两份摘要，原始日志和机器信息不发布。
+冻结文献、术语、假设和预注册约束全部后续模块；`tarca.contracts` 是 Stage 1 起唯一跨模块
+契约来源；`tarca.data.synthetic` 只消费该契约并产生合成真值。测试、pre-commit 和
+CPU-only CI 同时检查 Stage 0/1，生成数据和原始机器日志不进入 Git。
 
 ## Windows：可配置 Conda 环境
 
@@ -82,11 +98,13 @@ Linux/macOS/CI 将前缀替换为 `uv run`。Doctor 检查解释器、CPU/内存
 
 ```powershell
 & "$env:TARCA_CONDA_PREFIX\Scripts\uv.exe" run pytest -q
-& "$env:TARCA_CONDA_PREFIX\Scripts\uv.exe" run pytest --cov=tarca.stage0 --cov-report=term-missing
+& "$env:TARCA_CONDA_PREFIX\Scripts\uv.exe" run pytest --cov --cov-report=term-missing
 & "$env:TARCA_CONDA_PREFIX\Scripts\uv.exe" run pre-commit run --all-files
 ```
 
-Linux/macOS/CI 使用对应的 `uv run pytest`、`uv run pytest --cov=tarca.stage0` 和 `uv run pre-commit run --all-files`。覆盖率门禁为 80%。
+Linux/macOS/CI 使用对应的 `uv run pytest`、`uv run pytest --cov` 和
+`uv run pre-commit run --all-files`。覆盖率门禁同时覆盖 Stage 0、`tarca.contracts` 与
+`tarca.data.synthetic`，最低为 80%。
 
 如果系统提供 GNU Make，可使用：
 
@@ -137,9 +155,12 @@ Reference 状态：
 
 缓存校验失败时工具会 fail closed，并且不会自动覆盖本地修改。请先检查 `.cache/third_party/<name>`，再将该目录移到备份位置或手动删除，随后重试；工具会从 manifest 中的固定 commit 重新获取源码。
 
-## Stage 0 禁止事项
+## Stage 0 冻结边界与当前禁止事项
 
-- 不实现 synthetic `SCM`、正式模型训练、微调、activation cache、intervention engine、OT localization、`DAS`/HyperDAS 或 `DRO`。
+- Stage 0 冻结提交本身不包含 synthetic `SCM`；随后单独授权的 Stage 1A/1B 实现不得反写
+  `src/tarca/stage0/` 或篡改 Stage 0 证据。
+- 当前仍`不实现`正式模型训练、微调、activation cache、内部表示 intervention engine、
+  OT localization、`DAS`/HyperDAS 或 `DRO`。
 - 不下载 `金融数据`，不进行回测或交易，不声称真实市场因果关系。
 - 不下载或运行大模型、`MCQA`、`Gemma`、GPU/`Slurm`、全量 sweep 或多种子正式实验。
 - 不执行第三方不可信 YAML/eval 路径，不把无明确许可的第三方源码复制进 `src/tarca/`。
@@ -151,6 +172,17 @@ Reference 状态：
 - 第三方代码和文献元数据中的不确定字段保持 `UNVERIFIED` 或 `UNRESOLVED`。
 - GitHub Actions 工作流已配置为 frozen、offline、CPU-only 门禁；本地验证不能替代托管工作流的实际运行结果，本 README 不宣称它已经通过。
 
-## Stage 1 交接
+## Stage 1 工程状态与 Stage 2 交接
 
-Stage 1 只能从冻结的术语、假设台账、预注册、文献复核、新颖性声明和 Stage 0 验收结果开始，并先重开 Gate 0 文献复核。当前 `configs/`、`data/` 与 `experiments/` 仅保留空边界；schema、数据契约、SCM、训练、定位、干预与鲁棒优化入口都尚未实现。
+Stage 1A 已提供 `WindowBatch`、预测/概念/干预契约、严格 manifest、Arrow Schema 和安全产物
+布局。Stage 1B 已提供 Markov regime、trend/scale 潜概念、稳定非线性 VAR、共享未来随机量的
+paired oracle、显式缺失、连续 `60/20/10/10` 切分、train-only normalizer、确定性持久化和
+CPU-only E01 工程 smoke。
+
+```powershell
+& "$env:TARCA_CONDA_PREFIX\Scripts\uv.exe" run python scripts/build_synthetic_dataset.py --config configs/synthetic/synthetic_easy.yaml --output data/processed/synthetic-easy --smoke
+& "$env:TARCA_CONDA_PREFIX\Scripts\uv.exe" run python scripts/run_synthetic_oracle_smoke.py --config configs/synthetic/synthetic_easy.yaml --output artifacts/local/synthetic-smoke
+```
+
+进入 Stage 2 前必须以最新 Gate 0 记录、Stage 1 实施报告和全仓质量门禁为准。Stage 1B 的
+工程 smoke 不得升级为 `E01_FORMAL_PASS`、Gate A 通过或 TARCA 科学假设已验证。

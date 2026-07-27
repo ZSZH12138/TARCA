@@ -192,7 +192,7 @@ def test_ci_is_cpu_only_offline_and_frozen() -> None:
     )
 
 
-def test_pyproject_enforces_stage0_coverage_and_ruff() -> None:
+def test_pyproject_enforces_stage1_coverage_and_ruff() -> None:
     config = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
 
     dev_dependencies = set(config["dependency-groups"]["dev"])
@@ -202,12 +202,17 @@ def test_pyproject_enforces_stage0_coverage_and_ruff() -> None:
     pytest_options = config["tool"]["pytest"]["ini_options"]
     assert pytest_options["testpaths"] == ["tests"]
     addopts = pytest_options["addopts"]
-    assert "--cov=tarca.stage0" in addopts
+    assert "--cov" in addopts
+    assert not any(option.startswith("--cov=") for option in addopts)
     assert "--cov-fail-under=80" in addopts
 
     coverage = config["tool"]["coverage"]
     assert coverage["run"]["branch"] is True
-    assert coverage["run"]["source"] == ["tarca.stage0"]
+    assert coverage["run"]["source"] == [
+        "tarca.stage0",
+        "tarca.contracts",
+        "tarca.data.synthetic",
+    ]
     assert coverage["report"]["fail_under"] == 80
 
     ruff = config["tool"]["ruff"]
