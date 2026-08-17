@@ -32,6 +32,22 @@ class ArtifactLayout(StrictContractModel):
         "stdout.log",
         "plots",
     )
+    _FORECAST_REQUIRED_NAMES: ClassVar[tuple[str, ...]] = (
+        "config.yaml",
+        "run_manifest.json",
+        "data_manifest.json",
+        "resource_report.json",
+        "training_history.json",
+        "model_metadata.json",
+        "metrics.json",
+        "metrics_by_regime.parquet",
+        "predictions.parquet",
+        "checkpoint",
+        "environment.txt",
+        "git_state.txt",
+        "stdout.log",
+        "plots",
+    )
 
     @field_validator("experiment_id", "run_id")
     @classmethod
@@ -56,6 +72,13 @@ class ArtifactLayout(StrictContractModel):
 
         run_root = self.relative_run_root
         return tuple(run_root / name for name in self._REQUIRED_NAMES)
+
+    @property
+    def forecast_required_relative_paths(self) -> tuple[PurePosixPath, ...]:
+        """Return the Stage 2 forecast profile without intervention artifacts."""
+
+        run_root = self.relative_run_root
+        return tuple(run_root / name for name in self._FORECAST_REQUIRED_NAMES)
 
     def validate_relative_path(self, relative_path: str) -> PurePosixPath:
         """Validate an unmodified relative path as a descendant of this run."""

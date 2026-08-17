@@ -1,0 +1,31 @@
+{
+  "architecture_version": "1.0",
+  "registry_id": "tarca-contract-registry-v1",
+  "contracts": [
+    {"symbol": "ArtifactRef", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "artifact-ref-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "ScientificIdentity", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "scientific-identity-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "TaskSpec", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "task-spec-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "TaskResult", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "task-result-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "TaskAttemptRecord", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "task-attempt-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "GateDecision", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "gate-decision-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "ResourceRequest", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "resource-request-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "ExecutionContext", "type": "dataclass", "canonical_source": "src/tarca/contracts/common.py", "schema": "execution-context-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "EffectSignature", "type": "dataclass", "canonical_source": "src/tarca/contracts/effects.py", "schema": "effect-signature-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "TaskManifest", "type": "dataclass", "canonical_source": "src/tarca/contracts/future.py", "schema": "task-manifest-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "ExperimentSummary", "type": "dataclass", "canonical_source": "src/tarca/contracts/future.py", "schema": "experiment-summary-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "SealedAccessGrant", "type": "dataclass", "canonical_source": "src/tarca/contracts/governance.py", "schema": "sealed-grant-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "MonitoringSnapshot", "type": "dataclass", "canonical_source": "src/tarca/contracts/monitoring.py", "schema": "monitoring-snapshot-v1", "status": "ARCHITECTURE_FROZEN"},
+    {"symbol": "WindowBatch", "type": "grandfathered", "canonical_source": "src/tarca/contracts/data.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "ForecastDistribution", "type": "grandfathered", "canonical_source": "src/tarca/contracts/forecast.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "ConceptBatch", "type": "grandfathered", "canonical_source": "src/tarca/contracts/concepts.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "InterventionSite", "type": "grandfathered", "canonical_source": "src/tarca/contracts/interventions.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "InterventionSpec", "type": "grandfathered", "canonical_source": "src/tarca/contracts/interventions.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "InterventionPair", "type": "grandfathered", "canonical_source": "src/tarca/contracts/manifests.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "DataManifest", "type": "grandfathered", "canonical_source": "src/tarca/contracts/manifests.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "RunManifest", "type": "grandfathered", "canonical_source": "src/tarca/contracts/manifests.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "MetricRecord", "type": "grandfathered", "canonical_source": "src/tarca/contracts/manifests.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "ArtifactLayout", "type": "grandfathered", "canonical_source": "src/tarca/contracts/artifacts.py", "schema": "1.0.0", "status": "GRANDFATHERED"},
+    {"symbol": "ForecastPredictor", "type": "grandfathered_protocol", "canonical_source": "src/tarca/contracts/adapters.py", "schema": "1.1.0", "status": "GRANDFATHERED"},
+    {"symbol": "ForecastModelAdapter", "type": "grandfathered_protocol", "canonical_source": "src/tarca/contracts/adapters.py", "schema": "1.1.0", "status": "GRANDFATHERED"}
+  ]
+}

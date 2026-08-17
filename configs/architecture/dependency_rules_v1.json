@@ -1,0 +1,34 @@
+{
+  "architecture_version": "1.0",
+  "allowed_edges": [
+    {"from": "contracts", "to": "data"},
+    {"from": "contracts", "to": "models"},
+    {"from": "contracts", "to": "concepts"},
+    {"from": "contracts", "to": "interventions"},
+    {"from": "contracts", "to": "effects"},
+    {"from": "contracts", "to": "localization"},
+    {"from": "contracts", "to": "robustness"},
+    {"from": "contracts", "to": "metrics"},
+    {"from": "contracts", "to": "experiments"},
+    {"from": "experiments", "to": "orchestration"},
+    {"from": "orchestration", "to": "runtime"},
+    {"from": "contracts", "to": "governance"},
+    {"from": "contracts", "to": "artifacts"},
+    {"from": "contracts", "to": "monitoring"},
+    {"from": "governance", "to": "artifacts"},
+    {"from": "orchestration", "to": "monitoring"},
+    {"from": "runtime", "to": "monitoring"},
+    {"from": "contracts", "to": "backends"}
+  ],
+  "forbidden_edges": [
+    {"from": "contracts", "to": "training"},
+    {"from": "contracts", "to": "runtime"},
+    {"from": "data", "to": "models"},
+    {"from": "models", "to": "data"},
+    {"from": "models", "to": "concepts"},
+    {"from": "concepts", "to": "models"},
+    {"from": "monitoring", "to": "localization"},
+    {"from": "monitoring", "to": "robustness"},
+    {"from": "science", "to": "server"}
+  ]
+}

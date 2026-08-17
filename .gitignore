@@ -59,3 +59,16 @@ artifacts/stage0/reference_smoke/diroca/*
 
 # Stage 1B generated synthetic smoke data/evidence
 artifacts/stage1/synthetic_scm_smoke/
+
+# Stage 2 generated model runs; keep only reviewed Markdown summaries
+artifacts/stage2/smoke-*/
+artifacts/stage2/formal-e02-*/
+
+# Architecture local validation evidence; keep public contract registries only
+artifacts/architecture/full_regression_*.xml
+artifacts/architecture/TARCA_FROZEN_TEST_ENVIRONMENT.json
+artifacts/architecture/TARCA_BASELINE_EXCEPTION_REGISTRY_V1.json
+artifacts/architecture/TARCA_ARCHITECTURE_V1_IMPLEMENTATION_REPORT.md
+artifacts/architecture/TARCA_ARCHITECTURE_V1_FREEZE_RECEIPT.json
+artifacts/architecture/TARCA_ARCHITECTURE_V1_FOLLOWUP_REPORT.md
+artifacts/architecture/TARCA_ARCHITECTURE_V1_FOLLOWUP_RECEIPT.json

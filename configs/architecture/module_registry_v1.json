@@ -1,0 +1,25 @@
+{
+  "architecture_version": "1.0",
+  "registry_id": "tarca-module-registry-v1",
+  "policy": "logical ownership only; existing implementation paths are preserved",
+  "modules": [
+    {"name": "architecture", "plane": "governance", "path": "src/tarca/architecture", "status": "ARCHITECTURE_METADATA"},
+    {"name": "contracts", "plane": "governance", "path": "src/tarca/contracts", "status": "FROZEN_AUTHORITY"},
+    {"name": "data", "plane": "science", "path": "src/tarca/data", "skeleton_path": "src/tarca/architecture/skeleton/data.py", "status": "GRANDFATHERED_PLUS_SKELETON"},
+    {"name": "models", "plane": "science", "path": "src/tarca/models", "skeleton_path": "src/tarca/architecture/skeleton/models.py", "status": "GRANDFATHERED_PLUS_SKELETON"},
+    {"name": "concepts", "plane": "science", "path": "src/tarca/architecture/skeleton/concepts.py", "status": "SKELETON_ONLY"},
+    {"name": "interventions", "plane": "science", "path": "src/tarca/architecture/skeleton/interventions.py", "status": "SKELETON_ONLY"},
+    {"name": "effects", "plane": "science", "path": "src/tarca/architecture/skeleton/effects.py", "status": "SKELETON_ONLY"},
+    {"name": "localization", "plane": "science", "path": "src/tarca/architecture/skeleton/localization.py", "status": "SKELETON_ONLY"},
+    {"name": "robustness", "plane": "science", "path": "src/tarca/architecture/skeleton/robustness.py", "status": "SKELETON_ONLY"},
+    {"name": "metrics", "plane": "science", "path": "src/tarca/architecture/skeleton/metrics.py", "status": "SKELETON_ONLY"},
+    {"name": "experiments", "plane": "science", "path": "src/tarca/architecture/skeleton/experiments.py", "status": "SKELETON_ONLY"},
+    {"name": "training", "plane": "science", "path": "src/tarca/training", "status": "GRANDFATHERED_UNTOUCHED"},
+    {"name": "governance", "plane": "governance", "path": "src/tarca/architecture/skeleton/governance.py", "status": "SKELETON_ONLY"},
+    {"name": "artifacts", "plane": "governance", "path": "src/tarca/architecture/skeleton/artifacts.py", "status": "SKELETON_ONLY"},
+    {"name": "orchestration", "plane": "execution", "path": "src/tarca/architecture/skeleton/orchestration.py", "status": "SKELETON_ONLY"},
+    {"name": "runtime", "plane": "execution", "path": "src/tarca/architecture/skeleton/runtime.py", "status": "SKELETON_ONLY"},
+    {"name": "monitoring", "plane": "execution", "path": "src/tarca/architecture/skeleton/monitoring.py", "status": "SKELETON_ONLY"},
+    {"name": "backends", "plane": "execution", "path": "src/tarca/architecture/skeleton/backends.py", "status": "SKELETON_ONLY"}
+  ]
+}

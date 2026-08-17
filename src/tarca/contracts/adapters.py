@@ -1,4 +1,4 @@
-"""Static protocol for forecast-model adapters."""
+"""Capability protocols for prediction-only and intervention-capable models."""
 
 from __future__ import annotations
 
@@ -11,8 +11,12 @@ from .data import WindowBatch
 from .forecast import ForecastDistribution
 from .interventions import InterventionSite, InterventionSpec
 
+MODEL_CAPABILITY_PROTOCOL_VERSION = "1.1.0"
 
-class ForecastModelAdapter(Protocol):
+
+class ForecastPredictor(Protocol):
+    """Stage 2 prediction capability without representation intervention."""
+
     @property
     def adapter_name(self) -> str: ...
 
@@ -23,6 +27,10 @@ class ForecastModelAdapter(Protocol):
     def is_frozen(self) -> bool: ...
 
     def predict_distribution(self, batch: WindowBatch) -> ForecastDistribution: ...
+
+
+class ForecastModelAdapter(ForecastPredictor, Protocol):
+    """Backward-compatible full adapter capability for later TARCA stages."""
 
     def list_intervention_sites(self) -> tuple[InterventionSite, ...]: ...
 

@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from enum import StrEnum
 from typing import TypeAlias
+
+try:
+    from enum import StrEnum
+except ImportError:  # pragma: no cover - Python 3.10 server compatibility
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # noqa: UP042 - compatibility fallback for Python 3.10
+        def __str__(self) -> str:
+            return str(self.value)
 
 
 class SplitPartition(StrEnum):
