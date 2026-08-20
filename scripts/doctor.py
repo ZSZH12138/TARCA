@@ -16,15 +16,16 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Emit one JSON document.")
     args = parser.parse_args()
     result = run_doctor(REPO_ROOT)
+    payload = result.model_dump(mode="json", exclude_none=True)
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     else:
-        print(f"Stage 0 doctor: {result['status']}")
-        for name, status in sorted(result.get("checks", {}).items()):
+        print(f"Stage 0 doctor: {result.status}")
+        for name, status in sorted(result.checks.model_dump(exclude_none=True).items()):
             print(f"  {name}: {status}")
-        if "error" in result:
-            print(f"  error: {result['error']}")
-    return 0 if result["status"] == "PASS" else 1
+        if result.error is not None:
+            print(f"  error: {result.error}")
+    return 0 if result.status == "PASS" else 1
 
 
 if __name__ == "__main__":

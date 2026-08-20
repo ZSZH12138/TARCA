@@ -53,9 +53,13 @@ def main() -> int:
             }
         elif args.complete:
             complete_stage0(REPO_ROOT, run_doctor_check=not args.skip_doctor)
-            result = verify_stage0(REPO_ROOT, run_doctor_check=not args.skip_doctor)
+            result = verify_stage0(REPO_ROOT, run_doctor_check=not args.skip_doctor).model_dump(
+                mode="json", exclude_none=True
+            )
         else:
-            result = verify_stage0(REPO_ROOT, run_doctor_check=not args.skip_doctor)
+            result = verify_stage0(REPO_ROOT, run_doctor_check=not args.skip_doctor).model_dump(
+                mode="json", exclude_none=True
+            )
     except Exception as exc:
         result = {"status": "FAIL", "error": f"{type(exc).__name__}: {exc}"}
         exit_code = 1

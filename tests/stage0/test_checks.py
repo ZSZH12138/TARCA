@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tarca.contracts import GateDecision, GateStatus, canonical_json_bytes
+from tarca.contracts import GateDecision, GateStatus, StrictContractModel, canonical_json_bytes
 from tarca.stage0.checks import (
     complete_stage0,
     freeze_stage0,
@@ -85,9 +85,11 @@ def test_freeze_and_verify_full_stage0_flow(stage0_repo: Path) -> None:
     summary = verify_stage0(stage0_repo, run_doctor_check=False)
 
     assert manifest.status == "FROZEN"
-    assert summary["status"] == "PASS"
-    assert summary["gate0_status"] == "PASS"
-    assert summary["completion_status"] == "COMPLETED"
+    assert isinstance(summary, StrictContractModel)
+    assert type(summary).__name__ == "Stage0VerificationReport"
+    assert summary.status == "PASS"
+    assert summary.gate0_status == "PASS"
+    assert summary.completion_status == "COMPLETED"
 
 
 def test_verify_requires_preapproved_gate0_decision(stage0_repo: Path) -> None:
@@ -107,7 +109,7 @@ def test_verify_requires_completion_receipt(stage0_repo: Path) -> None:
     receipt = complete_stage0(stage0_repo, run_doctor_check=False)
 
     assert receipt.status == "COMPLETED"
-    assert verify_stage0(stage0_repo, run_doctor_check=False)["status"] == "PASS"
+    assert verify_stage0(stage0_repo, run_doctor_check=False).status == "PASS"
 
 
 def test_stage0_freeze_is_default_frozen_but_explicitly_overridable(stage0_repo: Path) -> None:
@@ -133,7 +135,7 @@ def test_stage0_freeze_is_default_frozen_but_explicitly_overridable(stage0_repo:
     assert (stage0_repo / "artifacts/stage0/gate0_decision.json").is_file()
     assert not (stage0_repo / "artifacts/stage0/stage0_completion_receipt.json").exists()
     complete_stage0(stage0_repo, run_doctor_check=False)
-    assert verify_stage0(stage0_repo, run_doctor_check=False)["research_contract_status"] == (
+    assert verify_stage0(stage0_repo, run_doctor_check=False).research_contract_status == (
         replacement.status
     )
 
@@ -172,3 +174,24 @@ def test_authoritative_docs_define_the_human_gate0_exception() -> None:
     assert exception in implementation
     assert exception in project_plan
     assert exception in terminology
+
+
+def test_protocol_names_stage0_public_report_contracts() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    protocol = (
+        repo_root / "docs/auth/TARCA_END_TO_END_STAGE_PROTOCOL_SPECIFICATION_V2_0.md"
+    ).read_text(encoding="utf-8")
+
+    assert "run_doctor(workspace: PathLike) -> DoctorReport" in protocol
+    assert "verify_stage0(...) -> Stage0VerificationReport" in protocol
+
+
+def test_protocol_makes_software_tests_recommended_not_mandatory() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    protocol = (
+        repo_root / "docs/auth/TARCA_END_TO_END_STAGE_PROTOCOL_SPECIFICATION_V2_0.md"
+    ).read_text(encoding="utf-8")
+
+    assert "因此必须配套静态类型检查和行为测试" not in protocol
+    assert "行为测试必须验证" not in protocol
+    assert "## 22.5 Wasserstein solver 单元测试（推荐）" in protocol  # noqa: RUF001

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from .artifacts import ArtifactRef
 from .base import Sha256Hash, StrictContractModel, UtcDatetime
@@ -89,3 +89,79 @@ class Stage0CompletionReceipt(StrictContractModel):
     research_contract_ref: ArtifactRef
     gate_decision_ref: ArtifactRef
     artifact_index_ref: ArtifactRef
+
+
+class DoctorCheckResults(StrictContractModel):
+    pot_sinkhorn: Literal["PASS"] | None = None
+    python_version: Literal["PASS"] | None = None
+    pyvene_import: Literal["PASS"] | None = None
+    torch_basic: Literal["PASS"] | None = None
+    torch_hook: Literal["PASS"] | None = None
+    workspace_disk: Literal["PASS"] | None = None
+    workspace_write: Literal["PASS"] | None = None
+
+
+class DoctorVersions(StrictContractModel):
+    numpy: str | None = None
+    pot: str | None = None
+    pyvene: str | None = None
+    torch: str | None = None
+
+
+class DoctorResources(StrictContractModel):
+    logical_cpu_count: int = Field(ge=1)
+    memory_total_bytes: int | None = Field(default=None, ge=1)
+    disk_total_bytes: int = Field(ge=1)
+    disk_free_bytes: int = Field(ge=1)
+    python_version: str
+    python_executable: str
+
+
+class DoctorReport(StrictContractModel):
+    status: Literal["PASS", "FAIL"]
+    gpu_required: Literal[False]
+    checks: DoctorCheckResults
+    versions: DoctorVersions
+    resources: DoctorResources | None = None
+    cuda_available: bool | None = None
+    cuda_device_count: int | None = Field(default=None, ge=0)
+    default_profile_id: str | None = None
+    execution_backend_replaceable: Literal[True] | None = None
+    tested_torch_dtypes: tuple[Literal["float32", "float64"], ...] = ()
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _status_fields_are_consistent(self) -> DoctorReport:
+        if self.status == "FAIL":
+            if self.error is None or not self.error.strip():
+                raise ValueError("failed doctor report requires an error")
+            return self
+        if self.error is not None:
+            raise ValueError("passing doctor report cannot contain an error")
+        required = (
+            self.resources,
+            self.cuda_available,
+            self.cuda_device_count,
+            self.default_profile_id,
+            self.execution_backend_replaceable,
+        )
+        if any(value is None for value in required):
+            raise ValueError("passing doctor report is missing required capability fields")
+        if any(value != "PASS" for value in self.checks.model_dump().values()):
+            raise ValueError("passing doctor report requires every check to pass")
+        if not self.tested_torch_dtypes:
+            raise ValueError("passing doctor report requires tested torch dtypes")
+        return self
+
+
+class Stage0VerificationReport(StrictContractModel):
+    status: Literal["PASS"]
+    row_count: int = Field(ge=0)
+    unique_work_ids: int = Field(ge=0)
+    dependency_release_count: int = Field(ge=0)
+    locked_dependency_count: int = Field(ge=0)
+    source_count: int = Field(ge=0)
+    research_contract_status: Literal["FROZEN"]
+    gate0_status: Literal["PASS"]
+    completion_status: Literal["COMPLETED"]
+    doctor: DoctorReport | None = None

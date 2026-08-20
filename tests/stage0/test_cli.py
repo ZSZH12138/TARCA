@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tarca.contracts import GateDecision, GateStatus, canonical_json_bytes
+from tarca.contracts import GateDecision, GateStatus, StrictContractModel, canonical_json_bytes
 from tarca.stage0.checks import freeze_stage0
 from tarca.stage0.environment import capture_environment_profile, run_doctor
 
@@ -41,14 +41,16 @@ def test_doctor_cli_returns_machine_readable_cpu_smoke() -> None:
 def test_doctor_function_runs_without_network_or_gpu_requirement() -> None:
     payload = run_doctor(REPO_ROOT)
 
-    assert payload["status"] == "PASS"
-    assert payload["gpu_required"] is False
-    assert payload["checks"] == {
+    assert isinstance(payload, StrictContractModel)
+    assert type(payload).__name__ == "DoctorReport"
+    assert payload.status == "PASS"
+    assert payload.gpu_required is False
+    assert payload.checks.model_dump(mode="json") == {
+        "pot_sinkhorn": "PASS",
+        "python_version": "PASS",
+        "pyvene_import": "PASS",
         "torch_basic": "PASS",
         "torch_hook": "PASS",
-        "pot_sinkhorn": "PASS",
-        "pyvene_import": "PASS",
-        "python_version": "PASS",
         "workspace_disk": "PASS",
         "workspace_write": "PASS",
     }

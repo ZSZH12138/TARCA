@@ -15,6 +15,7 @@ from tarca.contracts import (
     RelatedWorkBundle,
     ResearchContractManifest,
     Stage0CompletionReceipt,
+    Stage0VerificationReport,
     sha256_file,
 )
 
@@ -292,8 +293,8 @@ def _verify_stage0_core(repo_root: Path, *, run_doctor_check: bool) -> dict[str,
         store.verify_artifact(artifact)
     if run_doctor_check:
         doctor = run_doctor(repo_root)
-        if doctor["status"] != "PASS":
-            raise RuntimeError(f"Stage 0 doctor failed: {doctor.get('error', 'unknown')}")
+        if doctor.status != "PASS":
+            raise RuntimeError(f"Stage 0 doctor failed: {doctor.error or 'unknown'}")
         summary["doctor"] = doctor
     summary.update(
         {
@@ -343,7 +344,7 @@ def complete_stage0(
     return receipt
 
 
-def verify_stage0(repo_root: Path, *, run_doctor_check: bool = True) -> dict[str, Any]:
+def verify_stage0(repo_root: Path, *, run_doctor_check: bool = True) -> Stage0VerificationReport:
     repo_root = repo_root.resolve()
     summary = _verify_stage0_core(repo_root, run_doctor_check=run_doctor_check)
     store = LocalArtifactStore(repo_root)
@@ -375,5 +376,4 @@ def verify_stage0(repo_root: Path, *, run_doctor_check: bool = True) -> dict[str
         if actual != expected:
             raise ValueError(f"Stage 0 completion receipt has stale {field}")
         store.verify_artifact(actual)
-    summary["completion_status"] = receipt.status
-    return summary
+    return Stage0VerificationReport.model_validate({**summary, "completion_status": receipt.status})

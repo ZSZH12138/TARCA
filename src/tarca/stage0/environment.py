@@ -11,10 +11,13 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from tarca.contracts import (
     AcceleratorCapabilities,
+    DoctorCheckResults,
+    DoctorReport,
+    DoctorResources,
+    DoctorVersions,
     EnvironmentPlatform,
     EnvironmentProfile,
     EnvironmentResources,
@@ -99,7 +102,23 @@ def capture_environment_profile(workspace: Path) -> EnvironmentProfile:
     )
 
 
-def run_doctor(workspace: Path) -> dict[str, Any]:
+def _doctor_checks(values: dict[str, str]) -> DoctorCheckResults:
+    return DoctorCheckResults.model_validate(values)
+
+
+def _doctor_versions(values: dict[str, str]) -> DoctorVersions:
+    return DoctorVersions.model_validate(values)
+
+
+def _doctor_resources(profile: EnvironmentProfile) -> DoctorResources:
+    return DoctorResources(
+        **profile.resources.model_dump(),
+        python_version=profile.python.version,
+        python_executable=profile.python.executable,
+    )
+
+
+def run_doctor(workspace: Path) -> DoctorReport:
     checks: dict[str, str] = {}
     versions: dict[str, str] = {}
     profile: EnvironmentProfile | None = None
@@ -162,28 +181,24 @@ def run_doctor(workspace: Path) -> dict[str, Any]:
         cuda_available = profile.accelerators.cuda_available
         cuda_device_count = profile.accelerators.cuda_device_count
     except Exception as exc:  # pragma: no cover - exact dependency failures vary by host
-        return {
-            "status": "FAIL",
-            "gpu_required": False,
-            "checks": checks,
-            "versions": versions,
-            "resources": profile.resources.model_dump(mode="json") if profile is not None else {},
-            "error": f"{type(exc).__name__}: {exc}",
-        }
+        return DoctorReport(
+            status="FAIL",
+            gpu_required=False,
+            checks=_doctor_checks(checks),
+            versions=_doctor_versions(versions),
+            resources=_doctor_resources(profile) if profile is not None else None,
+            error=f"{type(exc).__name__}: {exc}",
+        )
 
-    return {
-        "status": "PASS",
-        "gpu_required": False,
-        "cuda_available": cuda_available,
-        "cuda_device_count": cuda_device_count,
-        "default_profile_id": profile.profile_id,
-        "execution_backend_replaceable": profile.execution_backend_replaceable,
-        "tested_torch_dtypes": list(profile.accelerators.tested_torch_dtypes),
-        "checks": checks,
-        "versions": versions,
-        "resources": {
-            **profile.resources.model_dump(mode="json"),
-            "python_version": profile.python.version,
-            "python_executable": profile.python.executable,
-        },
-    }
+    return DoctorReport(
+        status="PASS",
+        gpu_required=False,
+        cuda_available=cuda_available,
+        cuda_device_count=cuda_device_count,
+        default_profile_id=profile.profile_id,
+        execution_backend_replaceable=profile.execution_backend_replaceable,
+        tested_torch_dtypes=profile.accelerators.tested_torch_dtypes,
+        checks=_doctor_checks(checks),
+        versions=_doctor_versions(versions),
+        resources=_doctor_resources(profile),
+    )

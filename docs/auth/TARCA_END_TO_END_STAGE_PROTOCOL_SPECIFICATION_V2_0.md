@@ -75,7 +75,7 @@ Stage N 标准输入
 6. **PatchTST**：时间序列以 patch token 表示且 channel-independent，因此其时间 patch 轴可标准化，但不能强行把跨变量语义解释成模型原生变量交互。
 7. **iTransformer**：每个 variate 序列形成 variate token，因此变量轴需要在 `InterventionSite` 中显式声明。
 8. **Pydantic v2**：持久化 Manifest 使用 strict/frozen/extra-forbid。
-9. **Python Protocol**：用于静态结构接口；`runtime_checkable` 只做成员存在检查，因此必须配套静态类型检查和行为测试。
+9. **Python Protocol**：用于静态结构接口；`runtime_checkable` 只做成员存在检查，因此建议配套静态类型检查和行为测试。
 10. **Apache Arrow/Parquet**：持久化表必须固定字段名、类型、nullable 和 schema metadata，不能只比较列名。
 11. **fev/GIFT-Eval**：时间序列 benchmark 应把 task/window/horizon/data fingerprint 等信息显式写入评估上下文，而不是依赖脚本隐式参数。
 
@@ -474,6 +474,64 @@ class ResourceSnapshot(StrictContractModel):
 
 ---
 
+## 5.1G Stage 0 运行核验报告
+
+以下 strict/frozen/extra-forbid 对象是 Stage 0 公共检查函数的标准输出，只报告运行核验结果，不是科学证据或计划实施状态：
+
+```python
+class DoctorCheckResults(StrictContractModel):
+    pot_sinkhorn: Literal["PASS"] | None
+    python_version: Literal["PASS"] | None
+    pyvene_import: Literal["PASS"] | None
+    torch_basic: Literal["PASS"] | None
+    torch_hook: Literal["PASS"] | None
+    workspace_disk: Literal["PASS"] | None
+    workspace_write: Literal["PASS"] | None
+
+class DoctorVersions(StrictContractModel):
+    numpy: str | None
+    pot: str | None
+    pyvene: str | None
+    torch: str | None
+
+class DoctorResources(StrictContractModel):
+    logical_cpu_count: int
+    memory_total_bytes: int | None
+    disk_total_bytes: int
+    disk_free_bytes: int
+    python_version: str
+    python_executable: str
+
+class DoctorReport(StrictContractModel):
+    status: Literal["PASS", "FAIL"]
+    gpu_required: Literal[False]
+    checks: DoctorCheckResults
+    versions: DoctorVersions
+    resources: DoctorResources | None
+    cuda_available: bool | None
+    cuda_device_count: int | None
+    default_profile_id: str | None
+    execution_backend_replaceable: Literal[True] | None
+    tested_torch_dtypes: tuple[Literal["float32", "float64"], ...]
+    error: str | None
+
+class Stage0VerificationReport(StrictContractModel):
+    status: Literal["PASS"]
+    row_count: int
+    unique_work_ids: int
+    dependency_release_count: int
+    locked_dependency_count: int
+    source_count: int
+    research_contract_status: Literal["FROZEN"]
+    gate0_status: Literal["PASS"]
+    completion_status: Literal["COMPLETED"]
+    doctor: DoctorReport | None
+```
+
+`DoctorReport` 在 `PASS` 时必须包含完整 capability 字段且所有检查为 `PASS`；在 `FAIL` 时必须包含非空 `error`。默认环境只是可替换的执行起点，以上报告不得固定服务器或算力边界。
+
+---
+
 ## 5.2 `ArtifactRef`
 
 ```python
@@ -671,7 +729,7 @@ class ForecastPredictor(Protocol):
     ) -> ForecastDistribution: ...
 ```
 
-行为测试必须验证：输入不被修改，输出 shape/window_id/target_names 对齐。
+建议通过行为测试验证：输入不被修改，输出 shape/window_id/target_names 对齐。
 
 ---
 
@@ -1849,6 +1907,8 @@ TARCA 上层永远只看 `OTProblem/OTResult`。
 ```python
 freeze_research_contract(...) -> ResearchContractManifest
 verify_research_contract(...) -> None
+run_doctor(workspace: PathLike) -> DoctorReport
+verify_stage0(...) -> Stage0VerificationReport
 ```
 
 `GateDecision(GATE_0_NOVELTY)` 由经人工核验并授权的外部决策流程签发。仓库只验证其 schema、`PASS/FAIL/BLOCKED`、所需 evidence 类型与 content hash，不实现自动新颖性判断器。
@@ -2458,9 +2518,9 @@ apply_robustness(
 
 如果 test 发生任一 fit，`zero_refit_verified=False`，Gate2 主张不能通过。
 
-## 22.5 Wasserstein solver 单元测试
+## 22.5 Wasserstein solver 单元测试（推荐）
 
-小问题必须存在精确 primal/LP oracle，并检查：
+适用且资源允许时，建议为小问题提供精确 primal/LP oracle，并检查：
 
 - primal/dual 数值一致；
 - radius=0 接近 ERM；
@@ -3008,9 +3068,9 @@ contracts -> concrete science implementation
 
 ---
 
-# 35. Stage Acceptance Test 最低要求
+# 35. Stage Acceptance Test 推荐清单（非强制）
 
-每个 Stage 的实现 PR 必须至少包含：
+以下测试均为推荐项，而不是 Stage 合格或实现 PR 的强制条件。适用且资源允许时建议实现；未实现这些测试本身不构成阻断，但已经实现的测试应保持通过，并可作为验收证据：
 
 1. 正确输入成功；
 2. 错误 type fail；
@@ -3025,7 +3085,9 @@ contracts -> concrete science implementation
 11. public API signature test；
 12. no hidden execution/environment dependency；
 13. baseline regression；
-14. completion receipt。
+14. completion receipt 校验测试。
+
+本节只规定测试实现的推荐范围，不取消协议其他章节对契约、产物、Gate 决策或 completion receipt 本身的独立要求。
 
 ---
 

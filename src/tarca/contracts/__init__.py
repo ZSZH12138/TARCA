@@ -28,6 +28,10 @@ from .stage0 import (
     AcceleratorCapabilities,
     ArtifactIndex,
     AuthorizedOverwriteReceipt,
+    DoctorCheckResults,
+    DoctorReport,
+    DoctorResources,
+    DoctorVersions,
     EnvironmentBundle,
     EnvironmentPlatform,
     EnvironmentProfile,
@@ -35,6 +39,7 @@ from .stage0 import (
     PythonEnvironment,
     RelatedWorkBundle,
     Stage0CompletionReceipt,
+    Stage0VerificationReport,
 )
 
 __all__ = [
@@ -42,6 +47,10 @@ __all__ = [
     "ArtifactIndex",
     "ArtifactRef",
     "AuthorizedOverwriteReceipt",
+    "DoctorCheckResults",
+    "DoctorReport",
+    "DoctorResources",
+    "DoctorVersions",
     "EnvironmentBundle",
     "EnvironmentPlatform",
     "EnvironmentProfile",
@@ -56,6 +65,7 @@ __all__ = [
     "ResearchContractManifest",
     "Sha256Hash",
     "Stage0CompletionReceipt",
+    "Stage0VerificationReport",
     "StrictContractModel",
     "UtcDatetime",
     "build_gate_spec",
