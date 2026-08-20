@@ -1,8 +1,10 @@
-# TARCA End-to-End Stage Protocol Specification v2.0
+# TARCA End-to-End Stage Protocol Specification v2.0.1
 
 > **中文名**：TARCA 全阶段标准输入/输出与接口契约协议书
-> **协议版本**：v2.0
+> **协议版本**：v2.0.1
+> **稳定协议身份**：`TARCA-E2E-STAGE-PROTOCOL-2.0`
 > **制定日期**：2026-08-20
+> **兼容性修订**：`CCP-0001`；纠正 SHA-256 文字记号并补齐 sealed-access 授权边界，不改变既有 wire format 或科学身份。
 > **文档角色**：面向整个 TARCA 科研链路的规范性阶段接口协议；定义每个 Stage 的标准输入、标准输出、公共类、必要函数、持久化产物、Gate 连接与执行面边界。
 > **范围**：本文件只定义接口和验证规则；Stage/Gate 的执行记录与科学结论不属于本文。
 > **与计划书关系**：项目计划书决定“研究什么、按什么顺序验证、哪些 Gate 决定继续/停止”；本协议决定“每一步具体接收什么、返回什么、类里必须有什么字段、函数如何连接”。
@@ -202,7 +204,7 @@ contracts
 | `N_pair` | intervention pair count |
 | `N_site` | localization candidate count |
 | `E` | environment count |
-| `Sha256Hash` | `sha256:` + 64 lowercase hex |
+| `Sha256Hash` | 64 lowercase hex（不带算法前缀） |
 | `UtcDatetime` | timezone-aware UTC datetime |
 
 Tensor 原则：
@@ -280,13 +282,37 @@ TEST
 ### `AccessScope`
 
 ```python
-class AccessScope:
+class AccessScope(StrictContractModel):
     sealed: bool
     scope_name: str
 ```
 
 成员函数：无。
 `sealed=True` 只表示访问请求涉及 sealed scope，不等价于授权；真正 sealed 访问仍需要 `SealedAccessGrant`。
+
+### `SealedAccessGrant`
+
+```python
+class SealedAccessGrant(StrictContractModel):
+    grant_id: str
+    dataset: DatasetSpec
+    scope_name: str
+    allowed_partitions: tuple[DatasetWindowPartition, ...]
+    authorization_ref: ArtifactRef
+    issued_at: UtcDatetime
+    expires_at: UtcDatetime
+```
+
+约束：
+
+- `grant_id`、`scope_name` 必须非空；dataset 必须是精确的 logical `(name, version)`；
+- `allowed_partitions` 必须非空且无重复；
+- `authorization_ref.artifact_type` 必须为 `SEALED_ACCESS_AUTHORIZATION`；
+- `expires_at` 必须晚于 `issued_at`；
+- grant 必须与 dataset、scope 和请求 partition 全部精确匹配，并在访问时刻有效；
+- 缺失、过期或不匹配时，必须在任何物理读取前 fail closed；
+- registry 中 `sealed=True` 的 dataset 必须始终按 sealed 处理；调用方不得用 `AccessScope(sealed=False)` 将其降级为 unsealed；
+- grant 只授权读取，不授权在 validation/test 上 fit，也不改变 scientific identity。
 
 ### `DatasetSourceKind`
 
@@ -576,7 +602,7 @@ class ArtifactManifest(StrictContractModel):
 ## 5.4 `DatasetSpec`
 
 ```python
-class DatasetSpec:
+class DatasetSpec(StrictContractModel):
     name: str
     version: str
 ```
@@ -588,11 +614,12 @@ class DatasetSpec:
 ## 5.5 `DatasetWindowPartition`
 
 ```python
-TRAIN
-VALIDATION
-TEST
-TEST_SEEN_REGIME
-TEST_UNSEEN_REGIME
+class DatasetWindowPartition(StrEnum):
+    TRAIN = "TRAIN"
+    VALIDATION = "VALIDATION"
+    TEST = "TEST"
+    TEST_SEEN_REGIME = "TEST_SEEN_REGIME"
+    TEST_UNSEEN_REGIME = "TEST_UNSEEN_REGIME"
 ```
 
 它表示**已有物理窗口视图**，不能代替 temporal split policy。
@@ -1959,12 +1986,22 @@ build_windows(
     dataset: DatasetSpec,
     partition: DatasetWindowPartition,
     access: AccessScope,
+    grant: SealedAccessGrant | None = None,
 ) -> WindowBatch
 
 hash_dataset(
     dataset: DatasetSpec,
     access: AccessScope,
+    grant: SealedAccessGrant | None = None,
 ) -> Sha256Hash
+
+validate_sealed_access(
+    dataset: DatasetSpec,
+    partition: DatasetWindowPartition,
+    access: AccessScope,
+    grant: SealedAccessGrant | None,
+    accessed_at: UtcDatetime,
+) -> None
 ```
 
 未来 artifact transform：
@@ -1982,7 +2019,10 @@ transform(...) -> WindowBatch
 - registry exact `(name, version)`；
 - hash 实际计算并匹配；
 - TEST 不允许擅自拼接 seen/unseen；
-- sealed 在物理读取前 block；
+- unsealed 读取不要求 grant；sealed 读取必须在物理 I/O 前验证 grant；
+- effective sealed 状态必须由 registry 与 access scope 共同决定；registry 已标记 sealed 时，调用方不能降级；
+- sealed grant 必须精确匹配 dataset、scope、partition 和有效时间，否则 fail closed；
+- sealed grant 不得绕过 train-only fit、sealed truth 或 scientific identity 规则；
 - 不 re-window / re-normalize / cast / shuffle / re-split；
 - `WindowBatch` shape/time/name/mask 全部通过。
 

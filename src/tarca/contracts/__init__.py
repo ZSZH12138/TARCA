@@ -9,6 +9,13 @@ from .base import (
     sha256_bytes,
     sha256_file,
 )
+from .data_access import (
+    AccessScope,
+    DatasetSpec,
+    DatasetWindowPartition,
+    SealedAccessGrant,
+    validate_sealed_access,
+)
 from .governance import (
     GateDecision,
     GatePredicate,
@@ -44,9 +51,12 @@ from .stage0 import (
 
 __all__ = [
     "AcceleratorCapabilities",
+    "AccessScope",
     "ArtifactIndex",
     "ArtifactRef",
     "AuthorizedOverwriteReceipt",
+    "DatasetSpec",
+    "DatasetWindowPartition",
     "DoctorCheckResults",
     "DoctorReport",
     "DoctorResources",
@@ -63,6 +73,7 @@ __all__ = [
     "PythonEnvironment",
     "RelatedWorkBundle",
     "ResearchContractManifest",
+    "SealedAccessGrant",
     "Sha256Hash",
     "Stage0CompletionReceipt",
     "Stage0VerificationReport",
@@ -78,4 +89,5 @@ __all__ = [
     "sha256_file",
     "validate_gate_decision",
     "validate_research_contract",
+    "validate_sealed_access",
 ]
