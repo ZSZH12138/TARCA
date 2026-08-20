@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 正式数据、模型与大体积实验产物不进入 Git。
+data/
+checkpoints/
+artifacts/**/runtime/
+
+# Stage 0 的小型合同和 Gate artifact 应保留。
+!artifacts/stage0/
+!artifacts/stage0/*.json

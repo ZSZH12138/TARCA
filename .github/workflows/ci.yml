@@ -1,0 +1,31 @@
+name: stage0-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  stage0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Restore frozen environment
+        run: uv sync --frozen --extra research --group dev
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Type check
+        run: uv run --frozen mypy
+      - name: Test with coverage
+        run: uv run --frozen pytest --cov=tarca --cov-report=term-missing --cov-report=xml
+      - name: Stage 0 offline gate
+        run: uv run --frozen python scripts/check_stage0.py --json

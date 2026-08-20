@@ -1,0 +1,165 @@
+schema_version: "1.0.0"
+verification_date: "2026-08-20"
+sources:
+  - source_id: hyperdas
+    repository_url: https://github.com/jiudingsun01/HyperDAS
+    paper_url: https://arxiv.org/abs/2503.10894
+    role: anti-injection and automated-alignment reference
+    license_status: UNKNOWN
+    license_file: NONE_FOUND
+    allowed_action: STATIC_ONLY
+    default_branch: main
+    commit: ad89825abfdc6875f0c8529e64ca7c84f75e3946
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: plot
+    repository_url: https://github.com/jchang153/causal-abstractions-ot
+    paper_url: https://arxiv.org/abs/2605.06979
+    role: progressive-OT and PLOT-guided-DAS baseline
+    license_status: UNKNOWN
+    license_file: NONE_FOUND
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: ae6d6f229273ac6f14c50847e129b2c57d8d8562
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: diroca
+    repository_url: https://github.com/yfelekis/DiRoCA
+    paper_url: https://arxiv.org/abs/2510.04842
+    role: distributionally-robust causal-abstraction baseline
+    license_status: UNKNOWN
+    license_file: NONE_FOUND
+    allowed_action: STATIC_ONLY
+    default_branch: main
+    commit: 7002947b4954abea1f3d11fcb6f36e7f3c43e8bd
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: cae
+    repository_url: https://github.com/MelouxM/CAE
+    paper_url: https://arxiv.org/abs/2607.00267
+    role: causal-abstraction metric and unmapped-variable baseline
+    license_status: MIT
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: d91f65b5620423d3eae98478bc9843f4a40e361a
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: good-apples
+    repository_url: https://github.com/Paulineli/apple-bucket
+    paper_url: https://arxiv.org/abs/2605.02234
+    role: failure-region diagnostic reference
+    license_status: UNKNOWN
+    license_file: NONE_FOUND
+    allowed_action: STATIC_ONLY
+    default_branch: main
+    commit: f26e4416efa514ab969339a6d9ccde3b32e97bc4
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: representational-divergence
+    repository_url: https://github.com/grantsrb/rep_divergence
+    paper_url: https://arxiv.org/abs/2511.04638
+    role: intervention-support diagnostic reference
+    license_status: Apache-2.0
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: f2548d2ea9b4f4b87a87ba5d53db43838d15c521
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: causalab
+    repository_url: https://github.com/goodfire-ai/causalab
+    paper_url: null
+    role: causal-abstraction experiment-framework reference
+    license_status: UNKNOWN
+    license_file: NONE_FOUND
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: e433ccef06f638917da97b0d5316b4dae641ff90
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: pyvene
+    repository_url: https://github.com/stanfordnlp/pyvene
+    paper_url: https://arxiv.org/abs/2403.07809
+    role: PyTorch intervention dependency
+    license_status: Apache-2.0
+    license_file: LICENSE
+    allowed_action: DEPENDENCY
+    default_branch: main
+    commit: 9e333904dcf9e597ca76170010d17f4d4580de8d
+    package_name: pyvene
+    package_version: "0.1.8"
+    release_tag: v0.1.8
+    release_commit: 8138d93a7e5b1b5742d71f9f750447f2e1b65b95
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: pot
+    repository_url: https://github.com/PythonOT/POT
+    paper_url: null
+    role: optimal-transport dependency
+    license_status: MIT
+    license_file: LICENSE
+    allowed_action: DEPENDENCY
+    default_branch: master
+    commit: 9932112dbb0c985f3e57e38977ecc44c02f5ffc0
+    package_name: POT
+    package_version: "0.9.7"
+    release_tag: 0.9.7
+    release_commit: a12794ea4cc5eba5f6d215e4d86757344c392788
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: foil
+    repository_url: https://github.com/AdityaLab/FOIL
+    paper_url: https://arxiv.org/abs/2406.09130
+    role: OOD time-series forecasting baseline
+    license_status: MIT
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: 601c54a054906479cc3b2a38e19459af89a44622
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: cogs
+    repository_url: https://github.com/simon-sxx/COGS
+    paper_url: null
+    role: OOD causal-representation time-series baseline
+    license_status: MIT
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: 5f82f8f6f3796f2a07c0648a3313243fe339bf02
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: patchtst
+    repository_url: https://github.com/yuqinie98/PatchTST
+    paper_url: https://arxiv.org/abs/2211.14730
+    role: layer-and-time-patch forecasting baseline
+    license_status: Apache-2.0
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: itransformer
+    repository_url: https://github.com/thuml/iTransformer
+    paper_url: https://arxiv.org/abs/2310.06625
+    role: variable-token forecasting baseline
+    license_status: MIT
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: c2426e68ca13f74aaec08045c5c724d8ad328124
+    verification_date: "2026-08-20"
+    local_reference_path: null
+  - source_id: chronos
+    repository_url: https://github.com/amazon-science/chronos-forecasting
+    paper_url: https://arxiv.org/abs/2403.07815
+    role: frozen time-series foundation-model baseline
+    license_status: Apache-2.0
+    license_file: LICENSE
+    allowed_action: REFERENCE_ONLY
+    default_branch: main
+    commit: 8589d1988e9676817548e9626738ff06b6ca6370
+    verification_date: "2026-08-20"
+    local_reference_path: null
