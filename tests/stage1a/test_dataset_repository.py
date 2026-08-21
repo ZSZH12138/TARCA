@@ -155,7 +155,8 @@ def test_payload_hash_mismatch_and_object_array_fail_closed(
     fixture = persisted_fixture_factory()
     repository = _repository(fixture, CountingBackend())
     x_path = fixture.repo_root / "fixture_dataset" / "windows" / "train" / "x.npy"
-    x_path.write_bytes(b"tampered")
+    original = x_path.read_bytes()
+    x_path.write_bytes(b"X" + original[1:])
     with pytest.raises(ValueError, match="payload file hash mismatch"):
         repository.build_windows(
             fixture.dataset,

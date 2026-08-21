@@ -63,6 +63,7 @@ from .interventions import (
     validate_intervention_pair_set,
     validate_intervention_site,
     validate_intervention_spec,
+    validate_resolved_intervention_pair_batch,
 )
 from .metrics import MetricContext, MetricRecord
 from .research import (
@@ -165,6 +166,7 @@ __all__ = [
     "validate_intervention_site",
     "validate_intervention_spec",
     "validate_research_contract",
+    "validate_resolved_intervention_pair_batch",
     "validate_sealed_access",
     "validate_window_batch",
 ]

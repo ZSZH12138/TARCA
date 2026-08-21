@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import torch
@@ -20,12 +21,15 @@ from tarca.contracts import (
     MetricContext,
     MetricRecord,
     RegimeRelation,
+    ResolvedInterventionPairBatch,
     SplitPartition,
+    WindowBatch,
     validate_concept_batch,
     validate_forecast_distribution,
     validate_intervention_pair_set,
     validate_intervention_site,
     validate_intervention_spec,
+    validate_resolved_intervention_pair_batch,
 )
 
 HASH_A = "a" * 64
@@ -79,6 +83,8 @@ def test_forecast_validation_preserves_mean_identity() -> None:
             "must not cross",
         ),
         ({"scale": torch.ones((2, 2, 1), dtype=torch.float64)}, "dtype"),
+        ({"logits": torch.tensor(1.0)}, "rank-4"),
+        ({"samples": torch.tensor(1.0)}, "rank-4"),
     ),
 )
 def test_forecast_validation_rejects_invalid_distribution(
@@ -212,4 +218,60 @@ def test_intervention_pair_set_requires_unique_stable_ids() -> None:
     with pytest.raises(ValueError, match="must be unique"):
         validate_intervention_pair_set(
             InterventionPairSet(pair_ids=(pair_id, pair_id), source_label="train-pairs")
+        )
+
+
+def _pair_window_batch() -> WindowBatch:
+    start = datetime(2026, 8, 21, tzinfo=UTC)
+    return WindowBatch(
+        x=torch.tensor([[[1.0]], [[2.0]]]),
+        y=torch.tensor([[[2.0]], [[3.0]]]),
+        observed_covariates=None,
+        known_future_covariates=None,
+        x_observed_mask=None,
+        y_observed_mask=None,
+        observed_covariates_mask=None,
+        known_future_covariates_mask=None,
+        regime=None,
+        window_id=("window-0", "window-1"),
+        input_feature_names=("load",),
+        target_names=("load",),
+        observed_covariate_names=(),
+        known_future_covariate_names=(),
+        feature_start=(start, start),
+        feature_end=(start + timedelta(hours=1),) * 2,
+        prediction_start=(start + timedelta(hours=2),) * 2,
+        label_end=(start + timedelta(hours=2),) * 2,
+        forecast_time=((start + timedelta(hours=2),),) * 2,
+        metadata={"partition": "TRAIN"},
+    )
+
+
+def test_resolved_pair_batch_validates_direction_indices_and_partition() -> None:
+    pair = InterventionPair(
+        schema_version=CONTRACT_SCHEMA_VERSION,
+        pair_id="d" * 64,
+        partition=SplitPartition.TRAIN,
+        base_window_id="window-0",
+        source_window_id="window-1",
+        concept_name="trend",
+        regime_relation=RegimeRelation.SAME,
+        matching_distance=0.25,
+        concept_delta=1.0,
+    )
+    windows = _pair_window_batch()
+    resolved = ResolvedInterventionPairBatch(
+        pairs=(pair,),
+        base=windows,
+        source=windows,
+        base_row_for_pair=(0,),
+        source_row_for_pair=(1,),
+        dataset_hash=HASH_A,
+    )
+
+    assert validate_resolved_intervention_pair_batch(resolved) is resolved
+    assert resolved.base.x is windows.x
+    with pytest.raises(ValueError, match="source window direction"):
+        validate_resolved_intervention_pair_batch(
+            replace(resolved, source_row_for_pair=(0,))
         )

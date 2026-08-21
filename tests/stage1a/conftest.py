@@ -82,6 +82,7 @@ def _write_partition(
                 role=role,
                 relative_path=path.relative_to(dataset_root).as_posix(),
                 content_hash=sha256_file(path),
+                size_bytes=path.stat().st_size,
             )
         )
     metadata_path = partition_root / "metadata.json"
@@ -91,6 +92,7 @@ def _write_partition(
             role="metadata",
             relative_path=metadata_path.relative_to(dataset_root).as_posix(),
             content_hash=sha256_file(metadata_path),
+            size_bytes=metadata_path.stat().st_size,
         )
     )
     return PersistedPartitionPayload(partition=partition, files=tuple(files))

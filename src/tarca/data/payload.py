@@ -4,7 +4,7 @@ import re
 from pathlib import PurePosixPath
 from typing import Literal, Self
 
-from pydantic import JsonValue, field_validator, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
 from tarca.contracts.base import Sha256Hash, StrictContractModel, UtcDatetime
 from tarca.contracts.data_access import DatasetSpec, DatasetWindowPartition
@@ -27,6 +27,7 @@ class PersistedPayloadFile(StrictContractModel):
     role: PayloadRole
     relative_path: str
     content_hash: Sha256Hash
+    size_bytes: int = Field(ge=0)
 
     @field_validator("relative_path")
     @classmethod
@@ -42,6 +43,15 @@ class PersistedPayloadFile(StrictContractModel):
         ):
             raise ValueError("payload path must be a canonical POSIX relative path")
         return value
+
+    @model_validator(mode="after")
+    def _extension_matches_role(self) -> Self:
+        suffix = PurePosixPath(self.relative_path).suffix
+        if self.role == "metadata" and suffix != ".json":
+            raise ValueError("metadata payload must use a .json file")
+        if self.role != "metadata" and suffix != ".npy":
+            raise ValueError("array payloads must use individual .npy files")
+        return self
 
 
 class PersistedPartitionPayload(StrictContractModel):

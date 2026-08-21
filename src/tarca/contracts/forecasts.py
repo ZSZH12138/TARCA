@@ -36,9 +36,13 @@ def _validate_aligned_tensor(
 
 
 def _validate_quantiles(distribution: ForecastDistribution) -> None:
-    levels = sorted(distribution.quantiles)
-    if any(isinstance(level, bool) or not isinstance(level, (int, float)) for level in levels):
+    unsorted_levels = tuple(distribution.quantiles)
+    if any(
+        isinstance(level, bool) or not isinstance(level, (int, float))
+        for level in unsorted_levels
+    ):
         raise ValueError("quantile levels must be numeric")
+    levels = sorted(unsorted_levels)
     if any(not 0.0 < float(level) < 1.0 for level in levels):
         raise ValueError("quantile levels must be between 0 and 1")
     for level in levels:
@@ -82,14 +86,14 @@ def validate_forecast_distribution(
             raise ValueError("scale must be strictly positive")
     _validate_quantiles(distribution)
     if distribution.logits is not None:
-        shape = (*mean.shape, distribution.logits.shape[-1])
-        if distribution.logits.ndim != 4 or shape[-1] <= 0:
+        if distribution.logits.ndim != 4 or distribution.logits.shape[-1] <= 0:
             raise ValueError("logits must be a nonempty rank-4 Tensor")
+        shape = (*mean.shape, distribution.logits.shape[-1])
         _validate_aligned_tensor(distribution.logits, shape, "logits", mean)
     if distribution.samples is not None:
-        shape = (distribution.samples.shape[0], *mean.shape)
-        if distribution.samples.ndim != 4 or shape[0] <= 0:
+        if distribution.samples.ndim != 4 or distribution.samples.shape[0] <= 0:
             raise ValueError("samples must be a nonempty rank-4 Tensor")
+        shape = (distribution.samples.shape[0], *mean.shape)
         _validate_aligned_tensor(distribution.samples, shape, "samples", mean)
     _validate_forecast_identity(distribution, mean.shape[0])
     return distribution

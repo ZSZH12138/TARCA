@@ -149,7 +149,12 @@ class PersistedDatasetRepository:
         paths: dict[str, Path] = {}
         for descriptor in payload.files:
             path = self._resolve_payload_path(dataset_root, descriptor.relative_path)
-            actual_hash = sha256_bytes(self.backend.read_bytes(path))
+            content = self.backend.read_bytes(path)
+            if len(content) != descriptor.size_bytes:
+                raise ValueError(
+                    f"payload file size mismatch: {descriptor.relative_path}"
+                )
+            actual_hash = sha256_bytes(content)
             if actual_hash != descriptor.content_hash:
                 raise ValueError(
                     f"payload file hash mismatch: {descriptor.relative_path}"

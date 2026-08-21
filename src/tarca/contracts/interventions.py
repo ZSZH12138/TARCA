@@ -11,7 +11,7 @@ from pydantic import Field, field_validator, model_validator
 from torch import Tensor
 
 from .base import Sha256Hash, StrictContractModel
-from .data import SplitPartition, WindowBatch
+from .data import SplitPartition, WindowBatch, validate_window_batch
 from .forecasts import ForecastDistribution
 
 
@@ -158,6 +158,66 @@ class ResolvedInterventionPairBatch:
     base_row_for_pair: tuple[int, ...]
     source_row_for_pair: tuple[int, ...]
     dataset_hash: Sha256Hash
+
+
+def _window_split(batch: WindowBatch, label: str) -> SplitPartition:
+    raw_partition = batch.metadata.get("partition", batch.metadata.get("physical_partition"))
+    if not isinstance(raw_partition, str):
+        raise ValueError(f"{label} WindowBatch must record its physical partition")
+    mapping = {
+        "TRAIN": SplitPartition.TRAIN,
+        "VALIDATION": SplitPartition.VALIDATION,
+        "TEST": SplitPartition.TEST,
+        "TEST_SEEN_REGIME": SplitPartition.TEST,
+        "TEST_UNSEEN_REGIME": SplitPartition.TEST,
+    }
+    try:
+        return mapping[raw_partition]
+    except KeyError as exc:
+        raise ValueError(f"{label} WindowBatch has an unknown physical partition") from exc
+
+
+def _validate_pair_rows(
+    batch: ResolvedInterventionPairBatch,
+) -> None:
+    for index, pair in enumerate(batch.pairs):
+        base_row = batch.base_row_for_pair[index]
+        source_row = batch.source_row_for_pair[index]
+        if type(base_row) is not int or not 0 <= base_row < len(batch.base.window_id):
+            raise ValueError("base row index is outside the WindowBatch")
+        if type(source_row) is not int or not 0 <= source_row < len(batch.source.window_id):
+            raise ValueError("source row index is outside the WindowBatch")
+        if batch.base.window_id[base_row] != pair.base_window_id:
+            raise ValueError("pair base window direction does not match base_row_for_pair")
+        if batch.source.window_id[source_row] != pair.source_window_id:
+            raise ValueError("pair source window direction does not match source_row_for_pair")
+
+
+def validate_resolved_intervention_pair_batch(
+    batch: ResolvedInterventionPairBatch,
+) -> ResolvedInterventionPairBatch:
+    pair_count = len(batch.pairs)
+    if pair_count == 0:
+        raise ValueError("resolved pair batch must not be empty")
+    if not (
+        pair_count == len(batch.base_row_for_pair) == len(batch.source_row_for_pair)
+    ):
+        raise ValueError("resolved pair rows must align with pairs")
+    validate_window_batch(batch.base)
+    validate_window_batch(batch.source)
+    base_split = _window_split(batch.base, "base")
+    source_split = _window_split(batch.source, "source")
+    if base_split is not source_split:
+        raise ValueError("base and source WindowBatch partitions must agree")
+    if any(pair.partition is not base_split for pair in batch.pairs):
+        raise ValueError("pair partition must match the physical WindowBatch partition")
+    pair_ids = tuple(pair.pair_id for pair in batch.pairs)
+    if len(set(pair_ids)) != pair_count:
+        raise ValueError("resolved pair IDs must be unique")
+    if re.fullmatch(r"[0-9a-f]{64}", batch.dataset_hash) is None:
+        raise ValueError("resolved pair dataset_hash must be a lowercase SHA-256 hash")
+    _validate_pair_rows(batch)
+    return batch
 
 
 @dataclass(frozen=True, slots=True)
