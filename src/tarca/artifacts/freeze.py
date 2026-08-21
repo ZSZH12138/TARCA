@@ -9,6 +9,7 @@ _STATIC_FROZEN_PATHS = frozenset(
         "docs/preregistration_v0.md",
         "docs/related_work_matrix.csv",
         "docs/stage1a_scope.md",
+        "docs/superpowers/plans/2026-08-21-stage1a-completion.md",
         "docs/terminology.md",
         "pyproject.toml",
         "scripts/check_stage0.py",

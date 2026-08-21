@@ -74,6 +74,7 @@ def test_frozen_path_catalog_includes_authority_and_research_inputs(tmp_path: Pa
         "docs/auth/TARCA_项目计划书.md",
         "docs/preregistration_v0.md",
         "docs/stage1a_scope.md",
+        "docs/superpowers/plans/2026-08-21-stage1a-completion.md",
         "pyproject.toml",
         "scripts/check_stage1a.py",
         "src/tarca/contracts/data.py",
