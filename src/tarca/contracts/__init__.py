@@ -1,3 +1,4 @@
+from .adapters import ForecastPredictor, MechanisticModelAdapter
 from .artifacts import ArtifactRef
 from .base import (
     CONTRACT_SCHEMA_VERSION,
@@ -12,7 +13,13 @@ from .base import (
     sha256_bytes,
     sha256_file,
 )
-from .concepts import ConceptBatch, ConceptIntervention, ConceptSpec, validate_concept_batch
+from .concepts import (
+    ConceptBatch,
+    ConceptExtractor,
+    ConceptIntervention,
+    ConceptSpec,
+    validate_concept_batch,
+)
 from .data import (
     DataManifest,
     DatasetRegistryEntry,
@@ -90,6 +97,7 @@ __all__ = [
     "ArtifactRef",
     "AuthorizedOverwriteReceipt",
     "ConceptBatch",
+    "ConceptExtractor",
     "ConceptIntervention",
     "ConceptSpec",
     "DataManifest",
@@ -108,6 +116,7 @@ __all__ = [
     "EnvironmentProfile",
     "EnvironmentResources",
     "ForecastDistribution",
+    "ForecastPredictor",
     "GateDecision",
     "GatePredicate",
     "GateSpec",
@@ -121,6 +130,7 @@ __all__ = [
     "InterventionSpec",
     "JSONValue",
     "LeakageAudit",
+    "MechanisticModelAdapter",
     "MetricContext",
     "MetricRecord",
     "PairingSpec",

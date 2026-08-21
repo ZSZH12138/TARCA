@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
-from typing import Literal, Self
+from typing import Literal, Protocol, Self, runtime_checkable
 
 import torch
 from pydantic import Field, field_validator, model_validator
 from torch import Tensor
 
 from .base import Sha256Hash, StrictContractModel
+from .data import LeakageAudit, WindowBatch
 
 
 class ConceptSpec(StrictContractModel):
@@ -95,3 +96,10 @@ class ConceptIntervention:
             raise ValueError("concept_name must not be blank")
         if not isfinite(self.delta):
             raise ValueError("concept delta must be finite")
+
+
+@runtime_checkable
+class ConceptExtractor(Protocol):
+    def compute(self, batch: WindowBatch) -> ConceptBatch: ...
+
+    def leakage_audit(self, batch: WindowBatch) -> LeakageAudit: ...
