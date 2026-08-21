@@ -16,7 +16,7 @@ dist/
 Thumbs.db
 
 # 正式数据、模型与大体积实验产物不进入 Git。
-data/
+/data/
 checkpoints/
 artifacts/**/runtime/
 
