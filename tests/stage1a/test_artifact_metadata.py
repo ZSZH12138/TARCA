@@ -73,7 +73,12 @@ def test_frozen_path_catalog_includes_authority_and_research_inputs(tmp_path: Pa
     paths = (
         "docs/auth/TARCA_项目计划书.md",
         "docs/preregistration_v0.md",
+        "docs/stage1a_scope.md",
         "pyproject.toml",
+        "scripts/check_stage1a.py",
+        "src/tarca/contracts/data.py",
+        "src/tarca/data/repository.py",
+        "tests/stage1a/test_window_batch.py",
         "uv.lock",
         "artifacts/stage0/research_contract_manifest.json",
     )
@@ -82,10 +87,14 @@ def test_frozen_path_catalog_includes_authority_and_research_inputs(tmp_path: Pa
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("frozen", encoding="utf-8")
     unrelated = tmp_path / "src/tarca/example.py"
-    unrelated.parent.mkdir(parents=True)
+    unrelated.parent.mkdir(parents=True, exist_ok=True)
     unrelated.write_text("editable", encoding="utf-8")
+    cache = tmp_path / "src/tarca/contracts/__pycache__/data.pyc"
+    cache.parent.mkdir(parents=True)
+    cache.write_bytes(b"cache")
 
     frozen = frozen_relative_paths(tmp_path)
 
     assert set(paths) <= set(frozen)
     assert "src/tarca/example.py" not in frozen
+    assert "src/tarca/contracts/__pycache__/data.pyc" not in frozen

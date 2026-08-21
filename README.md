@@ -27,20 +27,23 @@ TARCA 的计划研究链路为：
 
 ## 仓库范围
 
-本仓库保留建立研究边界和后续实验入口所需的 Stage 0 基础：
+本仓库保留 Stage 0 研究合同，以及 Stage 1A 建立的统一数据、接口和制品边界：
 
 ```text
 artifacts/stage0/       结构化研究合同、环境、Gate 与完成凭证
 docs/auth/              项目计划、实施计划、端到端协议和服务器规范
 docs/                   范围、相关工作、新颖性、术语、假设和预注册
 src/tarca/contracts/    严格、冻结的公共契约
+src/tarca/artifacts/    Stage 1A 类型化原子制品仓库与冻结目录
+src/tarca/data/         registry 驱动的既有物理窗口读取边界
 src/tarca/stage0/       Stage 0 冻结与核验逻辑
-scripts/                环境、来源和 Stage 0 检查入口
+scripts/                环境、来源、Stage 0 与 Stage 1A 检查入口
 tests/stage0/           Stage 0 自动化验证
+tests/stage1a/          Stage 1A 高风险边界和最小闭环验证
 third_party_manifest/   第三方论文、仓库、版本和许可证边界
 ```
 
-Stage 0 不训练正式模型、不下载正式数据，也不包含 Stage 1 的 SCM、预测模型、内部干预、OT、DAS 或 DRO 实现。
+Stage 1A 不训练正式模型、不下载或生成正式数据，也不包含 Stage 1B 的 SCM 生成、内部干预、OT、DAS 或 DRO 实现。其范围和交接见 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)。
 
 ## 权威文档
 
@@ -66,6 +69,7 @@ D:\software\MyAnaconda\Scripts\conda.exe run -n tarca-local-py311 python -m uv s
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe scripts/check_stage0.py
+.\.venv\Scripts\python.exe scripts/check_stage1a.py --json
 ```
 
 Linux 或服务器：
@@ -77,6 +81,7 @@ python -m uv sync --frozen --extra research --group dev
 .venv/bin/python -m pytest
 .venv/bin/python -m ruff check .
 .venv/bin/python scripts/check_stage0.py
+.venv/bin/python scripts/check_stage1a.py --json
 ```
 
 `artifacts/stage0/environment_profile.json` 只记录默认可复现起点。更换本地或服务器 backend 时，仍须保持依赖、数据、模型、种子、指标和 Gate 的 scientific identity 不变。
