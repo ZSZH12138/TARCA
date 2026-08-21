@@ -1,5 +1,5 @@
 from .adapters import ForecastPredictor, MechanisticModelAdapter
-from .artifacts import ArtifactRef
+from .artifacts import ArtifactManifest, ArtifactRef, RunManifest
 from .base import (
     CONTRACT_SCHEMA_VERSION,
     PROTOCOL_ID,
@@ -94,6 +94,7 @@ __all__ = [
     "AcceleratorCapabilities",
     "AccessScope",
     "ArtifactIndex",
+    "ArtifactManifest",
     "ArtifactRef",
     "AuthorizedOverwriteReceipt",
     "ConceptBatch",
@@ -139,6 +140,7 @@ __all__ = [
     "RelatedWorkBundle",
     "ResearchContractManifest",
     "ResolvedInterventionPairBatch",
+    "RunManifest",
     "SealedAccessGrant",
     "Sha256Hash",
     "SplitPartition",
