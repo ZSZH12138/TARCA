@@ -8,6 +8,9 @@ from typing import Annotated, Any, TypeAlias
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, StringConstraints
 
+CONTRACT_SCHEMA_VERSION = "1.0.0"
+PROTOCOL_ID = "TARCA-E2E-STAGE-PROTOCOL-2.0"
+
 Sha256Hash: TypeAlias = Annotated[
     str,
     StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$"),

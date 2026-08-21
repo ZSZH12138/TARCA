@@ -1,5 +1,7 @@
 from .artifacts import ArtifactRef
 from .base import (
+    CONTRACT_SCHEMA_VERSION,
+    PROTOCOL_ID,
     GitCommit,
     Sha256Hash,
     StrictContractModel,
@@ -50,6 +52,8 @@ from .stage0 import (
 )
 
 __all__ = [
+    "CONTRACT_SCHEMA_VERSION",
+    "PROTOCOL_ID",
     "AcceleratorCapabilities",
     "AccessScope",
     "ArtifactIndex",

@@ -17,6 +17,7 @@ dependencies = [
 research = [
   "numpy>=1.26,<3",
   "pot==0.9.7",
+  "pyarrow>=25,<26",
   "pyvene==0.1.8",
   "torch==2.13.0",
 ]
