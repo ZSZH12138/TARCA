@@ -6,7 +6,12 @@ import pyarrow as pa
 import pytest
 
 from tarca.artifacts.store import LocalArtifactStore
-from tarca.contracts import ArtifactManifest, StrictContractModel, sha256_file
+from tarca.contracts import (
+    ArtifactManifest,
+    StrictContractModel,
+    canonical_json_bytes,
+    sha256_file,
+)
 from tarca.contracts.arrow_schemas import PREDICTIONS_SCHEMA
 
 
@@ -97,4 +102,18 @@ def test_verify_rejects_content_corruption(tmp_path: Path) -> None:
     (tmp_path / ref.relative_path).write_bytes(b"corrupted")
 
     with pytest.raises(ValueError, match="content hash mismatch"):
+        store.verify_artifact(ref)
+
+
+def test_verify_rejects_manifest_semantic_tampering(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    ref = store.publish_bytes(b"original", "BINARY", "application/octet-stream", "1.0.0")
+    assert ref.relative_path is not None
+    artifact_path = tmp_path / ref.relative_path
+    manifest_path = artifact_path.with_name(f"{artifact_path.name}.manifest.json")
+    manifest = ArtifactManifest.model_validate_json(manifest_path.read_bytes())
+    tampered = manifest.model_copy(update={"producer_task_id": "tampered-task"})
+    manifest_path.write_bytes(canonical_json_bytes(tampered) + b"\n")
+
+    with pytest.raises(ValueError, match="manifest hash mismatch"):
         store.verify_artifact(ref)

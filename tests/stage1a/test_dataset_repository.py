@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
+import numpy as np
 import pytest
 import torch
 
@@ -15,6 +16,7 @@ from tarca.contracts import (
     DatasetSourceKind,
     DatasetSpec,
     DatasetWindowPartition,
+    LeakageAudit,
     SealedAccessGrant,
 )
 from tarca.data.persisted import LocalPayloadBackend
@@ -40,9 +42,19 @@ class CountingBackend(LocalPayloadBackend):
         self.calls.append(("read_bytes", path))
         return super().read_bytes(path)
 
-    def load_npy(self, path: Path):  # type: ignore[no-untyped-def]
-        self.calls.append(("load_npy", path))
-        return super().load_npy(path)
+
+class ReplacingAfterReadBackend(CountingBackend):
+    def __init__(self, target: Path) -> None:
+        super().__init__()
+        self.target = target
+        self.replaced = False
+
+    def read_bytes(self, path: Path) -> bytes:
+        content = super().read_bytes(path)
+        if path == self.target and not self.replaced:
+            np.save(path, np.array([[[999.0], [999.5]]], dtype=np.float64))
+            self.replaced = True
+        return content
 
 
 def _repository(fixture: PersistedFixture, backend: CountingBackend) -> PersistedDatasetRepository:
@@ -98,6 +110,63 @@ def test_exact_registry_resolution_and_partition_load_preserve_payload_identity(
         repository.build_windows(
             fixture.dataset,
             DatasetWindowPartition.TEST,
+            AccessScope(sealed=False, scope_name="development"),
+        )
+
+
+def test_partition_load_uses_the_exact_bytes_that_passed_hash_verification(
+    persisted_fixture_factory: PersistedFixtureFactory,
+) -> None:
+    fixture = persisted_fixture_factory(partitions=(DatasetWindowPartition.TRAIN,))
+    x_path = fixture.repo_root / "fixture_dataset" / "windows" / "train" / "x.npy"
+    backend = ReplacingAfterReadBackend(x_path)
+
+    batch = _repository(fixture, backend).build_windows(
+        fixture.dataset,
+        DatasetWindowPartition.TRAIN,
+        AccessScope(sealed=False, scope_name="development"),
+    )
+
+    assert backend.replaced
+    assert batch.x.tolist() == [[[1.0], [1.5]]]
+
+
+def test_new_loader_returns_a_passing_leakage_audit_for_the_requested_partition(
+    persisted_fixture_factory: PersistedFixtureFactory,
+) -> None:
+    fixture = persisted_fixture_factory(partitions=(DatasetWindowPartition.TRAIN,))
+    repository = _repository(fixture, CountingBackend())
+
+    batch, audit = repository.build_windows_with_audit(
+        fixture.dataset,
+        DatasetWindowPartition.TRAIN,
+        AccessScope(sealed=False, scope_name="development"),
+    )
+
+    assert batch.metadata["physical_partition"] == "TRAIN"
+    assert audit == LeakageAudit(passed=True, findings=())
+
+
+def test_standard_loader_fails_closed_when_partition_leakage_audit_fails(
+    persisted_fixture_factory: PersistedFixtureFactory,
+) -> None:
+    fixture = persisted_fixture_factory(
+        partitions=(DatasetWindowPartition.TRAIN,),
+        physical_partition_override=DatasetWindowPartition.TEST_UNSEEN_REGIME,
+    )
+    repository = _repository(fixture, CountingBackend())
+
+    with pytest.raises(ValueError, match="loader leakage audit failed"):
+        repository.build_windows_with_audit(
+            fixture.dataset,
+            DatasetWindowPartition.TRAIN,
+            AccessScope(sealed=False, scope_name="development"),
+        )
+
+    with pytest.raises(ValueError, match="loader leakage audit failed"):
+        repository.build_windows(
+            fixture.dataset,
+            DatasetWindowPartition.TRAIN,
             AccessScope(sealed=False, scope_name="development"),
         )
 

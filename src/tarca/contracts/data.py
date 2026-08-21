@@ -328,6 +328,8 @@ def _window_dimensions(batch: WindowBatch) -> tuple[int, int, int, int, int, int
     _require_optional_rank_three(batch.observed_covariates, "observed_covariates")
     _require_optional_rank_three(batch.known_future_covariates, "known_future_covariates")
     horizon = batch.y.shape[1] if batch.y is not None else len(batch.forecast_time[0])
+    if horizon <= 0:
+        raise ValueError("forecast horizon must be positive")
     target_size = batch.y.shape[2] if batch.y is not None else len(batch.target_names)
     observed_size = (
         batch.observed_covariates.shape[2] if batch.observed_covariates is not None else 0

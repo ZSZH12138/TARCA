@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -17,33 +18,22 @@ from .payload import PersistedPayloadFile, PersistedWindowMetadata
 class PayloadBackend(Protocol):
     def read_bytes(self, path: Path) -> bytes: ...
 
-    def load_npy(self, path: Path) -> NDArray[Any]: ...
-
 
 class LocalPayloadBackend:
     def read_bytes(self, path: Path) -> bytes:
         return path.read_bytes()
 
-    def load_npy(self, path: Path) -> NDArray[Any]:
-        value = np.load(path, allow_pickle=False)
-        if not isinstance(value, np.ndarray):
-            raise TypeError("persisted array must be a single .npy ndarray")
-        if value.dtype.hasobject:
-            raise ValueError("object dtype is forbidden; arrays require allow_pickle=False")
-        return value
-
 
 def load_window_batch(
     files: dict[str, PersistedPayloadFile],
-    paths: dict[str, Path],
-    backend: PayloadBackend,
+    payloads: dict[str, bytes],
 ) -> WindowBatch:
-    metadata = _load_metadata(files["metadata"], paths["metadata"], backend)
+    metadata = _load_metadata(files["metadata"], payloads["metadata"])
 
     def tensor(role: str) -> torch.Tensor | None:
         if role not in files:
             return None
-        array = backend.load_npy(paths[role])
+        array = _load_npy_bytes(payloads[role])
         if array.dtype.hasobject:
             raise ValueError("object dtype is forbidden; arrays require allow_pickle=False")
         return torch.from_numpy(array)
@@ -76,10 +66,19 @@ def load_window_batch(
     return validate_window_batch(batch)
 
 
-def _load_metadata(
-    descriptor: PersistedPayloadFile, path: Path, backend: PayloadBackend
-) -> PersistedWindowMetadata:
-    payload = backend.read_bytes(path)
+def _load_npy_bytes(payload: bytes) -> NDArray[Any]:
+    value = np.load(BytesIO(payload), allow_pickle=False)
+    if not isinstance(value, np.ndarray):
+        close = getattr(value, "close", None)
+        if callable(close):
+            close()
+        raise TypeError("persisted array must be a single .npy ndarray")
+    if value.dtype.hasobject:
+        raise ValueError("object dtype is forbidden; arrays require allow_pickle=False")
+    return value
+
+
+def _load_metadata(descriptor: PersistedPayloadFile, payload: bytes) -> PersistedWindowMetadata:
     metadata = PersistedWindowMetadata.model_validate_json(payload)
     if canonical_json_bytes(metadata) + b"\n" != payload:
         raise ValueError(f"window metadata is not canonical: {descriptor.relative_path}")

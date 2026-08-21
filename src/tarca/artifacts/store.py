@@ -168,6 +168,7 @@ class LocalArtifactStore:
         temporary_path = self._write_temporary(payload)
         artifact_path: Path | None = None
         manifest_path: Path | None = None
+        completion_path: Path | None = None
         artifact_published = False
         try:
             content_hash = sha256_file(temporary_path)
@@ -179,13 +180,35 @@ class LocalArtifactStore:
             artifact_published = True
             ref = self._build_ref(artifact_path, artifact_type, content_hash, schema_version)
             manifest_path = self._publish_manifest(ref, artifact_path, media_type, serializer_id)
+            completion_path = self._publish_completion_marker(artifact_path, manifest_path)
             self._verified_path(ref)
             return ref
         except Exception:
+            if completion_path is not None:
+                completion_path.unlink(missing_ok=True)
             if manifest_path is not None:
                 manifest_path.unlink(missing_ok=True)
             if artifact_published and artifact_path is not None:
                 artifact_path.unlink(missing_ok=True)
+            raise
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+    def _publish_completion_marker(self, artifact_path: Path, manifest_path: Path) -> Path:
+        manifest_hash = sha256_file(manifest_path)
+        payload = f"sha256:{manifest_hash}\n".encode("ascii")
+        completion_path = self._completion_path(artifact_path)
+        temporary_path = self._write_temporary(payload)
+        marker_published = False
+        try:
+            self._validate_exact_bytes(temporary_path, payload)
+            self._atomic_link(temporary_path, completion_path)
+            marker_published = True
+            self._validate_exact_bytes(completion_path, payload)
+            return completion_path
+        except Exception:
+            if marker_published:
+                completion_path.unlink(missing_ok=True)
             raise
         finally:
             temporary_path.unlink(missing_ok=True)
@@ -250,6 +273,12 @@ class LocalArtifactStore:
         manifest_path = self._manifest_path(path)
         if not manifest_path.is_file():
             raise FileNotFoundError(manifest_path)
+        completion_path = self._completion_path(path)
+        if not completion_path.is_file():
+            raise FileNotFoundError(completion_path)
+        expected_marker = f"sha256:{sha256_file(manifest_path)}\n".encode("ascii")
+        if completion_path.read_bytes() != expected_marker:
+            raise ValueError(f"artifact manifest hash mismatch for {ref.artifact_id}")
         manifest = ArtifactManifest.model_validate_json(manifest_path.read_bytes())
         if manifest.artifact != ref or manifest.size_bytes != path.stat().st_size:
             raise ValueError(f"artifact manifest mismatch for {ref.artifact_id}")
@@ -261,6 +290,10 @@ class LocalArtifactStore:
     @staticmethod
     def _manifest_path(artifact_path: Path) -> Path:
         return artifact_path.with_name(f"{artifact_path.name}.manifest.json")
+
+    @staticmethod
+    def _completion_path(artifact_path: Path) -> Path:
+        return artifact_path.with_name(f"{artifact_path.name}.complete")
 
     def _build_ref(
         self,

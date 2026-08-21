@@ -35,7 +35,10 @@ class PersistedFixture:
 PersistedFixtureFactory = Callable[..., PersistedFixture]
 
 
-def _window_metadata(partition: DatasetWindowPartition) -> PersistedWindowMetadata:
+def _window_metadata(
+    partition: DatasetWindowPartition,
+    physical_partition_override: DatasetWindowPartition | None,
+) -> PersistedWindowMetadata:
     return PersistedWindowMetadata(
         window_id=(f"{partition.value.lower()}-0",),
         input_feature_names=("load",),
@@ -47,7 +50,7 @@ def _window_metadata(partition: DatasetWindowPartition) -> PersistedWindowMetada
         prediction_start=(datetime(2026, 1, 1, 2, tzinfo=UTC),),
         label_end=(datetime(2026, 1, 1, 2, tzinfo=UTC),),
         forecast_time=((datetime(2026, 1, 1, 2, tzinfo=UTC),),),
-        metadata={"physical_partition": partition.value},
+        metadata={"physical_partition": (physical_partition_override or partition).value},
     )
 
 
@@ -57,6 +60,7 @@ def _write_partition(
     value: float,
     *,
     object_x: bool,
+    physical_partition_override: DatasetWindowPartition | None,
 ) -> PersistedPartitionPayload:
     relative_root = Path("windows") / partition.value.lower()
     partition_root = dataset_root / relative_root
@@ -86,7 +90,9 @@ def _write_partition(
             )
         )
     metadata_path = partition_root / "metadata.json"
-    metadata_path.write_bytes(canonical_json_bytes(_window_metadata(partition)) + b"\n")
+    metadata_path.write_bytes(
+        canonical_json_bytes(_window_metadata(partition, physical_partition_override)) + b"\n"
+    )
     files.append(
         PersistedPayloadFile(
             role="metadata",
@@ -111,6 +117,7 @@ def persisted_fixture_factory(tmp_path: Path) -> PersistedFixtureFactory:
         sealed: bool = False,
         source_kind: DatasetSourceKind = DatasetSourceKind.PERSISTED_STAGE1,
         object_x: bool = False,
+        physical_partition_override: DatasetWindowPartition | None = None,
     ) -> PersistedFixture:
         nonlocal fixture_count
         fixture_count += 1
@@ -120,7 +127,13 @@ def persisted_fixture_factory(tmp_path: Path) -> PersistedFixtureFactory:
         dataset_root = tmp_path / relative_location
         dataset_root.mkdir()
         payloads = tuple(
-            _write_partition(dataset_root, partition, float(index + 1), object_x=object_x)
+            _write_partition(
+                dataset_root,
+                partition,
+                float(index + 1),
+                object_x=object_x,
+                physical_partition_override=physical_partition_override,
+            )
             for index, partition in enumerate(partitions)
         )
         manifest = PersistedDatasetPayloadManifest(

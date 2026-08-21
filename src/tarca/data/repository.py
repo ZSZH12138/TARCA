@@ -9,6 +9,7 @@ from tarca.contracts.data import (
     DatasetRegistryEntry,
     DatasetRegistryManifest,
     DatasetSourceKind,
+    LeakageAudit,
     WindowBatch,
 )
 from tarca.contracts.data_access import (
@@ -56,6 +57,17 @@ class PersistedDatasetRepository:
         access: AccessScope,
         grant: SealedAccessGrant | None = None,
     ) -> WindowBatch:
+        batch, _audit = self.build_windows_with_audit(dataset, partition, access, grant)
+        return batch
+
+    def build_windows_with_audit(
+        self,
+        dataset: DatasetSpec,
+        partition: DatasetWindowPartition,
+        access: AccessScope,
+        grant: SealedAccessGrant | None = None,
+    ) -> tuple[WindowBatch, LeakageAudit]:
+        """Load one physical partition and return the mandatory loader audit sidecar."""
         entry = self.resolve_dataset(dataset)
         self._authorize(entry, (partition,), access, grant)
         self._require_persisted_source(entry)
@@ -63,8 +75,12 @@ class PersistedDatasetRepository:
             raise KeyError(f"no exact physical partition {partition.value} for dataset")
         manifest, dataset_root = self._load_manifest(entry)
         payload = self._partition_payload(manifest, partition)
-        files, paths = self._verify_partition_files(dataset_root, payload)
-        return load_window_batch(files, paths, self.backend)
+        files, verified_payloads = self._verify_partition_files(dataset_root, payload)
+        batch = load_window_batch(files, verified_payloads)
+        audit = self._audit_loaded_partition(batch, partition)
+        if not audit.passed:
+            raise ValueError(f"loader leakage audit failed: {'; '.join(audit.findings)}")
+        return batch, audit
 
     def hash_dataset(
         self,
@@ -142,9 +158,9 @@ class PersistedDatasetRepository:
         self,
         dataset_root: Path,
         payload: PersistedPartitionPayload,
-    ) -> tuple[dict[str, PersistedPayloadFile], dict[str, Path]]:
+    ) -> tuple[dict[str, PersistedPayloadFile], dict[str, bytes]]:
         descriptors: dict[str, PersistedPayloadFile] = {}
-        paths: dict[str, Path] = {}
+        verified_payloads: dict[str, bytes] = {}
         for descriptor in payload.files:
             path = self._resolve_payload_path(dataset_root, descriptor.relative_path)
             content = self.backend.read_bytes(path)
@@ -154,8 +170,23 @@ class PersistedDatasetRepository:
             if actual_hash != descriptor.content_hash:
                 raise ValueError(f"payload file hash mismatch: {descriptor.relative_path}")
             descriptors[descriptor.role] = descriptor
-            paths[descriptor.role] = path
-        return descriptors, paths
+            verified_payloads[descriptor.role] = content
+        return descriptors, verified_payloads
+
+    @staticmethod
+    def _audit_loaded_partition(
+        batch: WindowBatch, requested_partition: DatasetWindowPartition
+    ) -> LeakageAudit:
+        loaded_partition = batch.metadata.get("physical_partition")
+        if loaded_partition == requested_partition.value:
+            return LeakageAudit(passed=True, findings=())
+        return LeakageAudit(
+            passed=False,
+            findings=(
+                f"loaded physical partition {loaded_partition} does not match requested "
+                f"{requested_partition.value}",
+            ),
+        )
 
     @staticmethod
     def _resolve_payload_path(dataset_root: Path, relative_path: str) -> Path:

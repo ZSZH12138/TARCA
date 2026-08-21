@@ -79,6 +79,24 @@ def test_window_validation_preserves_tensor_identity_and_gradient_state() -> Non
     assert after == before
 
 
+def test_window_validation_rejects_zero_forecast_horizon() -> None:
+    batch = _valid_batch()
+    empty_forecast_time = tuple(() for _ in batch.window_id)
+
+    with pytest.raises(ValueError, match="forecast horizon must be positive"):
+        validate_window_batch(
+            replace(
+                batch,
+                y=None,
+                y_observed_mask=None,
+                known_future_covariates=None,
+                known_future_covariates_mask=None,
+                known_future_covariate_names=(),
+                forecast_time=empty_forecast_time,
+            )
+        )
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     (
