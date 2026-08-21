@@ -38,8 +38,7 @@ def _validate_aligned_tensor(
 def _validate_quantiles(distribution: ForecastDistribution) -> None:
     unsorted_levels = tuple(distribution.quantiles)
     if any(
-        isinstance(level, bool) or not isinstance(level, (int, float))
-        for level in unsorted_levels
+        isinstance(level, bool) or not isinstance(level, (int, float)) for level in unsorted_levels
     ):
         raise ValueError("quantile levels must be numeric")
     levels = sorted(unsorted_levels)

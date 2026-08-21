@@ -62,7 +62,7 @@ def _write_partition(
     partition_root = dataset_root / relative_root
     partition_root.mkdir(parents=True)
     x = (
-        np.array([[['unsafe']]], dtype=object)
+        np.array([[["unsafe"]]], dtype=object)
         if object_x
         else np.array([[[value], [value + 0.5]]], dtype=np.float64)
     )

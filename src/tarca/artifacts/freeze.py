@@ -47,8 +47,6 @@ def frozen_relative_paths(repo_root: Path) -> tuple[str, ...]:
     frozen.update(_existing_files(root, "artifacts/stage0"))
     for relative_directory in _FROZEN_PYTHON_DIRECTORIES:
         frozen.update(
-            path
-            for path in _existing_files(root, relative_directory)
-            if path.endswith(".py")
+            path for path in _existing_files(root, relative_directory) if path.endswith(".py")
         )
     return tuple(sorted(frozen))

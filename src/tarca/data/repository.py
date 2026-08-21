@@ -93,9 +93,7 @@ class PersistedDatasetRepository:
         )
         accessed_at = self.clock()
         for partition in partitions:
-            validate_sealed_access(
-                entry.dataset, partition, effective_access, grant, accessed_at
-            )
+            validate_sealed_access(entry.dataset, partition, effective_access, grant, accessed_at)
 
     @staticmethod
     def _require_persisted_source(entry: DatasetRegistryEntry) -> None:
@@ -151,14 +149,10 @@ class PersistedDatasetRepository:
             path = self._resolve_payload_path(dataset_root, descriptor.relative_path)
             content = self.backend.read_bytes(path)
             if len(content) != descriptor.size_bytes:
-                raise ValueError(
-                    f"payload file size mismatch: {descriptor.relative_path}"
-                )
+                raise ValueError(f"payload file size mismatch: {descriptor.relative_path}")
             actual_hash = sha256_bytes(content)
             if actual_hash != descriptor.content_hash:
-                raise ValueError(
-                    f"payload file hash mismatch: {descriptor.relative_path}"
-                )
+                raise ValueError(f"payload file hash mismatch: {descriptor.relative_path}")
             descriptors[descriptor.role] = descriptor
             paths[descriptor.role] = path
         return descriptors, paths

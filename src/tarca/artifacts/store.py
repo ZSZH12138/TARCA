@@ -29,9 +29,7 @@ _LOGICAL_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
 class ArtifactStore(Protocol):
-    def publish_contract(
-        self, value: StrictContractModel, artifact_type: str
-    ) -> ArtifactRef: ...
+    def publish_contract(self, value: StrictContractModel, artifact_type: str) -> ArtifactRef: ...
 
     def publish_arrow(
         self, table: pa.Table, expected_schema: pa.Schema, artifact_type: str
@@ -45,9 +43,7 @@ class ArtifactStore(Protocol):
         self, value: str, artifact_type: str, media_type: str, schema_version: str
     ) -> ArtifactRef: ...
 
-    def load_contract(
-        self, ref: ArtifactRef, expected_type: type[TContract]
-    ) -> TContract: ...
+    def load_contract(self, ref: ArtifactRef, expected_type: type[TContract]) -> TContract: ...
 
     def load_arrow(self, ref: ArtifactRef, expected_schema: pa.Schema) -> pa.Table: ...
 
@@ -71,17 +67,13 @@ class LocalArtifactStore:
         self.repo_root = repo_root.resolve()
         self.store_root = self.repo_root / "artifacts" / "stage1a" / "store"
         self.producer_stage = self._validate_logical_key(producer_stage, "producer_stage")
-        self.producer_task_id = self._validate_logical_key(
-            producer_task_id, "producer_task_id"
-        )
+        self.producer_task_id = self._validate_logical_key(producer_task_id, "producer_task_id")
         if re.fullmatch(r"[0-9a-f]{64}", scientific_identity_hash) is None:
             raise ValueError("scientific_identity_hash must be a lowercase SHA-256 hash")
         self.scientific_identity_hash = scientific_identity_hash
         self.dependencies = dependencies
 
-    def publish_contract(
-        self, value: StrictContractModel, artifact_type: str
-    ) -> ArtifactRef:
+    def publish_contract(self, value: StrictContractModel, artifact_type: str) -> ArtifactRef:
         if not isinstance(value, StrictContractModel):
             raise TypeError("value must be a StrictContractModel")
         payload = canonical_json_bytes(value) + b"\n"
@@ -93,9 +85,7 @@ class LocalArtifactStore:
             serializer_id="canonical-json",
             schema_version=CONTRACT_SCHEMA_VERSION,
             suffix="json",
-            validator=lambda path: self._validate_contract_file(
-                path, expected_type, payload
-            ),
+            validator=lambda path: self._validate_contract_file(path, expected_type, payload),
         )
 
     def publish_arrow(
@@ -144,9 +134,7 @@ class LocalArtifactStore:
             validator=lambda path: self._validate_utf8_text(path, value),
         )
 
-    def load_contract(
-        self, ref: ArtifactRef, expected_type: type[TContract]
-    ) -> TContract:
+    def load_contract(self, ref: ArtifactRef, expected_type: type[TContract]) -> TContract:
         path = self._verified_path(ref)
         value = expected_type.model_validate_json(path.read_bytes())
         if canonical_json_bytes(value) + b"\n" != path.read_bytes():
@@ -190,9 +178,7 @@ class LocalArtifactStore:
             self._atomic_link(temporary_path, artifact_path)
             artifact_published = True
             ref = self._build_ref(artifact_path, artifact_type, content_hash, schema_version)
-            manifest_path = self._publish_manifest(
-                ref, artifact_path, media_type, serializer_id
-            )
+            manifest_path = self._publish_manifest(ref, artifact_path, media_type, serializer_id)
             self._verified_path(ref)
             return ref
         except Exception:
@@ -359,9 +345,7 @@ class LocalArtifactStore:
             raise ValueError("artifact_type must be an uppercase logical key")
         if not media_type.strip() or any(character in media_type for character in "\r\n\0"):
             raise ValueError("media_type must be nonblank single-line text")
-        if not schema_version.strip() or any(
-            character in schema_version for character in "\r\n\0"
-        ):
+        if not schema_version.strip() or any(character in schema_version for character in "\r\n\0"):
             raise ValueError("schema_version must be nonblank single-line text")
 
     @staticmethod

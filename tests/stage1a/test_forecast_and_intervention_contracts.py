@@ -272,6 +272,4 @@ def test_resolved_pair_batch_validates_direction_indices_and_partition() -> None
     assert validate_resolved_intervention_pair_batch(resolved) is resolved
     assert resolved.base.x is windows.x
     with pytest.raises(ValueError, match="source window direction"):
-        validate_resolved_intervention_pair_batch(
-            replace(resolved, source_row_for_pair=(0,))
-        )
+        validate_resolved_intervention_pair_batch(replace(resolved, source_row_for_pair=(0,)))

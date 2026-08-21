@@ -142,11 +142,14 @@ def test_full_hash_requires_grant_for_every_partition_before_io(
     assert backend.calls == []
 
     partitions = repository.resolve_dataset(fixture.dataset).available_partitions
-    assert repository.hash_dataset(
-        fixture.dataset,
-        AccessScope(sealed=True, scope_name="evaluation"),
-        _grant(fixture.dataset, partitions),
-    ) == repository.resolve_dataset(fixture.dataset).expected_dataset_hash
+    assert (
+        repository.hash_dataset(
+            fixture.dataset,
+            AccessScope(sealed=True, scope_name="evaluation"),
+            _grant(fixture.dataset, partitions),
+        )
+        == repository.resolve_dataset(fixture.dataset).expected_dataset_hash
+    )
 
 
 def test_payload_hash_mismatch_and_object_array_fail_closed(

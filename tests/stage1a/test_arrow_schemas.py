@@ -70,9 +70,7 @@ def test_predictions_round_trip_with_exact_ipc_and_parquet_schema(tmp_path: Path
     ipc_path = tmp_path / "predictions.arrow"
     parquet_path = tmp_path / "predictions.parquet"
 
-    with pa.OSFile(str(ipc_path), "wb") as sink, pa.ipc.new_file(
-        sink, table.schema
-    ) as writer:
+    with pa.OSFile(str(ipc_path), "wb") as sink, pa.ipc.new_file(sink, table.schema) as writer:
         writer.write_table(table)
     pq.write_table(table, parquet_path)
 

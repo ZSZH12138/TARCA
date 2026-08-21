@@ -103,9 +103,7 @@ def test_data_manifest_binds_frozen_schema_and_unique_splits() -> None:
     with pytest.raises(ValidationError, match="schema_version"):
         DataManifest(**{**manifest.model_dump(), "schema_version": "2.0.0"})
     with pytest.raises(ValidationError, match="split partitions must be unique"):
-        DataManifest(
-            **{**manifest.model_dump(), "splits": (train, train)}
-        )
+        DataManifest(**{**manifest.model_dump(), "splits": (train, train)})
 
 
 def test_window_summary_rejects_overlap_and_nonpositive_lengths() -> None:
@@ -118,9 +116,7 @@ def test_window_summary_rejects_overlap_and_nonpositive_lengths() -> None:
         )
 
     with pytest.raises(ValidationError):
-        WindowContractSummary(
-            **{**_window_summary().model_dump(), "horizon": 0}
-        )
+        WindowContractSummary(**{**_window_summary().model_dump(), "horizon": 0})
 
 
 def test_leakage_audit_is_frozen_and_cannot_pass_with_findings() -> None:

@@ -199,9 +199,7 @@ def validate_resolved_intervention_pair_batch(
     pair_count = len(batch.pairs)
     if pair_count == 0:
         raise ValueError("resolved pair batch must not be empty")
-    if not (
-        pair_count == len(batch.base_row_for_pair) == len(batch.source_row_for_pair)
-    ):
+    if not (pair_count == len(batch.base_row_for_pair) == len(batch.source_row_for_pair)):
         raise ValueError("resolved pair rows must align with pairs")
     validate_window_batch(batch.base)
     validate_window_batch(batch.source)

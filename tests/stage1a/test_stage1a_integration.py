@@ -56,9 +56,12 @@ def test_stage1a_minimal_typed_data_to_verified_artifact_loop(
     fixture = persisted_fixture_factory(partitions=(DatasetWindowPartition.TRAIN,))
     repository = PersistedDatasetRepository(fixture.repo_root, fixture.registry)
     entry = repository.resolve_dataset(fixture.dataset)
-    assert repository.hash_dataset(
-        fixture.dataset, AccessScope(sealed=False, scope_name="integration")
-    ) == entry.expected_dataset_hash
+    assert (
+        repository.hash_dataset(
+            fixture.dataset, AccessScope(sealed=False, scope_name="integration")
+        )
+        == entry.expected_dataset_hash
+    )
     batch = repository.build_windows(
         fixture.dataset,
         DatasetWindowPartition.TRAIN,
@@ -78,9 +81,7 @@ def test_stage1a_minimal_typed_data_to_verified_artifact_loop(
                 "y_true": float(batch.y[0, 0, 0]) if batch.y is not None else None,
                 "mean": float(distribution.mean[0, 0, 0]),
                 "scale": (
-                    float(distribution.scale[0, 0, 0])
-                    if distribution.scale is not None
-                    else None
+                    float(distribution.scale[0, 0, 0]) if distribution.scale is not None else None
                 ),
             }
         ],
