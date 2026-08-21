@@ -3,6 +3,7 @@ from .base import (
     CONTRACT_SCHEMA_VERSION,
     PROTOCOL_ID,
     GitCommit,
+    JSONValue,
     Sha256Hash,
     StrictContractModel,
     UtcDatetime,
@@ -19,7 +20,9 @@ from .data import (
     DataSplitSummary,
     LeakageAudit,
     SplitPartition,
+    WindowBatch,
     WindowContractSummary,
+    validate_window_batch,
 )
 from .data_access import (
     AccessScope,
@@ -89,6 +92,7 @@ __all__ = [
     "GateSpec",
     "GateStatus",
     "GitCommit",
+    "JSONValue",
     "LeakageAudit",
     "PythonEnvironment",
     "RelatedWorkBundle",
@@ -100,6 +104,7 @@ __all__ = [
     "Stage0VerificationReport",
     "StrictContractModel",
     "UtcDatetime",
+    "WindowBatch",
     "WindowContractSummary",
     "build_gate_spec",
     "canonical_json_bytes",
@@ -112,4 +117,5 @@ __all__ = [
     "validate_gate_decision",
     "validate_research_contract",
     "validate_sealed_access",
+    "validate_window_batch",
 ]

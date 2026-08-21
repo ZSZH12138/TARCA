@@ -11,6 +11,9 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, StringConstraints
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 PROTOCOL_ID = "TARCA-E2E-STAGE-PROTOCOL-2.0"
 
+JSONScalar: TypeAlias = None | bool | int | float | str
+JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
+
 Sha256Hash: TypeAlias = Annotated[
     str,
     StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$"),
