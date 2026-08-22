@@ -48,4 +48,3 @@ def test_var_recovers_var1_and_emits_positive_probabilistic_scale() -> None:
     assert bool((forecast.scale > 0).all())
     assert predictor.selected_lag == 1
     assert predictor.is_frozen
-

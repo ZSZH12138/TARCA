@@ -81,4 +81,3 @@ def test_source_swap_changes_forecast_without_mutating_frozen_weights() -> None:
 
     assert model.model_hash == before
     assert not torch.equal(intervened.mean, ordinary.mean)
-

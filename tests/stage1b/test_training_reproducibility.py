@@ -56,4 +56,3 @@ def test_same_seed_produces_identical_receipt_and_predictions() -> None:
         rtol=0.0,
         atol=0.0,
     )
-

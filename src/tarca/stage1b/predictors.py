@@ -202,4 +202,3 @@ def _validate_fit_tensors(
         raise ValueError("VAR train and tune horizons must match")
     if len(target_names) != dimension or len(set(target_names)) != dimension:
         raise ValueError("VAR target names must be unique and match the feature dimension")
-

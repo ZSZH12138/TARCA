@@ -48,4 +48,3 @@ def window_batch(
         forecast_time=forecast_time,
         metadata={"partition": "TRAIN"},
     )
-

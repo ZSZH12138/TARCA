@@ -153,7 +153,7 @@ Run: `python -m pytest tests/stage1b/test_worlds.py tests/stage1b/test_paired_re
 
 Expected: all real-adapter tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```text
 feat: add pinned external world adapters and paired replay
@@ -302,7 +302,7 @@ feat: add fair var and operable neural qualifiers
 - Consumes: predictions and targets grouped by trajectory, seed, regime, and horizon group.
 - Produces: `MetricBundle`, `BootstrapInterval`, `WorldGateDecision`, and `SuiteGateDecision`.
 
-- [ ] **Step 1: Write failing hand-derived Gaussian metric tests**
+- [x] **Step 1: Write failing hand-derived Gaussian metric tests**
 
 ```python
 def test_standard_normal_crps_at_mean_matches_closed_form() -> None:
@@ -315,13 +315,13 @@ def test_gaussian_nll_rejects_nonpositive_scale() -> None:
         gaussian_nll(torch.zeros(1), torch.zeros(1), torch.zeros(1))
 ```
 
-- [ ] **Step 2: Verify metrics RED, implement metrics, verify GREEN**
+- [x] **Step 2: Verify metrics RED, implement metrics, verify GREEN**
 
 Run before: `python -m pytest tests/stage1b/test_metrics.py -q`
 
 Run after: `python -m pytest tests/stage1b/test_metrics.py -q`
 
-- [ ] **Step 3: Write failing promotion-gate tests**
+- [x] **Step 3: Write failing promotion-gate tests**
 
 ```python
 def test_world_gate_fails_if_one_seed_loses_to_var() -> None:
@@ -336,7 +336,7 @@ def test_suite_gate_requires_two_independent_primary_families() -> None:
     assert decision.status == "FAIL"
 ```
 
-- [ ] **Step 4: Verify gate RED, implement paired trajectory bootstrap and gates, verify GREEN**
+- [x] **Step 4: Verify gate RED, implement paired trajectory bootstrap and gates, verify GREEN**
 
 Run before: `python -m pytest tests/stage1b/test_gates.py -q`
 
