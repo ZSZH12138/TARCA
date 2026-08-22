@@ -1,16 +1,42 @@
-schema_version: "0.1.0-draft"
+schema_version: "1.0.0"
 verification_date: "2026-08-22"
-status: DRAFT_AWAITING_USER_APPROVAL
+status: IMPLEMENTED_V1_FAILED_WQ13_UNFROZEN
 protocol_id: TARCA-E2E-STAGE-PROTOCOL-2.0
 formal_experiment_authorized: false
 e01_executed: false
 e02_executed: false
-training_performed: false
+qualification_training_performed: true
 formal_data_downloaded_or_generated: false
 notes:
   - This registry does not amend the frozen Stage0 third_party_manifest/sources.yaml.
-  - Repository commits are remote branch heads observed on 2026-08-22 and must be re-pinned at user-approved freeze time.
+  - Interfere was re-pinned locally and verified before the v1 qualification run.
   - UNKNOWN license means reference-only until clarified by the source owner or archive metadata.
+  - The v1 suite failed its automated neural-headroom gate and was not frozen.
+
+implementation_v1:
+  branch: codex/stage1b-world-implementation-v1
+  rollback_branch: codex/stage1b-world-qualification
+  rollback_commit: b4616d27ade8e6c69085339b75a0d74f2d67ba71
+  qualification_partitions: [QUAL_TRAIN, QUAL_TUNE, QUAL_SEEN, QUAL_UNSEEN]
+  qualification_seeds: [104729, 130363, 155921]
+  worlds:
+    - world_id: control_varma_v1
+      role: CONTROL_LINEAR
+      result: EXEMPT_VAR_WINS_AS_EXPECTED
+    - world_id: network_cml_v1
+      role: PRIMARY_MECHANISTIC
+      result: FAIL_WQ13
+      best_bootstrap_mean_improvement: -4.055297400199396
+      best_bootstrap_95_interval: [-4.955992169127826, -3.154921608364785]
+    - world_id: ecology_lv_sde_v1
+      role: PRIMARY_MECHANISTIC
+      result: FAIL_WQ13
+      best_bootstrap_mean_improvement: -0.028352015651762486
+      best_bootstrap_95_interval: [-0.03580532589306434, -0.021194331798943936]
+  suite_gate: FAIL
+  frozen: false
+  active_pointer_created: false
+  evidence: artifacts/stage1b/qualification_v1_summary.json
 
 sources:
   - source_id: interfere
@@ -25,7 +51,7 @@ sources:
     code_license: MIT
     data_artifact: Interfere Benchmark 1.1.1
     data_license: UNKNOWN
-    eligibility: CONDITIONAL_PRIMARY_CORE
+    eligibility: ATTEMPTED_V1_PRIMARY_CORE_FAILED_WQ13
     proposed_roles: [CONTROL_LINEAR, PRIMARY_MECHANISTIC]
     capabilities:
       - nonlinear multivariate ODE/SDE/discrete dynamics
@@ -39,7 +65,7 @@ sources:
       - downloadable benchmark data license not found in inspected official pages
       - pre-generated benchmark does not establish stored future-noise replay
       - no published PatchTST/iTransformer versus TARCA VAR guarantee
-    allowed_before_user_approval: REFERENCE_AND_READ_ONLY_API_REVIEW
+    v1_usage: PINNED_EXTERNAL_CORE_FOR_FAILED_QUALIFICATION
 
   - source_id: interfere-experiments
     title: Interfere benchmark construction experiments

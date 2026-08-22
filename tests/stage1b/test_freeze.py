@@ -70,4 +70,3 @@ def test_frozen_manifest_detects_tampering(tmp_path: Path) -> None:
 
     with pytest.raises(FreezeRejected, match="manifest hash"):
         verify_frozen_suite(tmp_path)
-

@@ -44,4 +44,3 @@ def passing_receipt(qualification_id: str = "stage1b-qualification-v1") -> dict[
         },
         "failure_ledger": [],
     }
-

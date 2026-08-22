@@ -41,4 +41,3 @@ def test_hardware_gate_accepts_safe_runtime_and_memory() -> None:
 
     assert decision.feasible
     assert decision.failed_checks == ()
-

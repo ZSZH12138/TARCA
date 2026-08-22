@@ -419,7 +419,7 @@ Run after:
 python -m pytest tests/stage1b/test_runner_integration.py tests/stage1b/test_freeze.py tests/stage1b/test_stage1b_cli.py -q
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 feat: add stage1b qualification and versioned freeze runner
@@ -437,7 +437,7 @@ feat: add stage1b qualification and versioned freeze runner
 - Consumes: all implementation from Tasks 1-6 and pinned Interfere checkout at `data/third_party/interfere`.
 - Produces: empirical qualification evidence or an explicit non-freeze decision.
 
-- [ ] **Step 1: Materialize the exact upstream checkout without modifying it**
+- [x] **Step 1: Materialize the exact upstream checkout without modifying it**
 
 Run:
 
@@ -448,7 +448,7 @@ git -C data/third_party/interfere checkout --detach adfa3f730019f17c3554dd7e0c18
 
 Expected: detached exact commit and matching MIT license hash.
 
-- [ ] **Step 2: Run the smallest representative hardware probe**
+- [x] **Step 2: Run the smallest representative hardware probe**
 
 Run:
 
@@ -458,13 +458,13 @@ python scripts/run_stage1b_qualification.py probe --worlds configs/stage1b/world
 
 Expected: a receipt containing measured seconds, peak working set, projected full-run hours, CPU/RAM/GPU inventory, and `feasible=true|false`.
 
-- [ ] **Step 3: Apply the hardware feasibility gate**
+- [x] **Step 3: Apply the hardware feasibility gate**
 
 If `feasible=false`, stop before full training and report measured evidence plus minimum/recommended server specifications. Do not shrink the frozen workload.
 
 If `feasible=true`, continue with the exact frozen workload.
 
-- [ ] **Step 4: Run the full independent qualification**
+- [x] **Step 4: Run the full independent qualification**
 
 Run:
 
@@ -474,7 +474,7 @@ python scripts/run_stage1b_qualification.py qualify --worlds configs/stage1b/wor
 
 Expected: all configured worlds and seeds are reported, including failures; no E01/E02 artifact is created.
 
-- [ ] **Step 5: Freeze only on automated PASS**
+- [x] **Step 5: Freeze only on automated PASS**
 
 Run:
 
@@ -487,7 +487,7 @@ Expected on suite PASS: immutable v1 manifest and active pointer verify successf
 
 Expected on suite FAIL: freeze command exits non-zero, no active pointer is created, and the failure ledger remains available.
 
-- [ ] **Step 6: Commit only small evidence, never runtime data or checkpoints**
+- [x] **Step 6: Commit only small evidence, never runtime data or checkpoints**
 
 ```text
 exp: record stage1b world qualification evidence
@@ -505,11 +505,11 @@ exp: record stage1b world qualification evidence
 - Consumes: actual receipts, gate decisions, git diff, and test outputs.
 - Produces: evidence-backed human report with no claim stronger than the automated result.
 
-- [ ] **Step 1: Write the report from actual artifacts**
+- [x] **Step 1: Write the report from actual artifacts**
 
 Report source commit, license, worlds, concepts, graph/lag truth, split counts, hardware estimate, model budgets, per-seed metrics, bootstrap intervals, failed checks, downstream operation smoke, freeze status, and exact reason for any non-freeze result. Do not label a conditional or failed world as frozen.
 
-- [ ] **Step 2: Run unit, integration, and CLI E2E tests with coverage**
+- [x] **Step 2: Run unit, integration, and CLI E2E tests with coverage**
 
 Run:
 
@@ -519,7 +519,7 @@ python -m pytest tests/stage1b -q --cov=tarca.stage1b --cov-branch --cov-report=
 
 Expected: zero failed/skipped tests and at least 80% branch-aware coverage for new Stage1B code.
 
-- [ ] **Step 3: Run the full repository verification suite**
+- [x] **Step 3: Run the full repository verification suite**
 
 Run:
 
@@ -534,7 +534,7 @@ python scripts/check_stage1b.py --allow-unfrozen
 
 Expected: all existing tests and Stage0/Stage1A checks pass; Stage1B check truthfully reports frozen PASS or qualified-but-unfrozen FAIL.
 
-- [ ] **Step 4: Audit frozen boundaries and ignored runtime data**
+- [x] **Step 4: Audit frozen boundaries and ignored runtime data**
 
 Run:
 
@@ -546,7 +546,7 @@ git check-ignore artifacts/stage1b/runtime data/third_party/interfere
 
 Expected: no completed-stage boundary changes; runtime data and external checkout are ignored; the user's pre-existing untracked authority snapshot remains untouched.
 
-- [ ] **Step 5: Review requirements line by line and commit documentation**
+- [x] **Step 5: Review requirements line by line and commit documentation**
 
 ```text
 docs: report stage1b world qualification outcome

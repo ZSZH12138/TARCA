@@ -180,4 +180,3 @@ def verify_frozen_suite(
         "verified_version": selected_version,
         "manifest_sha256": actual_hash,
     }
-

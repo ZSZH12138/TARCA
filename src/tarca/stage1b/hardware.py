@@ -84,4 +84,3 @@ def estimate_full_run(
         maximum_hours=maximum_hours,
         memory_safety_fraction=memory_safety_fraction,
     )
-

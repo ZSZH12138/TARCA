@@ -35,4 +35,3 @@ def test_check_cli_truthfully_allows_unfrozen_state() -> None:
     result = json.loads(completed.stdout)
 
     assert result["status"] in {"PASS", "UNFROZEN"}
-

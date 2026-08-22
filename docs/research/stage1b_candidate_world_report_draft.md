@@ -1,32 +1,27 @@
 # Stage1B 外部世界资格审查与候选组合报告
 
-> 状态：`DRAFT_AWAITING_USER_APPROVAL`
+> 状态：`IMPLEMENTED_V1_FAILED_WQ13_UNFROZEN`
 > 日期：2026-08-22
-> 分支：`codex/stage1b-world-qualification`
-> 研究边界：未运行 E01/E02，未训练模型，未下载或生成正式数据。
+> 分支：`codex/stage1b-world-implementation-v1`
+> 研究边界：仅运行独立资格流程；未运行 E01/E02，未访问正式数据或正式种子。
+
+> 本文件第 2～8、11 节保留实施前的外部研究与候选审查。v1 的实际执行结果以
+> `docs/research/stage1b_world_qualification_report_v1.md` 为准。
 
 ## 1. 执行结论
 
-本轮审查没有发现一个可以直接满足 TARCA 全部要求的“万能数据集”。最稳妥的方案是：
+用户已批准 v1 资格方案，实施和完整资格运行均已完成。
 
-```text
-外部科学动力学作为核心
-+ TARCA 薄适配层
-+ 独立 Level-3 oracle
-+ VAR 公平控制
-+ 纯外部/物理现实验证
-```
+实际结果：
 
-主要判断：
+1. Interfere 固定提交、MIT 许可证、显式噪声重放和三个候选世界均已实现。
+2. 线性控制世界中 VAR 按预期获胜。
+3. 网络 CML 主世界的最佳神经候选在三个种子上分别比 VAR 差约 4.06、4.05、4.06 CRPS，主要问题来自 unseen coupling。
+4. 生态 LV 主世界的最佳神经候选在三个种子上分别比 VAR 差约 0.018、0.027、0.040 CRPS，主要问题来自 unseen ecology regime。
+5. 18 次神经训练均完成并通过模型内部捕获/交换操作；失败不是工程失败，而是神经预测优势不存在。
+6. 自动 suite Gate 为 `FAIL`；冻结器拒绝创建 v1；活动指针不存在。
 
-1. **Interfere 是最合适的外部动力学核心，但不是现成的 TARCA 主世界。** 它支持大量非线性随机系统、干预和显式 `dW` 重放；但通用 regime、显式 causal lag 和 TARCA 趋势/尺度概念需要薄适配。
-2. **CausalDynamics 是最好的 graph/lag 来源之一，但不能直接承担 paired counterfactual。** 它面向观察性结构发现，且当前 PyPI 版本要求 Python `<3.11`，不能直接装入 TARCA 的 Python 3.11 环境。
-3. **DoTime 是最强的独立 oracle 候选，但不是神经预测胜 VAR 的主数据。** 连续套件提供共享噪声 Level-3 反事实；离散套件是独立噪声 Level-2。论文公开结果显示 PFN 的绝对 RMSE 没有稳定胜过 VAR/轨迹均值。
-4. **dysts 提供非线性和混沌预测压力，但没有 TARCA 所需的完整干预、regime 和 pair 协议。**
-5. **Causal Chamber 和 EpiCF-Bench 适合后期外部有效性。** 前者是真实物理干预但没有精确共享噪声反事实；后者有现实 ABM 反事实，但代码/数据许可证字段仍需澄清，且没有 TARCA 图、lag、同噪声 truth。
-6. **“神经模型可能获胜”只能用于排序通过项目有效性审查的世界，不能作为世界入选的第一条件。**
-
-因此，本轮不建议冻结任何单个世界为正式主世界；建议批准“职责组合 + 硬资格门 + 薄适配边界”，再进入后续只读 API 证明和配置冻结。
+结论：v1 失败证据保留，不得在同一个 v1 中按结果调参重跑。若继续，需要用户另行授权 v2。
 
 ## 2. 研究方法
 
@@ -52,15 +47,15 @@
 
 共审查 13 个来源条目、20 个以上一手网页/仓库/论文入口。精确 commit、许可证和包版本保存在 `docs/research/stage1b_world_sources_draft.yaml`。
 
-### 2.3 未执行事项
+### 2.3 执行边界
 
-- 没有安装任何候选包；
-- 没有修改 Conda 或 `.venv`；
-- 没有下载候选数据；
-- 没有运行生成器；
-- 没有进行训练、调参、E01 或 E02；
-- 没有访问 sealed test；
-- 没有修改冻结的 `third_party_manifest/sources.yaml`。
+- 新建隔离 Conda 环境 `tarca-stage1b-py311`，未修改既有环境；
+- 安装并锁定 Interfere `1.0.2` / commit `adfa3f7...`；
+- 只生成资格轨迹并运行资格训练；
+- 未进行结果后调参；
+- 未运行 E01 或 E02；
+- 未访问 sealed test 或正式数据；
+- 未修改冻结的 Stage0/Stage1A 权威文件或工件。
 
 ## 3. TARCA 项目有效性要求
 
@@ -407,53 +402,33 @@ EpiCF-Bench 使用校准的可微 agent-based model，为 158 个美国县提供
 | 流程 | 本轮完成内容 | 状态 |
 |---|---|---|
 | 收集外部世界 | 检索论文、仓库、文档、数据存档 | COMPLETED |
-| 登记来源 | 记录 commit、版本、许可证、DOI、能力和限制 | COMPLETED_DRAFT |
-| 分配职责 | CONTROL/PRIMARY/ORACLE/STRESS/REALISM/REFERENCE | COMPLETED_DRAFT |
-| 检查概念 | 对 trend/scale/propagation/shock/regime 做结构映射 | COMPLETED_DESIGN_REVIEW |
-| 检查 horizon × lag | 识别原生支持、适配需求和失败条件 | COMPLETED_DESIGN_REVIEW |
-| 检查变量传播 | 对 graph/path/D 规模做审查 | COMPLETED_DESIGN_REVIEW |
-| 检查预测相关性 | 依据方程和论文，不运行 E02 | COMPLETED_EXTERNAL_EVIDENCE_ONLY |
-| 检查 pair | 记录来源支持和待证明缺口 | CONDITIONAL_NOT_EMPIRICALLY_TESTED |
-| 检查负对照 | 形成 WQ-10 清单 | COMPLETED_DESIGN_REVIEW |
-| 检查 regime | 区分原生、适配和不可用来源 | COMPLETED_DESIGN_REVIEW |
-| 检查下游对应 | 映射到 Stage10/11 概念 | COMPLETED_DESIGN_REVIEW |
-| 组成套件 | 形成 v1-draft 职责组合 | COMPLETED_DRAFT |
-| 检查神经证据 | 区分直接、间接和负面证据 | COMPLETED_EXTERNAL_EVIDENCE_ONLY |
-| 形成审批报告 | 本文件和资格规范 | COMPLETED_DRAFT |
-| 用户批准 | 等待用户决定 | PENDING |
-| 冻结并实施 | 未授权 | NOT_STARTED |
+| 登记来源 | 固定 commit、版本、许可证和哈希 | COMPLETED |
+| 分配职责 | CONTROL 与两个 PRIMARY 世界 | COMPLETED |
+| 检查概念 | persistence/growth/scale/propagation/shock/regime | COMPLETED |
+| 检查 horizon × lag | 环图最短路径 lag 与三个跨度组 | COMPLETED |
+| 检查变量传播 | 图、路径和冲击传播测试 | COMPLETED |
+| 检查预测相关性 | 三种子、CRPS/NLL/MAE、整轨迹 bootstrap | COMPLETED_FAIL |
+| 检查 pair | 同初值、同未来噪声 factual/counterfactual | COMPLETED |
+| 检查负对照 | 结构能力和线性控制 | COMPLETED |
+| 检查 regime | QUAL_SEEN 与 QUAL_UNSEEN | COMPLETED_FAIL_WORST_REGIME |
+| 检查下游对应 | 网络/生态/金融映射 | COMPLETED |
+| 组成套件 | stage1b-worlds-v1 | COMPLETED |
+| 检查神经证据 | 18 次训练、3 seeds、2 architectures | COMPLETED_FAIL |
+| 形成实施报告 | v1 资格实施报告 | COMPLETED |
+| 用户批准 | 用户已授权 v1 实施 | COMPLETED |
+| 冻结 | 自动 Gate FAIL，冻结器拒绝 | REJECTED_UNFROZEN |
 
-## 10. 需要用户批准的决定
+## 10. 后续需要的新决定
 
-### 决定 A：资格规范
+v1 已完成且失败，不再等待 v1 批准。
 
-是否批准 `docs/research/stage1b_world_qualification_spec.md` 中 WQ-01～WQ-12 成为 Stage1B candidate world 的准入规则？
+如果继续，需要用户明确授权创建 v2。v2 必须：
 
-### 决定 B：职责组合
-
-是否批准以下职责架构：
-
-```text
-Interfere 外部动力学主核心
-+ CausalDynamics graph/lag 条件组件
-+ DoTime 独立 oracle
-+ dysts 预测压力
-+ Causal Chamber/EpiCF 后期现实验证
-```
-
-### 决定 C：薄适配边界
-
-是否允许 TARCA 在不改写外部核心方程的前提下增加：
-
-- concept mapping；
-- shared-noise replay；
-- 显式 delay buffer；
-- versioned regime scheduler；
-- Stage1A contract/manifest adapter？
-
-### 决定 D：暂不冻结具体系统
-
-是否同意先批准架构和资格门，但暂不把任何具体系统标为正式 `FROZEN v1`，直到完成后续只读 API/许可证证明和用户再次确认？
+- 保留 v1 配置、收据和失败报告；
+- 使用新版本目录和活动指针规则；
+- 更换失败世界或外部生成器，而不是在 v1 内按结果微调；
+- 继续先过项目有效性门，再运行相同神经余量 Gate；
+- 仍不运行 E01/E02，直到 Stage1B 有合法冻结版本。
 
 ## 11. 一手来源索引
 
