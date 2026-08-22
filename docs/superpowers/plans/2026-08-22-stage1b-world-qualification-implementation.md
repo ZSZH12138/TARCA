@@ -344,7 +344,7 @@ Implement all-seed CRPS direction, deterministic paired trajectory bootstrap, ho
 
 Run after: `python -m pytest tests/stage1b/test_gates.py -q`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 feat: automate stage1b neural headroom gates
@@ -367,7 +367,7 @@ feat: automate stage1b neural headroom gates
 - Consumes: source root, approved configs, runtime artifact directory, and explicit command (`probe`, `qualify`, `freeze`, `verify`).
 - Produces: hardware receipt, immutable run receipts, complete failure ledger, qualification decision, frozen version manifest, and active pointer.
 
-- [ ] **Step 1: Write failing hardware extrapolation tests**
+- [x] **Step 1: Write failing hardware extrapolation tests**
 
 ```python
 def test_hardware_gate_blocks_estimate_over_120_hours() -> None:
@@ -376,13 +376,13 @@ def test_hardware_gate_blocks_estimate_over_120_hours() -> None:
     assert decision.estimated_hours > 120.0
 ```
 
-- [ ] **Step 2: Verify RED, implement hardware receipts, verify GREEN**
+- [x] **Step 2: Verify RED, implement hardware receipts, verify GREEN**
 
 Run before: `python -m pytest tests/stage1b/test_hardware_gate.py -q`
 
 Run after: `python -m pytest tests/stage1b/test_hardware_gate.py -q`
 
-- [ ] **Step 3: Write failing runner and freeze tests**
+- [x] **Step 3: Write failing runner and freeze tests**
 
 ```python
 def test_runner_never_exposes_formal_test_partition(tmp_path: Path) -> None:
@@ -403,7 +403,7 @@ def test_authorized_override_keeps_v1_and_moves_active_pointer(tmp_path: Path) -
     assert load_active_pointer(tmp_path).version == "v2"
 ```
 
-- [ ] **Step 4: Verify RED, implement orchestration and fail-closed freezing, verify GREEN**
+- [x] **Step 4: Verify RED, implement orchestration and fail-closed freezing, verify GREEN**
 
 Run before:
 

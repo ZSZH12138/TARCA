@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
+
+from tarca.stage1b.freeze import (  # noqa: E402
+    OverrideAuthorization,
+    freeze_suite,
+)
+from tarca.stage1b.runner import run_hardware_probe, run_qualification  # noqa: E402
+
+
+def _common_paths(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--worlds",
+        type=Path,
+        default=REPOSITORY_ROOT / "configs/stage1b/worlds_v1.yaml",
+    )
+    parser.add_argument(
+        "--qualification",
+        type=Path,
+        default=REPOSITORY_ROOT / "configs/stage1b/qualification_v1.yaml",
+    )
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        default=REPOSITORY_ROOT / "data/third_party/interfere",
+    )
+    parser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=REPOSITORY_ROOT / "artifacts/stage1b",
+    )
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run independent TARCA Stage1B world qualification."
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    probe = subparsers.add_parser("probe", help="Measure and extrapolate the fixed workload.")
+    _common_paths(probe)
+    qualify = subparsers.add_parser("qualify", help="Run the approved qualification-only workload.")
+    _common_paths(qualify)
+    freeze = subparsers.add_parser("freeze", help="Freeze an automatically passing receipt.")
+    freeze.add_argument(
+        "--receipt",
+        type=Path,
+        default=REPOSITORY_ROOT / "artifacts/stage1b/qualification_v1_summary.json",
+    )
+    freeze.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=REPOSITORY_ROOT / "artifacts/stage1b",
+    )
+    freeze.add_argument("--version", required=True)
+    freeze.add_argument("--authorize-override", action="store_true")
+    freeze.add_argument("--prior-version")
+    freeze.add_argument("--authorization-reason")
+    return parser
+
+
+def main() -> int:
+    args = _parser().parse_args()
+    try:
+        if args.command == "probe":
+            result = run_hardware_probe(
+                args.worlds,
+                args.qualification,
+                args.source_root,
+                args.artifact_root / "runtime",
+            )
+        elif args.command == "qualify":
+            result = run_qualification(
+                args.worlds,
+                args.qualification,
+                args.source_root,
+                args.artifact_root,
+            )
+        else:
+            receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
+            authorization = None
+            if args.authorize_override:
+                if not args.prior_version or not args.authorization_reason:
+                    raise ValueError(
+                        "authorized override requires prior version and authorization reason"
+                    )
+                authorization = OverrideAuthorization(
+                    authorized_by="user",
+                    reason=args.authorization_reason,
+                    prior_version=args.prior_version,
+                )
+            result = freeze_suite(
+                receipt,
+                args.artifact_root,
+                version=args.version,
+                authorization=authorization,
+            )
+    except Exception as exc:
+        print(json.dumps({"status": "FAIL", "error": f"{type(exc).__name__}: {exc}"}))
+        return 1
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

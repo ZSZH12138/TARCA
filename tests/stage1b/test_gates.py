@@ -146,4 +146,3 @@ def test_linear_control_is_exempt_from_neural_win_but_not_structural_checks() ->
     )
 
     assert decision.status is GateStatus.EXEMPT
-

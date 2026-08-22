@@ -42,4 +42,3 @@ def test_paired_bootstrap_is_deterministic_and_uses_whole_units() -> None:
     assert first == second
     assert first.lower > 0
     assert first.unit_count == 4
-

@@ -88,6 +88,22 @@ class QualificationDataset:
         raise KeyError(partition)
 
 
+def stack_samples(samples: tuple[WindowSample, ...]) -> tuple[torch.Tensor, torch.Tensor]:
+    if not samples:
+        raise ValueError("cannot stack an empty qualification sample set")
+    return (
+        torch.stack(tuple(sample.history for sample in samples)),
+        torch.stack(tuple(sample.target for sample in samples)),
+    )
+
+
+def stack_partition(
+    dataset: QualificationDataset,
+    partition: QualificationPartition,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return stack_samples(dataset.for_partition(partition))
+
+
 def _window_id(record: TrajectoryRecord, start: int, history: int, horizon: int) -> str:
     identity = (
         f"{record.trajectory_id}|{record.partition.value}|{start}|{history}|{horizon}"

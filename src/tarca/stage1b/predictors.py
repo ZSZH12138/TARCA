@@ -182,6 +182,34 @@ class TunedVAR:
             )
         )
 
+    def predict_tensors(self, histories: Tensor, horizon: int) -> ForecastDistribution:
+        if histories.ndim != 3 or histories.shape[1] < self.selected_lag:
+            raise ValueError("VAR tensor histories are incompatible with the selected lag")
+        if histories.shape[2] != self.coefficients.shape[0]:
+            raise ValueError("VAR tensor dimension does not match the fitted model")
+        if horizon != self.residual_scale.shape[0]:
+            raise ValueError("VAR tensor horizon does not match the fitted scale")
+        mean = self._recursive_mean(
+            histories.to(torch.float64),
+            self.coefficients,
+            self.intercept,
+            self.selected_lag,
+            horizon,
+        ).to(dtype=histories.dtype, device=histories.device)
+        scale = self.residual_scale.to(dtype=histories.dtype, device=histories.device)
+        scale = scale.unsqueeze(0).expand(histories.shape[0], -1, -1)
+        return validate_forecast_distribution(
+            ForecastDistribution(
+                mean=mean,
+                scale=scale,
+                quantiles=MappingProxyType({}),
+                logits=None,
+                samples=None,
+                window_id=None,
+                target_names=self.target_names,
+            )
+        )
+
 
 def _validate_fit_tensors(
     train_x: Tensor,

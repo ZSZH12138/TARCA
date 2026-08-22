@@ -299,4 +299,3 @@ def evaluate_suite_gate(
         primary_families=families,
         failed_checks=tuple(failed_checks),
     )
-
