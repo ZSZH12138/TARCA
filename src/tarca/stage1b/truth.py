@@ -62,4 +62,3 @@ def build_world_truth(
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
         concepts=concepts,
     )
-

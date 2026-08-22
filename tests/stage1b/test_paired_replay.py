@@ -64,4 +64,3 @@ def test_node_shock_uses_same_noise_and_respects_first_effect_lags() -> None:
         changed_steps = torch.where(changed[:, target])[0]
         assert changed_steps.numel() > 0
         assert int(changed_steps[0]) == shock_step + expected_lag
-

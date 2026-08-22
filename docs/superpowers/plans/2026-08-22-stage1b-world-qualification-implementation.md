@@ -89,7 +89,7 @@ python -m pytest tests/stage1b/test_config.py --cov=tarca.stage1b.config --cov-b
 
 Expected: all tests pass and configuration module branch coverage is at least 80%.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```text
 feat: add stage1b source and qualification contracts
@@ -171,7 +171,7 @@ feat: add pinned external world adapters and paired replay
 - Consumes: simulated trajectories and `QualificationConfig`.
 - Produces: `QualificationDataset`, immutable training-only normalization statistics, and batches for `QUAL_TRAIN`, `QUAL_TUNE`, `QUAL_SEEN`, `QUAL_UNSEEN`.
 
-- [ ] **Step 1: Write failing whole-trajectory isolation tests**
+- [x] **Step 1: Write failing whole-trajectory isolation tests**
 
 ```python
 def test_windows_from_one_trajectory_never_cross_partitions() -> None:
@@ -186,17 +186,17 @@ def test_normalizer_uses_qual_train_only() -> None:
     assert normalized.statistics.mean == pytest.approx((1.0, 2.0))
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/stage1b/test_dataset.py tests/stage1b/test_qualification_splits.py -q`
 
 Expected: missing dataset/split modules.
 
-- [ ] **Step 3: Implement windowing, immutable normalization, and lineage**
+- [x] **Step 3: Implement windowing, immutable normalization, and lineage**
 
 Each sample carries world ID, family ID, regime ID, trajectory ID, time range, horizon group, graph hash, source commit, config hash, and qualification partition. Windows may overlap inside a trajectory but trajectories are indivisible across partitions. No class exposes a `TEST` partition.
 
-- [ ] **Step 4: Verify GREEN and Stage1A boundary compatibility**
+- [x] **Step 4: Verify GREEN and Stage1A boundary compatibility**
 
 Run:
 
