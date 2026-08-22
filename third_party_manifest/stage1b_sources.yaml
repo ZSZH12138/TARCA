@@ -1,0 +1,29 @@
+schema_version: 1.0.0
+verified_at: 2026-08-22
+runtime_sources:
+  - source_id: interfere
+    repository_url: https://github.com/djpasseyjr/interfere.git
+    commit: adfa3f730019f17c3554dd7e0c181248f785bb8b
+    package_version: 1.0.2
+    license_id: MIT
+    license_path: LICENSE
+    license_sha256: 44af4f82e0f356f4a0e48887e48ab0fbb4e586f83d7618b35b496a14f7ffd8f0
+    allowed_use: executable_external_dynamics
+references:
+  - source_id: causaldynamics
+    repository_url: https://github.com/kausable/CausalDynamics.git
+    commit: c0b1def6acc4280b87bfb81f5eaff31809d3455a
+    license_id: MIT
+    role: conditional_graph_lag_reference
+  - source_id: dotime
+    repository_url: https://github.com/thummd/dotime.git
+    role: oracle_reference_not_neural_win_evidence
+  - source_id: dysts
+    repository_url: https://github.com/GilpinLab/dysts.git
+    role: forecasting_stress_reference
+  - source_id: causal_chamber
+    repository_url: https://github.com/juangamella/causal-chamber.git
+    role: physical_realism_reference
+  - source_id: epi_cf_benchmark
+    repository_url: https://github.com/complex-ai-lab/epi-cf-benchmark.git
+    role: reference_only_pending_license

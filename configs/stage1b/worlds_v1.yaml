@@ -1,0 +1,91 @@
+schema_version: 1.0.0
+suite_id: stage1b-worlds-v1
+sources:
+  - source_id: interfere
+    repository_url: https://github.com/djpasseyjr/interfere.git
+    commit: adfa3f730019f17c3554dd7e0c181248f785bb8b
+    package_version: 1.0.2
+    license_id: MIT
+    license_path: LICENSE
+    license_sha256: 44af4f82e0f356f4a0e48887e48ab0fbb4e586f83d7618b35b496a14f7ffd8f0
+worlds:
+  - world_id: control_varma_v1
+    family_id: linear_control
+    role: CONTROL_LINEAR
+    source_id: interfere
+    adapter: INTERFERE_VARMA
+    dimension: 8
+    concepts: [linear_memory]
+    downstream_mappings: [baseline_fairness]
+    truth_capabilities:
+      shared_future_noise: true
+      graph: true
+      causal_lag: true
+      regime: true
+      source_pairs: true
+      negative_controls: true
+    graph: {kind: RING, directed: true}
+    generator: {spectral_radius: 0.72, innovation_scale: 0.08}
+    regimes:
+      - regime_id: linear_seen
+        split_role: SEEN
+        parameters: {coefficient_scale: 1.0}
+      - regime_id: linear_unseen
+        split_role: UNSEEN
+        parameters: {coefficient_scale: 0.9}
+  - world_id: network_cml_v1
+    family_id: nonlinear_network
+    role: PRIMARY_MECHANISTIC
+    source_id: interfere
+    adapter: INTERFERE_CML
+    dimension: 8
+    concepts: [persistence, propagation, shock]
+    downstream_mappings: [nonfinancial_network, financial_spillover]
+    truth_capabilities:
+      shared_future_noise: true
+      graph: true
+      causal_lag: true
+      regime: true
+      source_pairs: true
+      negative_controls: true
+    graph: {kind: RING, directed: false}
+    generator: {alpha: 1.45, sigma: 0.0, tsteps_btw_obs: 1.0}
+    regimes:
+      - regime_id: coupling_low
+        split_role: SEEN
+        parameters: {eps: 0.20}
+      - regime_id: coupling_mid
+        split_role: SEEN
+        parameters: {eps: 0.35}
+      - regime_id: coupling_unseen
+        split_role: UNSEEN
+        parameters: {eps: 0.50}
+  - world_id: ecology_lv_sde_v1
+    family_id: nonlinear_ecology
+    role: PRIMARY_MECHANISTIC
+    source_id: interfere
+    adapter: INTERFERE_LOTKA_VOLTERRA_SDE
+    dimension: 8
+    concepts: [growth_persistence, diffusion_scale, propagation, shock]
+    downstream_mappings: [nonfinancial_population, financial_volatility_spillover]
+    truth_capabilities:
+      shared_future_noise: true
+      graph: true
+      causal_lag: true
+      regime: true
+      source_pairs: true
+      negative_controls: true
+    graph: {kind: RING, directed: true}
+    generator:
+      {growth_min: 0.75, growth_max: 1.15, capacity: 1.5, initial_min: 0.25,
+       initial_max: 0.75, time_step: 0.05}
+    regimes:
+      - regime_id: ecology_low
+        split_role: SEEN
+        parameters: {growth_scale: 0.85, interaction_scale: 0.08, sigma: 0.015}
+      - regime_id: ecology_mid
+        split_role: SEEN
+        parameters: {growth_scale: 1.00, interaction_scale: 0.12, sigma: 0.030}
+      - regime_id: ecology_unseen
+        split_role: UNSEEN
+        parameters: {growth_scale: 1.15, interaction_scale: 0.16, sigma: 0.050}

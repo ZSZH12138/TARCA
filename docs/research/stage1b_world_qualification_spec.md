@@ -1,8 +1,9 @@
-# Stage1B 世界资格规范（审批草案）
+# Stage1B 世界资格规范（实施版）
 
-> 状态：`DRAFT_AWAITING_USER_APPROVAL`
+> 状态：`APPROVED_FOR_IMPLEMENTATION`
 > 核验日期：2026-08-22
-> 工作分支：`codex/stage1b-world-qualification`
+> 方案基线分支：`codex/stage1b-world-qualification`
+> 实施分支：`codex/stage1b-world-implementation-v1`
 > 协议身份：`TARCA-E2E-STAGE-PROTOCOL-2.0`
 > 边界：本文件不是冻结研究契约、Gate decision 或正式实验结果。
 
@@ -10,14 +11,17 @@
 
 Stage1B 需要提供一组“答案已知、适合预测、可以干预、能继续用于 Stage3–9”的时序世界。世界不能仅因为神经模型可能胜过 VAR 就入选；它必须先支持 TARCA-C1～C4 的证伪链，再讨论预测学习空间。
 
-本轮只完成来源登记、资格规则、候选审核、组合设计和冻结草案。明确不执行：
+用户已授权实施本规范所定义的 Stage1B 独立资格流程。仍明确不执行：
 
 - E01；
 - E02；
-- 预测器训练或调参；
-- 正式数据下载或生成；
-- 正式 SCM truth、split、seed 或测试结果发布；
+- E01/E02 的正式数据分区、正式结果 seed 或 sealed test；
+- 观察资格结果后修改同一候选版本来追求神经胜出；
 - 对冻结 Stage0/Stage1A 文件的修改。
+
+允许执行：固定外部源码、薄适配器、资格专用数据分区、资格专用预测器训练、
+WQ-01～WQ-13 自动检查、硬件最小探针和版本化冻结。资格结果只能决定世界是否有资格
+进入正式 E01/E02，不能作为 E01/E02 结果报告。
 
 ## 2. 权威约束
 
@@ -230,19 +234,41 @@ Stage1B 不需要模拟真实天气或金融市场，但其概念操作必须能
 
 只有 WQ-01～WQ-11 先通过，才允许考察神经学习空间。
 
-当前审批前阶段只允许使用：
+外部证据阶段允许使用：
 
 - 外部论文的已发表预测结果；
 - 外部官方 benchmark；
 - 方程的结构性非线性、状态依赖和长时传播分析。
 
-当前禁止运行 TARCA E02 或使用 TARCA sealed test 选择世界。后续如获授权：
+禁止运行 TARCA E02 或使用 TARCA sealed test 选择世界。已授权的独立资格流程必须：
 
 - candidate pool、系统族、指标和预算先冻结；
-- TRAIN/VALIDATION 只用于模型选择；
-- TEST 保留整个系统、参数状态或随机种子，而不是只保留窗口；
+- 使用与正式 E02 分离的 `QUAL_TRAIN/QUAL_TUNE/QUAL_SEEN/QUAL_UNSEEN`；
+- 资格分区保留整个轨迹、参数状态或随机种子，而不是只保留窗口；
 - 失败系统和 seed 不得删除；
 - E02 失败优先诊断 predictor/训练或 DGP headroom，不能静默换世界。
+
+### WQ-13：稳定神经优势与下游模型可操作性
+
+每个拟冻结的 `PRIMARY_MECHANISTIC` 世界必须至少存在一个预声明的 TARCA 可操作神经
+预测器，稳定优于公平调优后的 VAR。`CONTROL_LINEAR`、`ORACLE_AUXILIARY`、
+`FORECAST_STRESS` 和 `EXTERNAL_REALISM` 不承担此门槛。
+
+资格候选固定为小型 PatchTST 与小型 iTransformer；只会预测但不能暴露稳定内部位置、
+冻结模式和 source/base 交换接口的网络不算通过。主要指标为 CRPS，NLL、MAE、MSE、
+coverage、calibration error 和 worst-regime 风险为护栏。
+
+单个主世界通过必须同时满足：
+
+- 同一个神经预测器在三个资格 seed 上的 CRPS 都低于调优 VAR；
+- 按完整轨迹做 paired block bootstrap，神经相对 VAR 的 CRPS 改善 95% 区间下界大于零；
+- 预声明 horizon 分组趋势一致，不能只依赖单一预测步；
+- NLL、MAE 和 worst-regime 不出现预声明容差外的退化；
+- `QUAL_UNSEEN` 不完全失效，所有概率输出有限且 scale 严格为正；
+- 获胜模型能输出 `ForecastDistribution`，冻结后列出、捕获并交换批准的内部位置。
+
+整套冻结还要求至少两个相互独立的主科学系统族通过。任何失败世界和 seed 必须进入失败
+台账；不得静默删除或在同一版本中改参数重跑。
 
 ## 5. 世界职责
 
@@ -254,7 +280,7 @@ Stage1B 不需要模拟真实天气或金融市场，但其概念操作必须能
 
 功能：支撑 Stage2 预测、Stage3 机制植入、Stage4/5 干预与指标、Stage6–8 四轴定位、Stage9 regime robustness。
 
-准入：必须满足 WQ-01～WQ-11；WQ-12 只决定后续预测验证优先级。
+准入：必须满足 WQ-01～WQ-13。
 
 ### ORACLE_AUXILIARY
 
@@ -274,11 +300,13 @@ Stage1B 不需要模拟真实天气或金融市场，但其概念操作必须能
 
 ## 6. 主世界最小组合
 
-审批建议为至少三个不同科学系统族，而不是同一随机生成器的三个配置：
+正式冻结至少需要两个不同主科学系统族，而不是同一随机生成器的两个配置：
 
 1. 非线性随机网络/耦合系统；
 2. 非线性生态、生物或群体动力系统；
-3. 具有显式 graph 和 lag 的模块化动力系统。
+
+具有显式 graph 和 lag 的独立模块化动力系统继续作为优先扩展；在许可证、运行时和
+Level-3 paired oracle 未同时通过前，不强行提升为第三个主世界。
 
 每个系统族必须单独报告，不得只给混合平均数。组合应同时提供：
 
@@ -310,18 +338,19 @@ DRAFT
 → 冻结新版本
 ```
 
-禁止覆盖旧版本或观察 TEST 后静默修改。
+用户可以授权“修改或覆盖当前有效版本”，但实现必须创建递增的不可变版本并移动 active
+pointer；旧版本不得物理覆盖或删除。观察正式 E02 sealed test 后不得用新世界给结果补票。
 
-## 8. 本草案的审批边界
+## 8. 实施与完成边界
 
-当前可以批准：
+已批准并允许实施：
 
-- WQ-01～WQ-12 作为 Stage1B 世界准入规范；
+- WQ-01～WQ-13 作为 Stage1B 世界准入规范；
 - 外部核心 + 薄适配层的架构；
 - 世界职责和候选优先级；
-- 在正式实施前继续做只读 API/许可证核验。
+- 独立资格数据、训练、评估、硬件探针和版本化冻结。
 
-当前不能批准为已经完成：
+在自动证据产生前仍不能写成已经完成：
 
 - 某个候选已经通过 E01/E02；
 - 某个神经模型已经稳定胜过 VAR；
