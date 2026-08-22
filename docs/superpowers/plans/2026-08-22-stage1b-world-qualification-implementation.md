@@ -107,7 +107,7 @@ feat: add stage1b source and qualification contracts
 - Consumes: `WorldConfig`, Interfere installed at the pinned commit, trajectory seed, partition, regime, and optional concept intervention.
 - Produces: `ExternalWorldAdapter.simulate(request: SimulationRequest) -> SimulatedTrajectory`, `ExternalWorldAdapter.paired_counterfactual(request: PairedSimulationRequest) -> PairedTrajectory`, and `WorldTruth` containing graph, path-derived lags, regime parameters, concept mapping, and future-noise hash.
 
-- [ ] **Step 1: Write failing adapter tests against the real pinned Interfere package**
+- [x] **Step 1: Write failing adapter tests against the real pinned Interfere package**
 
 ```python
 @pytest.mark.parametrize("world_id", ["network_cml_v1", "ecology_lv_sde_v1"])
@@ -123,17 +123,17 @@ def test_no_intervention_pair_is_exact_for_same_future_noise(ecology_world: Exte
     torch.testing.assert_close(pair.factual.values, pair.counterfactual.values, rtol=0.0, atol=0.0)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python -m pytest tests/stage1b/test_worlds.py tests/stage1b/test_paired_replay.py -q`
 
 Expected: failure because world adapters are missing.
 
-- [ ] **Step 3: Implement thin external adapters**
+- [x] **Step 3: Implement thin external adapters**
 
 Implement one external nonlinear coupled-map world and one external stochastic Lotka-Volterra world. Keep upstream equations untouched. Pre-generate and persist Wiener increments for SDE replay; deterministic worlds record an explicit zero-noise artifact. Derive causal lag truth from directed shortest-path length in the fixed graph. Reject non-finite, clipped, silently replaced, or topology-mismatched trajectories.
 
-- [ ] **Step 4: Add intervention-isolation and truth tests**
+- [x] **Step 4: Add intervention-isolation and truth tests**
 
 ```python
 def test_target_intervention_changes_only_reachable_future_nodes(network_world: ExternalWorldAdapter) -> None:
@@ -147,7 +147,7 @@ def test_nonfinite_trajectory_fails_closed(ecology_world: ExternalWorldAdapter) 
         ecology_world.validate_values(torch.tensor([[float("inf")]]))
 ```
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `python -m pytest tests/stage1b/test_worlds.py tests/stage1b/test_paired_replay.py -q`
 
