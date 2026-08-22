@@ -1,0 +1,312 @@
+schema_version: "0.1.0-draft"
+verification_date: "2026-08-22"
+status: DRAFT_AWAITING_USER_APPROVAL
+protocol_id: TARCA-E2E-STAGE-PROTOCOL-2.0
+formal_experiment_authorized: false
+e01_executed: false
+e02_executed: false
+training_performed: false
+formal_data_downloaded_or_generated: false
+notes:
+  - This registry does not amend the frozen Stage0 third_party_manifest/sources.yaml.
+  - Repository commits are remote branch heads observed on 2026-08-22 and must be re-pinned at user-approved freeze time.
+  - UNKNOWN license means reference-only until clarified by the source owner or archive metadata.
+
+sources:
+  - source_id: interfere
+    title: Interfere
+    repository_url: https://github.com/djpasseyjr/interfere
+    default_branch: main
+    repository_commit: adfa3f730019f17c3554dd7e0c181248f785bb8b
+    paper_url: https://doi.org/10.21105/joss.09792
+    documentation_url: https://djpasseyjr.github.io/interfere/simulation/
+    package_name: interfere
+    package_version_observed: "1.0.2"
+    code_license: MIT
+    data_artifact: Interfere Benchmark 1.1.1
+    data_license: UNKNOWN
+    eligibility: CONDITIONAL_PRIMARY_CORE
+    proposed_roles: [CONTROL_LINEAR, PRIMARY_MECHANISTIC]
+    capabilities:
+      - nonlinear multivariate ODE/SDE/discrete dynamics
+      - interventions on observed states
+      - custom Wiener increments dW for paired SDE replay
+      - linear, chaotic, ecological, neural and public-health model families
+      - VAR, LSTM, NHITS, reservoir and SINDy forecast interfaces
+    limitations:
+      - no generic native regime-switching contract
+      - no generic explicit causal-lag truth across the model library
+      - downloadable benchmark data license not found in inspected official pages
+      - pre-generated benchmark does not establish stored future-noise replay
+      - no published PatchTST/iTransformer versus TARCA VAR guarantee
+    allowed_before_user_approval: REFERENCE_AND_READ_ONLY_API_REVIEW
+
+  - source_id: interfere-experiments
+    title: Interfere benchmark construction experiments
+    repository_url: https://github.com/djpasseyjr/interfere_experiments
+    default_branch: main
+    repository_commit: 3e3ae758e920d1249363638de0770a31c380988d
+    paper_url: https://doi.org/10.21105/joss.09792
+    code_license: MIT
+    data_license: UNKNOWN
+    eligibility: AUXILIARY
+    proposed_roles: [SOURCE_PROVENANCE, BENCHMARK_RECONSTRUCTION_REFERENCE]
+    capabilities:
+      - benchmark scenario construction metadata
+      - connection to sixty reviewed intervention-response scenarios
+    limitations:
+      - not a TARCA-ready truth manifest
+      - benchmark data license still requires clarification
+    allowed_before_user_approval: REFERENCE_ONLY
+  - source_id: dotime
+    title: DoTime
+    repository_url: https://github.com/thummd/dotime
+    default_branch: main
+    repository_commit: 6bcb7cddcd7a2a1007c756a98226bfea637fb4ce
+    paper_url: https://arxiv.org/abs/2607.27263
+    package_name: dotime
+    package_version_observed: "0.1.3"
+    code_license: Apache-2.0
+    data_license: CC-BY-4.0
+    data_artifacts:
+      - name: dot-Identifiability-v1
+        concept_doi: https://doi.org/10.5281/zenodo.20846063
+        episodes: 10800
+        truth_level: LEVEL_2
+      - name: dot-RegimeSwitch-v1
+        concept_doi: https://doi.org/10.5281/zenodo.20846073
+        episodes: 9999
+        truth_level: LEVEL_2
+      - name: dot-Continuous-v1
+        concept_doi: https://doi.org/10.5281/zenodo.20845980
+        episodes: 9999
+        truth_level: LEVEL_3_SHARED_NOISE
+      - name: dot-Generic-100k
+        concept_doi: https://doi.org/10.5281/zenodo.20845982
+        episodes: 100000
+        truth_level: LEVEL_2
+    eligibility: ORACLE_AUXILIARY
+    proposed_roles: [ORACLE_AUXILIARY, REGIME_AUXILIARY, IDENTIFICATION_NEGATIVE_CONTROL]
+    capabilities:
+      - exact temporal SCM graph and lag truth
+      - hard, soft and time-varying interventions
+      - sticky-Markov regimes
+      - shared-noise Level-3 continuous-time counterfactual suite
+      - frozen suites with checksummed manifests and persistent DOIs
+      - explicit null-effect and non-identifiable controls
+    limitations:
+      - discrete suites are Level-2 interventional twins with fresh noise
+      - generic concept semantics do not directly equal TARCA trend/scale/propagation concepts
+      - release paper reports PFN absolute RMSE does not consistently beat VAR or trajectory mean
+      - released generic suite discloses a 28.7 percent zeroed-trajectory fraction
+    allowed_before_user_approval: REFERENCE_AND_MANIFEST_REVIEW
+
+  - source_id: causaldynamics
+    title: CausalDynamics
+    repository_url: https://github.com/kausable/CausalDynamics
+    default_branch: main
+    repository_commit: c0b1def6acc4280b87bfb81f5eaff31809d3455a
+    paper_url: https://arxiv.org/abs/2505.16620
+    documentation_url: https://kausable.github.io/CausalDynamics/
+    package_name: causaldynamics
+    package_version_observed: "1.0.0"
+    package_python_requirement: ">=3.10,<3.11"
+    code_license: MIT
+    data_url: https://huggingface.co/datasets/kausable/CausalDynamics
+    data_revision_observed: eafbb463838caf19ef9d6da6156a3f7b017c9967
+    data_license: MIT
+    eligibility: TOPOLOGY_LAG_AUXILIARY
+    proposed_roles: [GRAPH_AND_LAG_SOURCE, PRIMARY_COMPONENT_IF_REPLAY_PROVEN]
+    capabilities:
+      - true graphs from coupled ODE/SDE systems
+      - scalable node count and node dimension
+      - explicit time_lag and lagged-edge probability
+      - nonlinear activations, noise, confounding and climate dynamics
+    limitations:
+      - benchmark target is observational structural discovery
+      - no documented TARCA-style paired counterfactual protocol
+      - no native TARCA concept-source matching contract
+      - package Python requirement conflicts with TARCA Python 3.11 runtime
+      - requires isolated conversion or use of frozen external data
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: dysts
+    title: dysts
+    repository_url: https://github.com/GilpinLab/dysts
+    default_branch: master
+    repository_commit: 2a03f1ae7b0680b0470458783dcb4664660e131a
+    paper_urls:
+      - https://arxiv.org/abs/2110.05266
+      - https://arxiv.org/abs/2303.08011
+    package_name: dysts
+    package_version_observed: "0.96"
+    code_license: Apache-2.0
+    eligibility: FORECAST_STRESS
+    proposed_roles: [FORECAST_STRESS, EQUATION_REFERENCE]
+    capabilities:
+      - 135 named continuous-time systems
+      - known equations, parameters, initial conditions and timescale metadata
+      - several delay differential equations
+      - published 24-method forecasting study
+    limitations:
+      - no native paired counterfactual protocol
+      - no native regime suite
+      - mostly low-dimensional systems
+      - no direct PatchTST/iTransformer versus VAR guarantee for TARCA
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: dysts-data
+    title: dysts precomputed trajectories and benchmark results
+    repository_url: https://github.com/GilpinLab/dysts_data
+    default_branch: main
+    repository_commit: 98999d9a439ab5f8b562ee91abe1ea75a9cea5eb
+    code_license: UNKNOWN
+    data_license: UNKNOWN
+    eligibility: REFERENCE_ONLY
+    proposed_roles: [PUBLISHED_FORECAST_EVIDENCE]
+    capabilities:
+      - precomputed trajectories
+      - benchmark result artifacts
+    limitations:
+      - no explicit repository license found through GitHub metadata
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: causal-chamber-data
+    title: Causal Chamber datasets
+    repository_url: https://github.com/juangamella/causal-chamber
+    default_branch: main
+    repository_commit: 2f059123f4ac6f4724338154825630bf4ab74ac0
+    paper_url: https://doi.org/10.1038/s42256-024-00964-x
+    code_or_repository_license: CC-BY-4.0
+    data_license: CC-BY-4.0
+    eligibility: EXTERNAL_REALISM
+    proposed_roles: [PHYSICAL_INTERVENTION_VALIDATION, STAGE10_PLUS_REALISM]
+    capabilities:
+      - real wind-tunnel and light-tunnel measurements
+      - controlled physical interventions
+      - empirically validated causal graphs
+      - OOD, change-point and impulse-response settings
+    limitations:
+      - no exact replayed same-noise Level-3 counterfactual
+      - physical graph truth is not a full exogenous-noise truth manifest
+      - cannot provide TARCA planted internal-subspace truth
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: causal-chamber-package
+    title: causalchamber Python package and simulators
+    repository_url: https://github.com/juangamella/causal-chamber-package
+    default_branch: main
+    repository_commit: 9fb5d82e391bb91a89a64f2e1c9b6ae8e7aed6d6
+    package_name: causalchamber
+    package_version_observed: "0.2.8"
+    code_license: MIT
+    data_license: CC-BY-4.0
+    eligibility: EXTERNAL_REALISM_AUXILIARY
+    proposed_roles: [DATA_LOADER_REFERENCE, PHYSICAL_SIMULATOR_REFERENCE]
+    capabilities:
+      - dataset download and loading API
+      - ground-truth graph access
+      - chamber simulator access
+    limitations:
+      - not a Level-3 counterfactual oracle
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: epicf-bench
+    title: EpiCF-Bench
+    repository_url: https://github.com/complex-ai-lab/epi-cf-benchmark
+    default_branch: main
+    repository_commit: 8f7df27507dc8b01422bb373417c8d0d3efffae2
+    paper_url: https://doi.org/10.1145/3770855.3817522
+    dataset_url: https://doi.org/10.5281/zenodo.20680219
+    dataset_version_observed: "1.1"
+    code_license: UNKNOWN
+    data_license: UNKNOWN
+    eligibility: REFERENCE_ONLY_PENDING_LICENSE
+    proposed_roles: [LATE_EXTERNAL_COUNTERFACTUAL_VALIDATION]
+    capabilities:
+      - calibrated differentiable epidemic ABM
+      - factual and counterfactual trajectories across 158 counties
+      - static and time-varying single/multi-policy interventions
+      - trajectory, distribution, calibration and CATE metrics
+    limitations:
+      - code and Zenodo license fields were blank in inspected official metadata
+      - no VAR baseline in the released benchmark repository
+      - no TARCA graph/lag/shared-noise truth manifest
+      - domain-specific policies do not directly instantiate trend/scale/propagation concepts
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: timegraph
+    title: TimeGraph
+    repository_url: https://github.com/hferdous/TimeGraph
+    default_branch: main
+    repository_commit: 4d93403b002664fa55607f308ad0e80623472ded
+    paper_url: https://doi.org/10.1145/3711896.3737439
+    code_license: MIT
+    data_license: CC-BY-4.0
+    eligibility: AUXILIARY
+    proposed_roles: [GRAPH_STRESS, MISSINGNESS_AND_NONSTATIONARITY_REFERENCE]
+    capabilities:
+      - linear and nonlinear lagged causal graphs
+      - confounding, irregular sampling, trends, seasonality and missingness
+      - pre-generated data and explicit true model descriptions
+    limitations:
+      - observational causal-discovery benchmark
+      - no paired counterfactual or effect-estimation protocol
+      - no native regime/zero-refit abstraction contract
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: odebench
+    title: ODEBench
+    repository_url: https://github.com/GPBench/ODEBench
+    default_branch: main
+    repository_commit: 4cab6369135be24a6b15444f12671861fd32fd44
+    paper_url: https://arxiv.org/abs/2310.05573
+    code_license: UNKNOWN
+    data_license: UNKNOWN
+    eligibility: REFERENCE_ONLY
+    proposed_roles: [EXACT_EQUATION_SANITY_REFERENCE]
+    capabilities:
+      - 63 curated one-to-four-dimensional ODE systems
+      - fixed equations and parameter values
+    limitations:
+      - low dimensionality
+      - only four chaotic systems
+      - no native interventions, regimes or paired counterfactuals
+      - no explicit repository license found
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: causaltimeprior
+    title: CausalTimePrior
+    repository_url: https://github.com/thummd/CausalTimePrior
+    default_branch: main
+    repository_commit: ad9f0a4194132517b426546190edeec49a418040
+    paper_url: https://openreview.net/forum?id=JbTgx2L9Z2
+    code_license: Apache-2.0
+    eligibility: REJECTED_AS_FORMAL_PRIMARY
+    proposed_roles: [GENERATOR_DESIGN_REFERENCE]
+    capabilities:
+      - temporal SCMs with lags
+      - multiple intervention types
+      - nonlinear mechanisms and regime switching
+    limitations:
+      - generator/prior design is itself the research object
+      - proof-of-concept scale and learned-prior coupling increase generator-induced bias risk
+      - duplicates the type of self-generated-world dependency TARCA is trying to limit
+    allowed_before_user_approval: REFERENCE_ONLY
+
+  - source_id: causalflow-candoit
+    title: causalflow / CAnDOIT
+    repository_url: https://github.com/lcastri/causalflow
+    default_branch: main
+    repository_commit: 1da78c03ab01a7297e31e4641e5853d214addf35
+    paper_url: https://arxiv.org/abs/2410.02844
+    code_license: GPL-3.0
+    eligibility: AUXILIARY
+    proposed_roles: [INTERVENTIONAL_CAUSAL_DISCOVERY_REFERENCE]
+    capabilities:
+      - observational and hard-interventional time-series causal discovery
+      - explicit causal-discovery evaluation utilities
+    limitations:
+      - no frozen Level-3 paired counterfactual effect protocol
+      - target is graph discovery rather than TARCA effect matching
+    allowed_before_user_approval: REFERENCE_ONLY
