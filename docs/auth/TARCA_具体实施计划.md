@@ -1,9 +1,10 @@
 # TARCA 从零到一具体实施计划
 
-> **文档版本**：v1.3
+> **文档版本**：v1.4
 > **文档类型**：工程—实验一体化实施计划
 > **依据文件**：`TARCA_项目计划书.md`
 > **外部资料核对日期**：2026-08-20
+> **Stage 1A 执行同步日期**：2026-08-22
 > **Stage 0 边界**：Stage 0 负责研究契约、实验边界、依赖锁和证据规范，不训练正式模型。
 > **契约优先级**：Stage 0 应冻结预注册、假设台账、新颖性声明和术语边界；后续实现必须服从这些研究契约。没有明确上位修订时，不得重新定义 Gate 或证据等级。
 > **建议总周期**：39 周
@@ -649,6 +650,28 @@ artifacts/<experiment_id>/<run_id>/
 - Tensor identity、device、dtype 和 `requires_grad` 在校验后不变；
 - JSON Schema、Arrow Schema 和临时 Parquet round-trip 可复现；
 - Stage 0 全量测试继续通过，且本阶段不下载数据、不训练模型。
+
+### 5.8 Stage 1A 实际执行同步（2026-08-22）
+
+本节只同步工程执行状态和交接位置，不改变项目计划书、端到端协议、CCP-0001 或冻结 Stage 0 研究契约的优先级，也不把工程验收结果升级为科学证据或新的 Gate。详细、可追溯的执行记录保存于：
+
+```text
+docs/auth/TARCA_STAGE1A_HANDOFF_SNAPSHOT_2026-08-22.md
+```
+
+截至该日期，Stage 1A 的工程边界状态为 `PASS`，具体含义是：
+
+- 已在 `src/tarca/contracts/` 的同一权威位置扩展数据、预测、概念、干预、指标、Artifact 和 Adapter 契约，没有建立第二套基础类型；
+- 已实现 registry 驱动的 persisted dataset repository、sealed access fail-closed 校验、按物理分区读取、真实 SHA-256 验证和 `LeakageAudit`；
+- 已实现 `WindowBatch`、`ForecastDistribution`、`ConceptBatch`、`InterventionSite`、`InterventionSpec` 等运行时结构及显式 shape/time/name/mask/device/dtype 校验；
+- 已冻结 predictions、intervention pairs、effects、metrics、localization 五套 Arrow Schema，并验证字段顺序、类型、nullability 与 metadata；
+- 已实现类型化、本地、原子 `ArtifactStore`，加载时消费的就是通过哈希验证的同一份字节；
+- 已增加跨 TRAIN/VALIDATION/TEST 物理分区的 `window_id` 隔离审计，不拼接、不重切分数据；
+- 已完成最小 typed data → predictor → Arrow table → verified artifact 闭环；
+- 未下载或生成正式数据，未训练模型，未执行内部干预，未创建可支撑科学结论的实验结果；
+- `STAGE1_SYNTHETIC_CONFIG` 在 Stage 1A 仍然 fail closed，合成 SCM、normalization、真值和正式物理切分继续由 Stage 1B 负责。
+
+本状态不自动授权 Stage 1B 正式运行。进入 Stage 1B 时仍须沿用同一 `DatasetSpec`、`DataManifest`、`WindowBatch`、ArtifactStore 和冻结研究契约，并在生成完整物理分区后显式运行跨分区隔离审计。
 
 ---
 
