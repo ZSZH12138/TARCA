@@ -135,22 +135,22 @@ class LocalArtifactStore:
         )
 
     def load_contract(self, ref: ArtifactRef, expected_type: type[TContract]) -> TContract:
-        path = self._verified_path(ref)
-        value = expected_type.model_validate_json(path.read_bytes())
-        if canonical_json_bytes(value) + b"\n" != path.read_bytes():
+        payload = self._verified_payload(ref)
+        value = expected_type.model_validate_json(payload)
+        if canonical_json_bytes(value) + b"\n" != payload:
             raise ValueError("contract artifact is not canonically serialized")
         return value
 
     def load_arrow(self, ref: ArtifactRef, expected_schema: pa.Schema) -> pa.Table:
-        path = self._verified_path(ref)
-        table = self._read_arrow(path)
+        payload = self._verified_payload(ref)
+        table = self._read_arrow_payload(payload)
         return validate_table(table, expected_schema)
 
     def load_bytes(self, ref: ArtifactRef) -> bytes:
-        return self._verified_path(ref).read_bytes()
+        return self._verified_payload(ref)
 
     def verify_artifact(self, ref: ArtifactRef) -> bool:
-        self._verified_path(ref)
+        self._verified_payload(ref)
         return True
 
     def _publish_payload(
@@ -181,7 +181,7 @@ class LocalArtifactStore:
             ref = self._build_ref(artifact_path, artifact_type, content_hash, schema_version)
             manifest_path = self._publish_manifest(ref, artifact_path, media_type, serializer_id)
             completion_path = self._publish_completion_marker(artifact_path, manifest_path)
-            self._verified_path(ref)
+            self._verified_payload(ref)
             return ref
         except Exception:
             if completion_path is not None:
@@ -262,13 +262,14 @@ class LocalArtifactStore:
         finally:
             temporary_path.unlink(missing_ok=True)
 
-    def _verified_path(self, ref: ArtifactRef) -> Path:
+    def _verified_payload(self, ref: ArtifactRef) -> bytes:
         if ref.relative_path is None:
             raise ValueError(f"artifact has no repository path: {ref.artifact_id}")
         path = self._resolve(ref.relative_path)
         if not path.is_file():
             raise FileNotFoundError(path)
-        if sha256_file(path) != ref.content_hash:
+        payload = path.read_bytes()
+        if sha256_bytes(payload) != ref.content_hash:
             raise ValueError(f"content hash mismatch for {ref.artifact_id}")
         manifest_path = self._manifest_path(path)
         if not manifest_path.is_file():
@@ -276,13 +277,14 @@ class LocalArtifactStore:
         completion_path = self._completion_path(path)
         if not completion_path.is_file():
             raise FileNotFoundError(completion_path)
-        expected_marker = f"sha256:{sha256_file(manifest_path)}\n".encode("ascii")
+        manifest_payload = manifest_path.read_bytes()
+        expected_marker = f"sha256:{sha256_bytes(manifest_payload)}\n".encode("ascii")
         if completion_path.read_bytes() != expected_marker:
             raise ValueError(f"artifact manifest hash mismatch for {ref.artifact_id}")
-        manifest = ArtifactManifest.model_validate_json(manifest_path.read_bytes())
-        if manifest.artifact != ref or manifest.size_bytes != path.stat().st_size:
+        manifest = ArtifactManifest.model_validate_json(manifest_payload)
+        if manifest.artifact != ref or manifest.size_bytes != len(payload):
             raise ValueError(f"artifact manifest mismatch for {ref.artifact_id}")
-        return path
+        return payload
 
     def _artifact_path(self, artifact_type: str, content_hash: str, suffix: str) -> Path:
         return self.store_root / artifact_type.lower() / f"{content_hash}.{suffix}"
@@ -341,6 +343,11 @@ class LocalArtifactStore:
     @staticmethod
     def _read_arrow(path: Path) -> pa.Table:
         with pa.memory_map(str(path), "r") as source:
+            return pa.ipc.open_file(source).read_all()
+
+    @staticmethod
+    def _read_arrow_payload(payload: bytes) -> pa.Table:
+        with pa.BufferReader(payload) as source:
             return pa.ipc.open_file(source).read_all()
 
     @classmethod

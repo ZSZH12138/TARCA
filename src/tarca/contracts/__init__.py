@@ -30,6 +30,7 @@ from .data import (
     SplitPartition,
     WindowBatch,
     WindowContractSummary,
+    audit_partition_isolation,
     validate_window_batch,
 )
 from .data_access import (
@@ -151,6 +152,7 @@ __all__ = [
     "UtcDatetime",
     "WindowBatch",
     "WindowContractSummary",
+    "audit_partition_isolation",
     "build_gate_spec",
     "canonical_json_bytes",
     "canonical_json_hash",

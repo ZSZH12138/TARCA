@@ -6,7 +6,8 @@ from datetime import UTC, datetime, timedelta, timezone
 import pytest
 import torch
 
-from tarca.contracts import WindowBatch, validate_window_batch
+import tarca.contracts as contracts
+from tarca.contracts import DatasetWindowPartition, LeakageAudit, WindowBatch, validate_window_batch
 
 
 def _valid_batch() -> WindowBatch:
@@ -149,3 +150,31 @@ def test_window_validation_rejects_non_utc_or_non_monotonic_time() -> None:
 def test_window_validation_rejects_duplicate_window_ids() -> None:
     with pytest.raises(ValueError, match="window_id must be unique"):
         validate_window_batch(replace(_valid_batch(), window_id=("same", "same")))
+
+
+def test_partition_isolation_audit_rejects_window_id_reuse_across_physical_partitions() -> None:
+    train = replace(_valid_batch(), metadata={"physical_partition": "TRAIN"})
+    validation = replace(_valid_batch(), metadata={"physical_partition": "VALIDATION"})
+
+    audit = contracts.audit_partition_isolation(
+        {
+            DatasetWindowPartition.TRAIN: train,
+            DatasetWindowPartition.VALIDATION: validation,
+        }
+    )
+
+    assert audit == LeakageAudit(
+        passed=False,
+        findings=("window_id overlap between TRAIN and VALIDATION: window-0, window-1",),
+    )
+
+
+def test_partition_isolation_audit_rejects_mismatched_physical_partition_label() -> None:
+    mislabeled = replace(_valid_batch(), metadata={"physical_partition": "VALIDATION"})
+
+    audit = contracts.audit_partition_isolation({DatasetWindowPartition.TRAIN: mislabeled})
+
+    assert audit == LeakageAudit(
+        passed=False,
+        findings=("physical partition label VALIDATION does not match key TRAIN",),
+    )

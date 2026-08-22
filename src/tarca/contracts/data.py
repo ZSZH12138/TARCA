@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from itertools import pairwise
+from itertools import combinations, pairwise
 from math import isfinite
 from pathlib import PurePosixPath
 from typing import Literal, Self
@@ -436,3 +436,25 @@ class LeakageAudit:
             raise ValueError("leakage audit cannot pass with findings")
         if not self.passed and not self.findings:
             raise ValueError("failed leakage audit must contain findings")
+
+
+def audit_partition_isolation(
+    batches: Mapping[DatasetWindowPartition, WindowBatch],
+) -> LeakageAudit:
+    """Report window identities reused across distinct physical partitions."""
+    findings: list[str] = []
+    ordered = tuple(sorted(batches.items(), key=lambda item: item[0].value))
+    for partition, batch in ordered:
+        declared = batch.metadata.get("physical_partition", batch.metadata.get("partition"))
+        if declared != partition.value:
+            findings.append(
+                f"physical partition label {declared} does not match key {partition.value}"
+            )
+    for (left_partition, left_batch), (right_partition, right_batch) in combinations(ordered, 2):
+        overlap = sorted(set(left_batch.window_id) & set(right_batch.window_id))
+        if overlap:
+            findings.append(
+                f"window_id overlap between {left_partition.value} and "
+                f"{right_partition.value}: {', '.join(overlap)}"
+            )
+    return LeakageAudit(passed=not findings, findings=tuple(findings))

@@ -11,6 +11,7 @@ from tarca.contracts.data import (
     DatasetSourceKind,
     LeakageAudit,
     WindowBatch,
+    audit_partition_isolation,
 )
 from tarca.contracts.data_access import (
     AccessScope,
@@ -77,7 +78,7 @@ class PersistedDatasetRepository:
         payload = self._partition_payload(manifest, partition)
         files, verified_payloads = self._verify_partition_files(dataset_root, payload)
         batch = load_window_batch(files, verified_payloads)
-        audit = self._audit_loaded_partition(batch, partition)
+        audit = audit_partition_isolation({partition: batch})
         if not audit.passed:
             raise ValueError(f"loader leakage audit failed: {'; '.join(audit.findings)}")
         return batch, audit
@@ -172,21 +173,6 @@ class PersistedDatasetRepository:
             descriptors[descriptor.role] = descriptor
             verified_payloads[descriptor.role] = content
         return descriptors, verified_payloads
-
-    @staticmethod
-    def _audit_loaded_partition(
-        batch: WindowBatch, requested_partition: DatasetWindowPartition
-    ) -> LeakageAudit:
-        loaded_partition = batch.metadata.get("physical_partition")
-        if loaded_partition == requested_partition.value:
-            return LeakageAudit(passed=True, findings=())
-        return LeakageAudit(
-            passed=False,
-            findings=(
-                f"loaded physical partition {loaded_partition} does not match requested "
-                f"{requested_partition.value}",
-            ),
-        )
 
     @staticmethod
     def _resolve_payload_path(dataset_root: Path, relative_path: str) -> Path:

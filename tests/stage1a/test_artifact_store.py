@@ -5,6 +5,7 @@ from pathlib import Path
 import pyarrow as pa
 import pytest
 
+import tarca.artifacts.store as store_module
 from tarca.artifacts.store import LocalArtifactStore
 from tarca.contracts import (
     ArtifactManifest,
@@ -117,3 +118,26 @@ def test_verify_rejects_manifest_semantic_tampering(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="manifest hash mismatch"):
         store.verify_artifact(ref)
+
+
+def test_load_bytes_consumes_the_exact_payload_that_was_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    ref = store.publish_bytes(b"AAAA", "BINARY", "application/octet-stream", "1.0.0")
+    assert ref.relative_path is not None
+    artifact_path = tmp_path / ref.relative_path
+    swapped = False
+    real_sha256_file = store_module.sha256_file
+
+    def hash_then_swap(path: Path) -> str:
+        nonlocal swapped
+        digest = real_sha256_file(path)
+        if path == artifact_path and not swapped:
+            artifact_path.write_bytes(b"BBBB")
+            swapped = True
+        return digest
+
+    monkeypatch.setattr(store_module, "sha256_file", hash_then_swap)
+
+    assert store.load_bytes(ref) == b"AAAA"
