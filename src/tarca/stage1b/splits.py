@@ -50,4 +50,3 @@ def build_qualification_split(records: tuple[TrajectoryRecord, ...]) -> Qualific
     if set(split.partitions()) != set(QualificationPartition):
         raise SplitValidationError("split must contain all four qualification partitions")
     return split
-

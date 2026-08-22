@@ -207,7 +207,7 @@ python -m pytest tests/stage1a/test_window_batch.py tests/stage1a/test_data_meta
 
 Expected: Stage1B tests and unchanged Stage1A contract tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```text
 feat: add leakage-safe stage1b qualification datasets
@@ -227,7 +227,7 @@ feat: add leakage-safe stage1b qualification datasets
 - Consumes: qualification batches and fixed candidate configs.
 - Produces: `TunedVAR`, `SmallPatchTST`, `SmallITransformer`, `TrainingReceipt`, and models satisfying `ForecastPredictor`; neural models also satisfy `MechanisticModelAdapter` for predeclared sites.
 
-- [ ] **Step 1: Write failing VAR behavior tests**
+- [x] **Step 1: Write failing VAR behavior tests**
 
 ```python
 def test_var_recovers_known_var1_and_emits_positive_scale() -> None:
@@ -237,7 +237,7 @@ def test_var_recovers_known_var1_and_emits_positive_scale() -> None:
     assert bool((forecast.scale > 0).all())
 ```
 
-- [ ] **Step 2: Verify VAR RED, implement ridge VAR, then verify GREEN**
+- [x] **Step 2: Verify VAR RED, implement ridge VAR, then verify GREEN**
 
 Run before implementation: `python -m pytest tests/stage1b/test_var_predictor.py -q`
 
@@ -245,7 +245,7 @@ Implement lag-order and ridge selection using `QUAL_TUNE`, recursive forecasts, 
 
 Run after implementation: `python -m pytest tests/stage1b/test_var_predictor.py -q`
 
-- [ ] **Step 3: Write failing neural contract and intervention tests**
+- [x] **Step 3: Write failing neural contract and intervention tests**
 
 ```python
 @pytest.mark.parametrize("model_factory", [small_patchtst, small_itransformer])
@@ -264,7 +264,7 @@ def test_source_swap_changes_forecast_without_mutating_frozen_weights() -> None:
     assert not torch.equal(result.mean, model.predict_distribution(base_batch()).mean)
 ```
 
-- [ ] **Step 4: Verify neural RED, implement minimal models, then verify GREEN**
+- [x] **Step 4: Verify neural RED, implement minimal models, then verify GREEN**
 
 Run before implementation: `python -m pytest tests/stage1b/test_neural_predictors.py -q`
 
@@ -272,7 +272,7 @@ Implement the predeclared architectures, diagonal Gaussian heads, strictly posit
 
 Run after implementation: `python -m pytest tests/stage1b/test_neural_predictors.py -q`
 
-- [ ] **Step 5: Add and pass reproducibility tests**
+- [x] **Step 5: Add and pass reproducibility tests**
 
 ```python
 def test_same_seed_produces_same_receipt_and_predictions() -> None:
