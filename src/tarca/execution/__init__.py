@@ -11,17 +11,43 @@ from .contracts import (
     TaskSpec,
     TaskState,
 )
+from .registry import Executor, ExecutorRegistry, ProgressSink
+from .state import (
+    RETRY_POLICY,
+    AttemptState,
+    ClaimedTask,
+    ExecutionStateStore,
+    ProcessIdentity,
+    ProcessProbe,
+    ReconciliationResult,
+    RetryDisposition,
+    StateTransitionConflict,
+)
+from .worker import run_worker
 
 __all__ = [
+    "RETRY_POLICY",
+    "AttemptState",
+    "ClaimedTask",
     "ExecutionContext",
     "ExecutionPlan",
+    "ExecutionStateStore",
+    "Executor",
+    "ExecutorRegistry",
     "MonitoringSnapshot",
     "PlannedTask",
+    "ProcessIdentity",
+    "ProcessProbe",
+    "ProgressSink",
+    "ReconciliationResult",
     "ResourceAllocation",
     "ResourceRequest",
+    "RetryDisposition",
     "ScientificIdentity",
+    "StateTransitionConflict",
     "TaskManifest",
     "TaskResult",
     "TaskSpec",
     "TaskState",
+    "run_worker",
 ]
