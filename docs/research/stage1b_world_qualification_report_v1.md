@@ -1,6 +1,7 @@
 # Stage1B 世界资格实施报告 v1
 
 > 状态：`QUALIFIED_FAIL_UNFROZEN`
+> 历史状态：`HISTORICAL_ONLY`；这是仓库中唯一保留的 v1 快照，不是活动配置。
 > 日期：2026-08-22
 > 实施分支：`codex/stage1b-world-implementation-v1`
 > 可回退文档分支：`codex/stage1b-world-qualification`（`b4616d2`）
@@ -197,11 +198,78 @@ v2 应更换世界或外部生成器，而不是只微调当前参数。建议�
 3. 从已有公开神经时序基准生成器或冻结数据中，先筛选具有非线性长记忆、交叉变量交互和稳定 OOD 预测余量的外部世界。
 4. v2 仍先冻结 WQ-01～WQ-11，再运行同一 WQ-13，不复用 v1 资格结果作为调参目标。
 
-## 11. 证据位置
+## 11. 历史证据处置
 
-- 资格配置：`configs/stage1b/qualification_v1.yaml`
-- 世界配置：`configs/stage1b/worlds_v1.yaml`
-- 完整资格收据：`artifacts/stage1b/qualification_v1_summary.json`
-- 忽略的硬件与检查点：`artifacts/stage1b/runtime/`
-- 实施规范：`docs/research/stage1b_world_qualification_spec.md`
-- 实施计划：`docs/superpowers/plans/2026-08-22-stage1b-world-qualification-implementation.md`
+原资格配置、世界配置、资格收据、模型检查点和旧实施计划已在 v2 覆盖时退出活动入口；
+关键参数、运行结果、哈希和根因集中保留在本报告中。当前活动规范是
+`docs/research/stage1b_world_qualification_spec.md`。
+
+## 12. 2026-08-25 根因复核附录
+
+本节是在 v1 已结束后进行的只读根因审计，不属于 E01 或 E02，也没有生成或改写任何正式资格数据。结论按证据强度区分，避免把推断写成事实。
+
+### 12.1 已确认：CML 实现与其文档方程不一致
+
+Interfere 的 CML 文档方程把邻居项除以节点度数：
+
+`(1-epsilon) f(x_i) + epsilon / degree_i * sum_j A_ij f(x_j)`。
+
+但 v1 固定版本以及当前上游源码实际先相加，再把整个结果除以节点度数：
+
+`((1-epsilon) f(x_i) + epsilon * sum_j A_ij f(x_j)) / degree_i`。
+
+v1 使用的是度数为 2 的无向环，因此自项也被额外减半。对 v1 三个资格种子、同一 D=8 环和同一 warm-up 做最小数值复核后：
+
+| coupling | v1 轨迹行为 |
+|---:|---|
+| 0.20 | 时间标准差约 `4e-12` 到 `2e-10`，近似常数 |
+| 0.35 | 时间标准差约 `5e-6` 到 `3e-5`，近似常数 |
+| 0.50 | 逐渐收敛到近似二周期；lag-2 差异继续衰减 |
+
+把同一初值代入文档方程后，三个 coupling 的全局标准差约为 `0.532 / 0.533 / 0.539`，没有上述塌缩。因而网络世界失败的首要根因不是随机波动，而是“实现语义错误 + 不适配的参数组合”。v1 把 `alpha=1.45` 固定后任意改 coupling，也没有遵循公开命名机制中 alpha、coupling 和下采样共同变化的组合。
+
+原始证据：
+
+- [Interfere CML 上游源码与文档方程](https://github.com/djpasseyjr/interfere/blob/main/interfere/dynamics/coupled_map_lattice.py)
+- v1 固定源码：`data/third_party/interfere/interfere/dynamics/coupled_map_lattice.py`
+- v1 世界配置：`configs/stage1b/worlds_v1.yaml`
+
+### 12.2 强证据：生态世界在 v1 的时间尺度上过于接近线性
+
+使用 v1 原生成器和三个资格种子，仅拟合一步线性诊断，不做模型资格竞赛。一步 OLS 残差 MSE / 轨迹总方差为：
+
+| regime | 比值范围 |
+|---|---:|
+| ecology_low | `0.009–0.014` |
+| ecology_mid | `0.050–0.062` |
+| ecology_unseen | `0.092–0.097` |
+
+一步平均变化量也只有约 `0.004 / 0.007 / 0.012`。v1 的 `H=8, dt=0.05` 只覆盖 0.4 个连续时间单位，因此 VAR 在局部线性区间内占优是符合数据结构的。与此同时，unseen 一次改变 growth、interaction 和 noise 三项，无法把失败唯一归因到某一个参数。
+
+公开的 GVAR/Lotka–Volterra 实验使用 10 个猎物与 10 个捕食者、每个物种连接 2 个对方物种、`T=20000`、`dt=0.01`、每 10 步采样、`alpha=1.1`、`beta=0.2`、`gamma=1.1`、`delta=0.2`、`sigma=0.1`；它与 v1 的 D=8 广义 LV、增长率 `0.75–1.15`、容量 `1.5`、interaction `0.08–0.16`、sigma `0.015–0.05` 不是同一个已发表世界。故不能用该论文替 v1 参数背书，也不能声称只改一个数就一定解决问题。
+
+原始证据：
+
+- [GVAR 官方 Lotka–Volterra 运行脚本](https://github.com/i6092467/GVAR/blob/master/bin/run_grid_search_lotka_volterra)
+- [GVAR 官方参数解析与生成代码](https://github.com/i6092467/GVAR/blob/master/bin/run_grid_search.py)
+- [ICLR 2021 GVAR 论文](https://openreview.net/forum?id=DEa4JdMWRHp)
+
+### 12.3 不能排除：v1 神经实现本身也是混杂因素
+
+v1 的 SmallPatchTST 不是论文/官方仓库中的通道独立 PatchTST：它把全部变量拼入同一 patch、对 patch 求均值，没有 RevIN 和官方 flatten head。v1 SmallITransformer 也缺少官方逐窗口归一化/反归一化。两者都只使用输入无关的固定预测尺度，不能表达 v1 unseen 中变化的条件波动率。
+
+因此，整个 v1 的严谨结论是：
+
+- CML：世界实现与参数设计是已确认的决定性根因；
+- 生态：参数、采样间隔和短预测跨度是强根因，但不能证明是唯一根因；
+- 总体：不能把 v1 概括成“只需调几个参数”，还必须修正生成器语义并使用与公开方法一致的模型适配器。
+
+原始证据：
+
+- [PatchTST 官方仓库](https://github.com/yuqinie98/PatchTST)
+- [iTransformer 官方实现](https://github.com/thuml/Time-Series-Library/blob/main/models/iTransformer.py)
+- v1 神经实现：`src/tarca/stage1b/neural.py`
+
+### 12.4 v2 处置约束
+
+本报告只保留 v1 的事实、收据和根因，不把失败世界继续作为活动冻结版本。v2 的活动实现应覆盖 v1 的世界和模型入口，但必须满足：参数来自论文/官方仓库；生成方程有单元测试；先检查非塌缩、周期性、线性可预测性和机制可分离性；只用资格调优种子筛选；最后才用未见种子做一次盲评。E01、E02 仍保持未执行。

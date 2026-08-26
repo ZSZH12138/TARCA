@@ -53,10 +53,10 @@ def _validate_receipt(receipt: dict[str, Any]) -> None:
     suite_decision = _mapping(receipt.get("suite_decision"), "suite decision")
     if suite_decision.get("status") != "PASS":
         raise FreezeRejected("suite gate did not pass")
-    if receipt.get("source_lock_verified") is not True:
-        raise FreezeRejected("source lock was not verified")
+    if receipt.get("source_evidence_verified") is not True:
+        raise FreezeRejected("source evidence was not verified")
     required_hashes = (
-        "source_license_sha256",
+        "source_manifest_sha256",
         "world_config_sha256",
         "qualification_config_sha256",
         "hardware_receipt_sha256",
@@ -64,8 +64,16 @@ def _validate_receipt(receipt: dict[str, Any]) -> None:
     for field in required_hashes:
         if re.fullmatch(r"[0-9a-f]{64}", str(receipt.get(field, ""))) is None:
             raise FreezeRejected(f"receipt {field} is missing or invalid")
-    if re.fullmatch(r"[0-9a-f]{40}", str(receipt.get("source_commit", ""))) is None:
-        raise FreezeRejected("receipt source commit is missing or invalid")
+    source_commits = receipt.get("source_commits")
+    if not isinstance(source_commits, dict) or not source_commits:
+        raise FreezeRejected("receipt source commits are missing")
+    if any(
+        not isinstance(source_id, str)
+        or not source_id.strip()
+        or re.fullmatch(r"[0-9a-f]{40}", str(commit)) is None
+        for source_id, commit in source_commits.items()
+    ):
+        raise FreezeRejected("receipt source commits are invalid")
     serialized = canonical_json_bytes(receipt).decode("utf-8")
     if any(identifier in serialized for identifier in ('"E01"', '"E02"', '"TEST"')):
         raise FreezeRejected("receipt contains a formal experiment identifier")
@@ -113,14 +121,14 @@ def freeze_suite(
         if item.get("role") == "PRIMARY_MECHANISTIC" and item.get("status") == "PASS"
     }
     manifest: dict[str, Any] = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "version": version,
         "qualification_id": receipt.get("qualification_id"),
         "suite_id": receipt.get("suite_id"),
         "suite_gate_status": "PASS",
         "receipt_sha256": _sha256(receipt_payload),
-        "source_commit": receipt.get("source_commit"),
-        "source_license_sha256": receipt.get("source_license_sha256"),
+        "source_manifest_sha256": receipt.get("source_manifest_sha256"),
+        "source_commits": receipt.get("source_commits"),
         "world_config_sha256": receipt.get("world_config_sha256"),
         "qualification_config_sha256": receipt.get("qualification_config_sha256"),
         "hardware_receipt_sha256": receipt.get("hardware_receipt_sha256"),
@@ -135,7 +143,7 @@ def freeze_suite(
     manifest_path.chmod(0o444)
     hash_path.chmod(0o444)
     active = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "version": version,
         "manifest_sha256": manifest_hash,
     }

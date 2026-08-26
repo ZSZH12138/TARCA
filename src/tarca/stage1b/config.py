@@ -3,11 +3,9 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-import subprocess
 from collections.abc import Mapping
-from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Literal, Self
 
 import yaml
@@ -28,9 +26,16 @@ class WorldRole(StrEnum):
 
 
 class WorldAdapter(StrEnum):
-    INTERFERE_VARMA = "INTERFERE_VARMA"
-    INTERFERE_CML = "INTERFERE_CML"
-    INTERFERE_LOTKA_VOLTERRA_SDE = "INTERFERE_LOTKA_VOLTERRA_SDE"
+    TARCA_VAR = "TARCA_VAR"
+    LORENZ96 = "LORENZ96"
+    LORENZ96_TWO_SCALE = "LORENZ96_TWO_SCALE"
+    GVAR_PREDATOR_PREY = "GVAR_PREDATOR_PREY"
+    CORRECTED_CML = "CORRECTED_CML"
+
+
+class NeuralAdapter(StrEnum):
+    PATCHTST_REFERENCE = "PATCHTST_REFERENCE"
+    ITRANSFORMER_REFERENCE = "ITRANSFORMER_REFERENCE"
 
 
 class RegimeSplitRole(StrEnum):
@@ -45,20 +50,47 @@ class QualificationPartition(StrEnum):
     QUAL_UNSEEN = "QUAL_UNSEEN"
 
 
+class EvidenceFileConfig(FrozenModel):
+    url: str
+    sha256: str
+
+    @field_validator("url")
+    @classmethod
+    def _url_is_https(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("evidence URL must use HTTPS")
+        return value
+
+    @field_validator("sha256")
+    @classmethod
+    def _sha_is_valid(cls, value: str) -> str:
+        if re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("evidence hash must be a lowercase SHA-256")
+        return value
+
+
 class SourceConfig(FrozenModel):
     source_id: str
+    title: str
     repository_url: str
+    paper_url: str
     commit: str
-    package_version: str
-    license_id: Literal["MIT"]
-    license_path: str
-    license_sha256: str
+    license_id: Literal["MIT", "APACHE-2.0", "REFERENCE_ONLY"]
+    code_usage: Literal["REIMPLEMENTED_EQUATIONS"]
+    evidence_files: tuple[EvidenceFileConfig, ...]
 
-    @field_validator("source_id", "repository_url", "package_version")
+    @field_validator("source_id", "title", "repository_url", "paper_url")
     @classmethod
     def _nonblank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("source fields must not be blank")
+        return value
+
+    @field_validator("repository_url", "paper_url")
+    @classmethod
+    def _source_urls_are_https(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("source URLs must use HTTPS")
         return value
 
     @field_validator("commit")
@@ -68,25 +100,23 @@ class SourceConfig(FrozenModel):
             raise ValueError("source commit must be a lowercase Git SHA-1")
         return value
 
-    @field_validator("license_sha256")
+    @field_validator("evidence_files")
     @classmethod
-    def _license_is_sha256(cls, value: str) -> str:
-        if re.fullmatch(r"[0-9a-f]{64}", value) is None:
-            raise ValueError("license hash must be a lowercase SHA-256")
-        return value
-
-    @field_validator("license_path")
-    @classmethod
-    def _license_path_is_safe(cls, value: str) -> str:
-        path = PurePosixPath(value)
-        if not value or "\\" in value or path.is_absolute() or ".." in path.parts:
-            raise ValueError("license path must stay inside the source repository")
+    def _evidence_is_present(
+        cls, value: tuple[EvidenceFileConfig, ...]
+    ) -> tuple[EvidenceFileConfig, ...]:
+        if not value:
+            raise ValueError("each source requires pinned evidence files")
+        urls = tuple(item.url for item in value)
+        if len(urls) != len(set(urls)):
+            raise ValueError("evidence URLs must be unique within a source")
         return value
 
 
 class TruthCapabilities(FrozenModel):
     shared_future_noise: bool
     graph: bool
+    signed_graph: bool
     causal_lag: bool
     regime: bool
     source_pairs: bool
@@ -94,38 +124,33 @@ class TruthCapabilities(FrozenModel):
 
 
 class GraphConfig(FrozenModel):
-    kind: Literal["RING"]
+    kind: Literal["RING", "LORENZ96", "PREDATOR_PREY_BLOCK"]
     directed: bool
 
 
 class RegimeConfig(FrozenModel):
     regime_id: str
     split_role: RegimeSplitRole
+    changed_parameter: str
     parameters: tuple[tuple[str, float], ...]
 
-    @field_validator("regime_id")
+    @field_validator("regime_id", "changed_parameter")
     @classmethod
-    def _regime_id_is_nonblank(cls, value: str) -> str:
+    def _regime_labels_are_nonblank(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("regime_id must not be blank")
+            raise ValueError("regime labels must not be blank")
         return value
 
     @field_validator("parameters", mode="before")
     @classmethod
     def _freeze_parameters(cls, value: object) -> tuple[tuple[str, float], ...]:
-        if not isinstance(value, Mapping) or not value:
-            raise ValueError("regime parameters must be a nonempty mapping")
-        frozen: list[tuple[str, float]] = []
-        for raw_name, raw_value in value.items():
-            if not isinstance(raw_name, str) or not raw_name.strip():
-                raise ValueError("regime parameter names must be nonblank strings")
-            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
-                raise ValueError("regime parameter values must be numeric")
-            numeric = float(raw_value)
-            if not math.isfinite(numeric):
-                raise ValueError("regime parameter values must be finite")
-            frozen.append((raw_name, numeric))
-        return tuple(sorted(frozen))
+        return _freeze_numeric_mapping(value, "regime parameters")
+
+    @model_validator(mode="after")
+    def _changed_parameter_is_explicit(self) -> Self:
+        if self.changed_parameter not in self.parameter_map():
+            raise ValueError("changed_parameter must be present in regime parameters")
+        return self
 
     def parameter_map(self) -> dict[str, float]:
         return dict(self.parameters)
@@ -152,8 +177,11 @@ class WorldConfig(FrozenModel):
     family_id: str
     role: WorldRole
     source_id: str
+    supporting_source_ids: tuple[str, ...] = ()
     adapter: WorldAdapter
     dimension: int = Field(ge=2)
+    latent_dimension: int = Field(default=0, ge=0)
+    boundary_policy: Literal["NONE", "DECLARED_ZERO_CLIP"] = "NONE"
     concepts: tuple[str, ...]
     downstream_mappings: tuple[str, ...]
     truth_capabilities: TruthCapabilities
@@ -166,6 +194,13 @@ class WorldConfig(FrozenModel):
     def _identifiers_are_nonblank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("world identifiers must not be blank")
+        return value
+
+    @field_validator("supporting_source_ids")
+    @classmethod
+    def _supporting_sources_are_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not source_id.strip() for source_id in value) or len(value) != len(set(value)):
+            raise ValueError("supporting source IDs must be nonblank and unique")
         return value
 
     @field_validator("concepts", "downstream_mappings")
@@ -185,31 +220,44 @@ class WorldConfig(FrozenModel):
     @field_validator("regimes")
     @classmethod
     def _regimes_are_unique(cls, value: tuple[RegimeConfig, ...]) -> tuple[RegimeConfig, ...]:
-        regime_ids = tuple(regime.regime_id for regime in value)
-        if len(set(regime_ids)) != len(regime_ids):
-            raise ValueError("regime IDs must be unique within a world")
+        ids = tuple(regime.regime_id for regime in value)
+        if not ids or len(ids) != len(set(ids)):
+            raise ValueError("regime IDs must be nonempty and unique within a world")
         return value
 
     @model_validator(mode="after")
-    def _primary_world_has_complete_truth(self) -> Self:
+    def _world_contract_is_coherent(self) -> Self:
+        if self.adapter is WorldAdapter.LORENZ96_TWO_SCALE and self.latent_dimension <= 0:
+            raise ValueError("two-scale Lorenz-96 requires latent variables")
+        if (
+            self.boundary_policy == "DECLARED_ZERO_CLIP"
+            and self.adapter is not WorldAdapter.GVAR_PREDATOR_PREY
+        ):
+            raise ValueError("zero clipping is declared only by the published predator-prey world")
         if self.role is not WorldRole.PRIMARY_MECHANISTIC:
             return self
         capabilities = self.truth_capabilities
         if not capabilities.shared_future_noise:
             raise ValueError("primary worlds require shared future noise")
-        required = (
-            capabilities.graph,
-            capabilities.causal_lag,
-            capabilities.regime,
-            capabilities.source_pairs,
-            capabilities.negative_controls,
-        )
-        if not all(required):
-            raise ValueError("primary worlds require graph, lag, regime, pairs, and controls")
+        if not all(
+            (
+                capabilities.graph,
+                capabilities.signed_graph,
+                capabilities.causal_lag,
+                capabilities.regime,
+                capabilities.source_pairs,
+                capabilities.negative_controls,
+            )
+        ):
+            raise ValueError(
+                "primary worlds require graph, signed graph, lag, regime, pairs, and controls"
+            )
         if len(self.concepts) < 2:
             raise ValueError("primary worlds require at least two structural concepts")
-        split_roles = {regime.split_role for regime in self.regimes}
-        if split_roles != {RegimeSplitRole.SEEN, RegimeSplitRole.UNSEEN}:
+        if {regime.split_role for regime in self.regimes} != {
+            RegimeSplitRole.SEEN,
+            RegimeSplitRole.UNSEEN,
+        }:
             raise ValueError("primary worlds require seen and unseen regimes")
         return self
 
@@ -218,33 +266,31 @@ class WorldConfig(FrozenModel):
 
 
 class WorldSuiteConfig(FrozenModel):
-    schema_version: Literal["1.0.0"]
+    schema_version: Literal["2.0.0"]
     suite_id: str
     sources: tuple[SourceConfig, ...]
     worlds: tuple[WorldConfig, ...]
 
-    @field_validator("suite_id")
-    @classmethod
-    def _suite_id_is_nonblank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("suite_id must not be blank")
-        return value
-
     @model_validator(mode="after")
     def _suite_is_self_contained(self) -> Self:
+        if not self.suite_id.strip():
+            raise ValueError("suite_id must not be blank")
         source_ids = tuple(source.source_id for source in self.sources)
         world_ids = tuple(world.world_id for world in self.worlds)
-        if not source_ids or len(set(source_ids)) != len(source_ids):
+        if not source_ids or len(source_ids) != len(set(source_ids)):
             raise ValueError("source IDs must be nonempty and unique")
-        if not world_ids or len(set(world_ids)) != len(world_ids):
+        if not world_ids or len(world_ids) != len(set(world_ids)):
             raise ValueError("world IDs must be nonempty and unique")
-        unknown_sources = sorted({world.source_id for world in self.worlds} - set(source_ids))
-        if unknown_sources:
-            raise ValueError(f"worlds reference unknown sources: {', '.join(unknown_sources)}")
-        primary_families = {
-            world.family_id
+        referenced_sources = {
+            source_id
             for world in self.worlds
-            if world.role is WorldRole.PRIMARY_MECHANISTIC
+            for source_id in (world.source_id, *world.supporting_source_ids)
+        }
+        unknown = sorted(referenced_sources - set(source_ids))
+        if unknown:
+            raise ValueError(f"worlds reference unknown sources: {', '.join(unknown)}")
+        primary_families = {
+            world.family_id for world in self.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
         }
         if len(primary_families) < 2:
             raise ValueError("suite requires two independent primary families")
@@ -256,6 +302,16 @@ class WorldSuiteConfig(FrozenModel):
                 return world
         raise KeyError(world_id)
 
+    def source(self, source_id: str) -> SourceConfig:
+        for source in self.sources:
+            if source.source_id == source_id:
+                return source
+        raise KeyError(source_id)
+
+    def source_manifest_sha256(self) -> str:
+        payload = self.model_dump_json(include={"sources"}).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
 
 class TrajectoryPartitionCounts(FrozenModel):
     qual_train: int = Field(alias="QUAL_TRAIN", gt=0)
@@ -265,21 +321,36 @@ class TrajectoryPartitionCounts(FrozenModel):
 
 
 class NeuralModelConfig(FrozenModel):
+    model_id: str
+    adapter: NeuralAdapter
     d_model: int = Field(gt=0)
     n_layers: int = Field(gt=0)
     n_heads: int = Field(gt=0)
+    d_ff: int = Field(gt=0)
     dropout: float = Field(ge=0.0, lt=1.0)
     batch_size: int = Field(gt=0)
     max_epochs: int = Field(gt=0)
     patience: int = Field(gt=0)
     learning_rate: float = Field(gt=0.0)
+    revin: bool
+    patch_length: int | None = Field(default=None, gt=1)
+    patch_stride: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
-    def _heads_divide_model_width(self) -> Self:
+    def _model_is_coherent(self) -> Self:
+        if not self.model_id.strip():
+            raise ValueError("model_id must not be blank")
         if self.d_model % self.n_heads:
             raise ValueError("d_model must be divisible by n_heads")
         if self.patience >= self.max_epochs:
             raise ValueError("patience must be smaller than max_epochs")
+        if not self.revin:
+            raise ValueError("v2 neural adapters require window normalization")
+        if self.adapter is NeuralAdapter.PATCHTST_REFERENCE:
+            if self.patch_length is None or self.patch_stride is None:
+                raise ValueError("PatchTST requires patch length and stride")
+        elif self.patch_length is not None or self.patch_stride is not None:
+            raise ValueError("patch settings are exclusive to PatchTST")
         return self
 
 
@@ -289,16 +360,16 @@ class VarSearchConfig(FrozenModel):
 
     @field_validator("lag_orders")
     @classmethod
-    def _lags_are_positive_and_unique(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+    def _lags_are_valid(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         if not value or any(type(item) is not int or item <= 0 for item in value):
             raise ValueError("VAR lag orders must be positive integers")
-        if len(set(value)) != len(value):
+        if len(value) != len(set(value)):
             raise ValueError("VAR lag orders must be unique")
         return value
 
     @field_validator("ridge")
     @classmethod
-    def _ridge_is_nonnegative(cls, value: tuple[float, ...]) -> tuple[float, ...]:
+    def _ridge_is_valid(cls, value: tuple[float, ...]) -> tuple[float, ...]:
         if not value or any(not math.isfinite(item) or item < 0 for item in value):
             raise ValueError("VAR ridge values must be finite and nonnegative")
         return value
@@ -309,11 +380,15 @@ class QualificationGateConfig(FrozenModel):
     bootstrap_replicates: int = Field(ge=1000)
     confidence_level: float = Field(gt=0.5, lt=1.0)
     guardrail_relative_tolerance: float = Field(ge=0.0, lt=1.0)
-    minimum_primary_families: int = Field(ge=2)
+    minimum_primary_families: int = Field(ge=1)
+    minimum_comparison_units: int = Field(ge=40)
+    minimum_win_rate: float = Field(gt=0.5, le=1.0)
+    minimum_skill_score: float = Field(ge=0.0, lt=1.0)
+    require_seen_and_unseen_majority: bool
 
 
 class QualificationConfig(FrozenModel):
-    schema_version: Literal["1.0.0"]
+    schema_version: Literal["2.0.0"]
     qualification_id: str
     partitions: tuple[QualificationPartition, ...]
     qualification_seeds: tuple[int, int, int]
@@ -324,78 +399,45 @@ class QualificationConfig(FrozenModel):
     trajectory_length: int = Field(gt=0)
     warmup_steps: int = Field(ge=0)
     trajectories_per_partition: TrajectoryPartitionCounts
-    models: NeuralModelConfig
+    models: tuple[NeuralModelConfig, ...]
     var_search: VarSearchConfig
     gate: QualificationGateConfig
-
-    @field_validator("qualification_id")
-    @classmethod
-    def _qualification_id_is_nonblank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("qualification_id must not be blank")
-        return value
 
     @field_validator("partitions", mode="before")
     @classmethod
     def _reject_formal_partitions(cls, value: object) -> object:
-        if not isinstance(value, (list, tuple)):
-            return value
-        allowed = {partition.value for partition in QualificationPartition}
-        if any(item not in allowed for item in value):
-            raise ValueError("configuration may use qualification-only partitions")
-        return value
-
-    @field_validator("partitions")
-    @classmethod
-    def _only_qualification_partitions(
-        cls, value: tuple[QualificationPartition, ...]
-    ) -> tuple[QualificationPartition, ...]:
-        expected = set(QualificationPartition)
-        if len(value) != len(expected) or set(value) != expected:
-            raise ValueError("configuration must contain exactly the qualification-only partitions")
-        return value
-
-    @field_validator("qualification_seeds")
-    @classmethod
-    def _qualification_seeds_are_unique(cls, value: tuple[int, int, int]) -> tuple[int, int, int]:
-        if any(type(seed) is not int or seed < 0 for seed in value) or len(set(value)) != 3:
-            raise ValueError("qualification seeds must be three unique nonnegative integers")
-        return value
-
-    @field_validator("reserved_formal_seeds")
-    @classmethod
-    def _formal_seeds_are_unique(cls, value: tuple[int, ...]) -> tuple[int, ...]:
-        if not value or any(type(seed) is not int or seed < 0 for seed in value):
-            raise ValueError("reserved formal seeds must be nonnegative integers")
-        if len(set(value)) != len(value):
-            raise ValueError("reserved formal seeds must be unique")
+        if isinstance(value, (list, tuple)):
+            allowed = {partition.value for partition in QualificationPartition}
+            if any(item not in allowed for item in value):
+                raise ValueError("configuration may use qualification-only partitions")
         return value
 
     @model_validator(mode="after")
-    def _qualification_is_sealed_from_formal_experiments(self) -> Self:
+    def _qualification_is_coherent(self) -> Self:
+        if not self.qualification_id.strip():
+            raise ValueError("qualification_id must not be blank")
+        if len(self.partitions) != 4 or set(self.partitions) != set(QualificationPartition):
+            raise ValueError("configuration must contain exactly the qualification-only partitions")
+        if len(set(self.qualification_seeds)) != 3 or any(
+            seed < 0 for seed in self.qualification_seeds
+        ):
+            raise ValueError("qualification seeds must be three unique nonnegative integers")
+        if not self.reserved_formal_seeds or len(set(self.reserved_formal_seeds)) != len(
+            self.reserved_formal_seeds
+        ):
+            raise ValueError("reserved formal seeds must be nonempty and unique")
         if set(self.qualification_seeds) & set(self.reserved_formal_seeds):
             raise ValueError("qualification seeds must not overlap reserved formal seeds")
         if self.trajectory_length <= self.history_length + self.horizon:
             raise ValueError("trajectory length must exceed history plus horizon")
-        covered: list[int] = []
-        for start, end in self.horizon_groups:
-            if start <= 0 or end < start or end > self.horizon:
-                raise ValueError("horizon groups must stay inside the forecast horizon")
-            covered.extend(range(start, end + 1))
+        covered = [step for start, end in self.horizon_groups for step in range(start, end + 1)]
         if covered != list(range(1, self.horizon + 1)):
             raise ValueError("horizon groups must cover each horizon exactly once in order")
+        model_ids = tuple(model.model_id for model in self.models)
+        adapters = {model.adapter for model in self.models}
+        if len(model_ids) != len(set(model_ids)) or adapters != set(NeuralAdapter):
+            raise ValueError("qualification requires one unique PatchTST and iTransformer adapter")
         return self
-
-
-class SourceLockError(RuntimeError):
-    """Raised when an external source differs from its approved identity."""
-
-
-@dataclass(frozen=True, slots=True)
-class SourceLockEvidence:
-    source_root: Path
-    commit: str
-    license_sha256: str
 
 
 def _load_yaml_mapping(path: Path) -> Mapping[str, Any]:
@@ -411,41 +453,3 @@ def load_world_suite(path: Path) -> WorldSuiteConfig:
 
 def load_qualification_config(path: Path) -> QualificationConfig:
     return QualificationConfig.model_validate(_load_yaml_mapping(path))
-
-
-def verify_source_lock(
-    source_root: Path,
-    expected_commit: str,
-    expected_license_sha256: str,
-    license_path: str,
-) -> SourceLockEvidence:
-    root = source_root.resolve()
-    if not root.is_dir():
-        raise SourceLockError("source root does not exist")
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise SourceLockError("source commit could not be verified") from exc
-    actual_commit = completed.stdout.strip()
-    if actual_commit != expected_commit:
-        raise SourceLockError("source commit does not match the approved lock")
-    relative_license = PurePosixPath(license_path)
-    if relative_license.is_absolute() or ".." in relative_license.parts or "\\" in license_path:
-        raise SourceLockError("license path must stay inside the source root")
-    license_file = root.joinpath(*relative_license.parts)
-    if not license_file.is_file():
-        raise SourceLockError("source license file is missing")
-    actual_license_sha256 = hashlib.sha256(license_file.read_bytes()).hexdigest()
-    if actual_license_sha256 != expected_license_sha256:
-        raise SourceLockError("source license hash does not match the approved lock")
-    return SourceLockEvidence(
-        source_root=root,
-        commit=actual_commit,
-        license_sha256=actual_license_sha256,
-    )

@@ -1,0 +1,213 @@
+schema_version: 2.0.0
+suite_id: stage1b-worlds-v2
+sources:
+  - source_id: neural_gc
+    title: Neural Granger Causality
+    repository_url: https://github.com/iancovert/Neural-GC.git
+    paper_url: https://arxiv.org/abs/1802.05842
+    commit: c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf
+    license_id: MIT
+    code_usage: REIMPLEMENTED_EQUATIONS
+    evidence_files:
+      - url: https://raw.githubusercontent.com/iancovert/Neural-GC/c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf/synthetic.py
+        sha256: 9153d1131e3232fcc8fe278731404f63c8feb9b41cb2f72ad0ca2db228d2d328
+  - source_id: gvar
+    title: Generalized Vector Autoregression
+    repository_url: https://github.com/i6092467/GVAR.git
+    paper_url: https://openreview.net/forum?id=DEa4JdMWRHp
+    commit: e06268f87fbe923580af14b2cab26399191747a6
+    license_id: REFERENCE_ONLY
+    code_usage: REIMPLEMENTED_EQUATIONS
+    evidence_files:
+      - url: https://raw.githubusercontent.com/i6092467/GVAR/e06268f87fbe923580af14b2cab26399191747a6/datasets/lorenz.py
+        sha256: 87970ec4e33994b6fe48de9f50e2ee0e7df08b896486be133d39dc1d5a7f3305
+      - url: https://raw.githubusercontent.com/i6092467/GVAR/e06268f87fbe923580af14b2cab26399191747a6/datasets/lotkaVolterra/multiple_lotka_volterra.py
+        sha256: ecc58ba39112ef8aa9ccbbe884e4a6bb21352d275f916d8bea665819fee8a97b
+  - source_id: scoring_rules_l96
+    title: Generative Neural Networks for Probabilistic Forecasting in Lorenz-96
+    repository_url: https://github.com/LoryPack/GenerativeNetworksScoringRulesProbabilisticForecasting.git
+    paper_url: https://jmlr.org/papers/v25/23-0038.html
+    commit: 6f28942f6a703c2b52501d01258ca2708539f209
+    license_id: REFERENCE_ONLY
+    code_usage: REIMPLEMENTED_EQUATIONS
+    evidence_files:
+      - url: https://raw.githubusercontent.com/LoryPack/GenerativeNetworksScoringRulesProbabilisticForecasting/6f28942f6a703c2b52501d01258ca2708539f209/src/models.py
+        sha256: 75aea46171f2ac33ddab3728dbfb0ee8fa32ebcdf635a9955e145b7ad36cc3ca
+  - source_id: interfere_cml
+    title: Interfere Coupled Map Lattice Formula
+    repository_url: https://github.com/djpasseyjr/interfere.git
+    paper_url: https://djpasseyjr.github.io/interfere/
+    commit: adfa3f730019f17c3554dd7e0c181248f785bb8b
+    license_id: MIT
+    code_usage: REIMPLEMENTED_EQUATIONS
+    evidence_files:
+      - url: https://raw.githubusercontent.com/djpasseyjr/interfere/adfa3f730019f17c3554dd7e0c181248f785bb8b/interfere/dynamics/coupled_map_lattice.py
+        sha256: 4cf841788d0c452222ec1c56162fae82dfd4552ea1f8ef8acb2693d13086cd69
+  - source_id: patchtst
+    title: A Time Series is Worth 64 Words
+    repository_url: https://github.com/yuqinie98/PatchTST.git
+    paper_url: https://openreview.net/forum?id=Jbdc0vTOcol
+    commit: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
+    license_id: APACHE-2.0
+    code_usage: REIMPLEMENTED_EQUATIONS
+    evidence_files:
+      - url: https://raw.githubusercontent.com/yuqinie98/PatchTST/204c21efe0b39603ad6e2ca640ef5896646ab1a9/PatchTST_supervised/layers/PatchTST_backbone.py
+        sha256: df67173153787c2356bdfb6491159cd754332ef7382986efe879e1fbea8ebf26
+  - source_id: itransformer
+    title: iTransformer Inverted Transformers Are Effective for Time Series Forecasting
+    repository_url: https://github.com/thuml/Time-Series-Library.git
+    paper_url: https://openreview.net/forum?id=JePfAI8fah
+    commit: 4e938a1767106324dd753b2a44832bf870a0252e
+    license_id: MIT
+    code_usage: REIMPLEMENTED_EQUATIONS
+    evidence_files:
+      - url: https://raw.githubusercontent.com/thuml/Time-Series-Library/4e938a1767106324dd753b2a44832bf870a0252e/models/iTransformer.py
+        sha256: 7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e
+worlds:
+  - world_id: control_var_v2
+    family_id: linear_control
+    role: CONTROL_LINEAR
+    source_id: neural_gc
+    adapter: TARCA_VAR
+    dimension: 10
+    latent_dimension: 0
+    concepts: [linear_memory]
+    downstream_mappings: [baseline_fairness, structure_negative_control]
+    truth_capabilities: &complete_truth
+      shared_future_noise: true
+      graph: true
+      signed_graph: true
+      causal_lag: true
+      regime: true
+      source_pairs: true
+      negative_controls: true
+    graph: {kind: RING, directed: true}
+    generator: {spectral_radius: 0.97, innovation_scale: 0.1, sparsity: 0.2}
+    regimes:
+      - regime_id: linear_seen
+        split_role: SEEN
+        changed_parameter: coefficient_scale
+        parameters: {coefficient_scale: 1.0}
+      - regime_id: linear_unseen
+        split_role: UNSEEN
+        changed_parameter: coefficient_scale
+        parameters: {coefficient_scale: 0.9}
+  - world_id: lorenz96_f10_v2
+    family_id: lorenz96_single_scale
+    role: PRIMARY_MECHANISTIC
+    source_id: gvar
+    supporting_source_ids: [neural_gc]
+    adapter: LORENZ96
+    dimension: 20
+    latent_dimension: 0
+    concepts: [forcing, nonlinear_persistence, propagation, observation_scale, shock]
+    downstream_mappings: [weather_regime, traffic_propagation, financial_spillover]
+    truth_capabilities: *complete_truth
+    graph: {kind: LORENZ96, directed: true}
+    generator:
+      {forcing: 10.0, integration_step: 0.01, observation_interval: 0.1,
+       initial_perturbation: 0.01, burn_in_observations: 1000}
+    regimes:
+      - regime_id: f10_seen_clean
+        split_role: SEEN
+        changed_parameter: measurement_noise
+        parameters: {measurement_noise: 0.0}
+      - regime_id: f10_unseen_noisy
+        split_role: UNSEEN
+        changed_parameter: measurement_noise
+        parameters: {measurement_noise: 0.1}
+  - world_id: lorenz96_f40_v2
+    family_id: lorenz96_single_scale_stress
+    role: FORECAST_STRESS
+    source_id: gvar
+    supporting_source_ids: [neural_gc]
+    adapter: LORENZ96
+    dimension: 20
+    latent_dimension: 0
+    concepts: [forcing, chaotic_persistence, propagation, observation_scale, shock]
+    downstream_mappings: [weather_extreme_regime, financial_stress_regime]
+    truth_capabilities: *complete_truth
+    graph: {kind: LORENZ96, directed: true}
+    generator:
+      {forcing: 40.0, integration_step: 0.01, observation_interval: 0.1,
+       initial_perturbation: 0.01, burn_in_observations: 1000}
+    regimes:
+      - regime_id: f40_seen_clean
+        split_role: SEEN
+        changed_parameter: measurement_noise
+        parameters: {measurement_noise: 0.0}
+      - regime_id: f40_unseen_noisy
+        split_role: UNSEEN
+        changed_parameter: measurement_noise
+        parameters: {measurement_noise: 0.1}
+  - world_id: lorenz96_twoscale_v2
+    family_id: lorenz96_two_scale
+    role: PRIMARY_MECHANISTIC
+    source_id: scoring_rules_l96
+    supporting_source_ids: [neural_gc]
+    adapter: LORENZ96_TWO_SCALE
+    dimension: 8
+    latent_dimension: 256
+    concepts: [slow_persistence, latent_fast_scale, slow_fast_coupling, propagation, shock]
+    downstream_mappings: [weather_multiscale, electricity_latent_demand, financial_latent_liquidity]
+    truth_capabilities: *complete_truth
+    graph: {kind: LORENZ96, directed: true}
+    generator:
+      {forcing: 20.0, slow_variables: 8, fast_variables_per_slow: 32,
+       coupling_h: 1.0, fast_amplitude_b: 10.0, time_scale_c: 10.0,
+       integration_step: 0.001, observation_interval: 0.2, burn_in_observations: 10}
+    regimes:
+      - regime_id: twoscale_seen_clean
+        split_role: SEEN
+        changed_parameter: measurement_noise
+        parameters: {measurement_noise: 0.0}
+      - regime_id: twoscale_unseen_noisy
+        split_role: UNSEEN
+        changed_parameter: measurement_noise
+        parameters: {measurement_noise: 0.1}
+  - world_id: gvar_predator_prey_v2
+    family_id: ecological_bipartite
+    role: ORACLE_AUXILIARY
+    source_id: gvar
+    adapter: GVAR_PREDATOR_PREY
+    dimension: 20
+    latent_dimension: 0
+    boundary_policy: DECLARED_ZERO_CLIP
+    concepts: [growth, signed_interaction, diffusion_scale, propagation, shock]
+    downstream_mappings: [population_dynamics, signed_financial_spillover]
+    truth_capabilities: *complete_truth
+    graph: {kind: PREDATOR_PREY_BLOCK, directed: true}
+    generator:
+      {prey_count: 10, predator_count: 10, parents_per_node: 2, alpha: 1.1,
+       beta: 0.2, gamma: 1.1, delta: 0.2, sigma: 0.1,
+       integration_step: 0.01, observation_interval: 0.1}
+    regimes:
+      - regime_id: ecology_seen_clean
+        split_role: SEEN
+        changed_parameter: dynamic_noise_scale
+        parameters: {dynamic_noise_scale: 0.1}
+      - regime_id: ecology_unseen_deterministic
+        split_role: UNSEEN
+        changed_parameter: dynamic_noise_scale
+        parameters: {dynamic_noise_scale: 0.0}
+  - world_id: corrected_cml_v2
+    family_id: coupled_map_auxiliary
+    role: ORACLE_AUXILIARY
+    source_id: interfere_cml
+    adapter: CORRECTED_CML
+    dimension: 8
+    latent_dimension: 0
+    concepts: [local_nonlinearity, coupling, propagation, shock]
+    downstream_mappings: [sensor_network, financial_network_stress]
+    truth_capabilities: *complete_truth
+    graph: {kind: RING, directed: false}
+    generator: {alpha: 2.0, sigma: 0.0, observations_per_step: 1}
+    regimes:
+      - regime_id: cml_seen_spatiotemporal
+        split_role: SEEN
+        changed_parameter: epsilon
+        parameters: {epsilon: 0.3}
+      - regime_id: cml_unseen_weak_coupling
+        split_role: UNSEEN
+        changed_parameter: epsilon
+        parameters: {epsilon: 0.1}

@@ -39,19 +39,13 @@ def gaussian_crps(mean: Tensor, scale: Tensor, target: Tensor) -> Tensor:
     density = torch.exp(-0.5 * standardized**2) / math.sqrt(2.0 * math.pi)
     distribution = 0.5 * (1.0 + torch.erf(standardized / math.sqrt(2.0)))
     return scale * (
-        standardized * (2.0 * distribution - 1.0)
-        + 2.0 * density
-        - 1.0 / math.sqrt(math.pi)
+        standardized * (2.0 * distribution - 1.0) + 2.0 * density - 1.0 / math.sqrt(math.pi)
     )
 
 
 def gaussian_nll(mean: Tensor, scale: Tensor, target: Tensor) -> Tensor:
     _validate_gaussian_inputs(mean, scale, target)
-    return (
-        torch.log(scale)
-        + 0.5 * ((target - mean) / scale) ** 2
-        + 0.5 * math.log(2.0 * math.pi)
-    )
+    return torch.log(scale) + 0.5 * ((target - mean) / scale) ** 2 + 0.5 * math.log(2.0 * math.pi)
 
 
 def summarize_gaussian(mean: Tensor, scale: Tensor, target: Tensor) -> MetricBundle:

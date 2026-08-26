@@ -19,17 +19,12 @@ def _common_paths(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--worlds",
         type=Path,
-        default=REPOSITORY_ROOT / "configs/stage1b/worlds_v1.yaml",
+        default=REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml",
     )
     parser.add_argument(
         "--qualification",
         type=Path,
-        default=REPOSITORY_ROOT / "configs/stage1b/qualification_v1.yaml",
-    )
-    parser.add_argument(
-        "--source-root",
-        type=Path,
-        default=REPOSITORY_ROOT / "data/third_party/interfere",
+        default=REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml",
     )
     parser.add_argument(
         "--artifact-root",
@@ -51,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     freeze.add_argument(
         "--receipt",
         type=Path,
-        default=REPOSITORY_ROOT / "artifacts/stage1b/qualification_v1_summary.json",
+        default=REPOSITORY_ROOT / "artifacts/stage1b/qualification_v2_summary.json",
     )
     freeze.add_argument(
         "--artifact-root",
@@ -72,14 +67,12 @@ def main() -> int:
             result = run_hardware_probe(
                 args.worlds,
                 args.qualification,
-                args.source_root,
                 args.artifact_root / "runtime",
             )
         elif args.command == "qualify":
             result = run_qualification(
                 args.worlds,
                 args.qualification,
-                args.source_root,
                 args.artifact_root,
             )
         else:

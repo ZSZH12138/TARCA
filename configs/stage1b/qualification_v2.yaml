@@ -1,0 +1,55 @@
+schema_version: 2.0.0
+qualification_id: stage1b-qualification-v2
+partitions: [QUAL_TRAIN, QUAL_TUNE, QUAL_SEEN, QUAL_UNSEEN]
+qualification_seeds: [104729, 130363, 155921]
+reserved_formal_seeds: [1729, 2718, 3141, 5772, 8111]
+history_length: 64
+horizon: 24
+horizon_groups: [[1, 6], [7, 12], [13, 24]]
+trajectory_length: 512
+warmup_steps: 0
+trajectories_per_partition:
+  QUAL_TRAIN: 24
+  QUAL_TUNE: 8
+  QUAL_SEEN: 12
+  QUAL_UNSEEN: 12
+models:
+  - model_id: patchtst_reference
+    adapter: PATCHTST_REFERENCE
+    d_model: 128
+    n_layers: 3
+    n_heads: 16
+    d_ff: 256
+    dropout: 0.1
+    batch_size: 64
+    max_epochs: 100
+    patience: 20
+    learning_rate: 0.0001
+    revin: true
+    patch_length: 16
+    patch_stride: 8
+  - model_id: itransformer_reference
+    adapter: ITRANSFORMER_REFERENCE
+    d_model: 512
+    n_layers: 3
+    n_heads: 8
+    d_ff: 512
+    dropout: 0.1
+    batch_size: 32
+    max_epochs: 100
+    patience: 20
+    learning_rate: 0.0001
+    revin: true
+var_search:
+  lag_orders: [1, 2, 4, 8, 16]
+  ridge: [0.000001, 0.001, 0.1]
+gate:
+  primary_metric: CRPS
+  bootstrap_replicates: 2000
+  confidence_level: 0.95
+  guardrail_relative_tolerance: 0.05
+  minimum_primary_families: 1
+  minimum_comparison_units: 40
+  minimum_win_rate: 0.65
+  minimum_skill_score: 0.0
+  require_seen_and_unseen_majority: true

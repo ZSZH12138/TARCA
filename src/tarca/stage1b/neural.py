@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Self, cast
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as functional
+from torch.nn import functional
 
 from tarca.contracts import (
     ForecastDistribution,
@@ -16,9 +17,23 @@ from tarca.contracts import (
     InterventionSpec,
     WindowBatch,
     validate_forecast_distribution,
+    validate_intervention_site,
     validate_intervention_spec,
     validate_window_batch,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationContext:
+    center: Tensor
+    scale: Tensor
+
+
+def _normalize_history(histories: Tensor) -> tuple[Tensor, NormalizationContext]:
+    center = histories.mean(dim=1, keepdim=True).detach()
+    variance = torch.var(histories, dim=1, keepdim=True, unbiased=False)
+    scale = torch.sqrt(variance + 1e-5).detach()
+    return (histories - center) / scale, NormalizationContext(center=center, scale=scale)
 
 
 class OperableNeuralPredictor(nn.Module, ABC):
@@ -30,9 +45,12 @@ class OperableNeuralPredictor(nn.Module, ABC):
         d_model: int,
         n_layers: int,
         n_heads: int,
+        d_ff: int,
         dropout: float,
     ) -> None:
         super().__init__()
+        if min(history_length, horizon, input_dimension, d_model, n_layers, n_heads, d_ff) <= 0:
+            raise ValueError("neural dimensions must be positive")
         if d_model % n_heads:
             raise ValueError("d_model must be divisible by n_heads")
         self.history_length = history_length
@@ -44,7 +62,7 @@ class OperableNeuralPredictor(nn.Module, ABC):
             nn.TransformerEncoderLayer(
                 d_model=d_model,
                 nhead=n_heads,
-                dim_feedforward=4 * d_model,
+                dim_feedforward=d_ff,
                 dropout=dropout,
                 activation="gelu",
                 batch_first=True,
@@ -53,7 +71,6 @@ class OperableNeuralPredictor(nn.Module, ABC):
             for _ in range(n_layers)
         )
         self.final_norm = nn.LayerNorm(d_model)
-        self.log_scale = nn.Parameter(torch.full((horizon, input_dimension), -1.0))
         self._frozen = False
 
     @property
@@ -61,20 +78,29 @@ class OperableNeuralPredictor(nn.Module, ABC):
     def adapter_name(self) -> str: ...
 
     @abstractmethod
-    def _tokenize(self, histories: Tensor) -> Tensor: ...
+    def _tokenize(self, normalized_histories: Tensor) -> Tensor: ...
 
     @abstractmethod
-    def _decode(self, representation: Tensor) -> Tensor: ...
+    def _apply_encoder_layer(self, tokens: Tensor, layer: nn.Module) -> Tensor: ...
+
+    @abstractmethod
+    def _decode(
+        self, representation: Tensor, context: NormalizationContext
+    ) -> tuple[Tensor, Tensor]: ...
 
     @abstractmethod
     def _site(self, site_name: str, layer: int | None) -> InterventionSite: ...
 
+    def _reset_adapter_parameters(self) -> None:
+        """Reset non-module adapter parameters after module resets."""
+
     def list_intervention_sites(self) -> tuple[InterventionSite, ...]:
-        return (
+        sites = (
             self._site("encoder.input", None),
             *(self._site(f"encoder.layer.{index}", index) for index in range(self.n_layers)),
             self._site("encoder.representation", None),
         )
+        return tuple(validate_intervention_site(site) for site in sites)
 
     @property
     def is_frozen(self) -> bool:
@@ -101,7 +127,7 @@ class OperableNeuralPredictor(nn.Module, ABC):
             reset = getattr(module, "reset_parameters", None)
             if callable(reset):
                 reset()
-        nn.init.constant_(self.log_scale, -1.0)
+        self._reset_adapter_parameters()
 
     def freeze(self) -> Self:
         self.eval()
@@ -116,7 +142,8 @@ class OperableNeuralPredictor(nn.Module, ABC):
         override_site: str | None = None,
         override_value: Tensor | None = None,
     ) -> tuple[ForecastDistribution, dict[str, Tensor]]:
-        tokens = self._tokenize(histories)
+        normalized, context = _normalize_history(histories)
+        tokens = self._tokenize(normalized)
         activations: dict[str, Tensor] = {"encoder.input": tokens}
         if override_site == "encoder.input":
             if override_value is None:
@@ -124,26 +151,23 @@ class OperableNeuralPredictor(nn.Module, ABC):
             tokens = override_value
             activations["encoder.input"] = tokens
         for index, layer in enumerate(self.layers):
-            tokens = layer(tokens)
+            tokens = self._apply_encoder_layer(tokens, layer)
             site_name = f"encoder.layer.{index}"
-            activations[site_name] = tokens
             if override_site == site_name:
                 if override_value is None:
                     raise ValueError("intervention override value is missing")
                 tokens = override_value
-                activations[site_name] = tokens
+            activations[site_name] = tokens
         representation = self.final_norm(tokens)
         if override_site == "encoder.representation":
             if override_value is None:
                 raise ValueError("intervention override value is missing")
             representation = override_value
         activations["encoder.representation"] = representation
-        mean = self._decode(representation)
-        scale = functional.softplus(self.log_scale).clamp_min(1e-4)
-        scale = scale.unsqueeze(0).expand(histories.shape[0], -1, -1)
+        mean, scale = self._decode(representation, context)
         distribution = ForecastDistribution(
             mean=mean,
-            scale=scale,
+            scale=scale.clamp_min(1e-4),
             quantiles=MappingProxyType({}),
             logits=None,
             samples=None,
@@ -184,8 +208,7 @@ class OperableNeuralPredictor(nn.Module, ABC):
         validate_window_batch(batch)
         approved = {site.site_name: site for site in self.list_intervention_sites()}
         if any(
-            site.site_name not in approved or approved[site.site_name] != site
-            for site in sites
+            site.site_name not in approved or approved[site.site_name] != site for site in sites
         ):
             raise ValueError("capture requested an undeclared intervention site")
         with torch.no_grad():
@@ -224,9 +247,7 @@ class OperableNeuralPredictor(nn.Module, ABC):
                 spec,
             )
             distribution, _ = self._forward_with_activations(
-                base.x,
-                override_site=site.site_name,
-                override_value=replacement,
+                base.x, override_site=site.site_name, override_value=replacement
             )
         return validate_forecast_distribution(
             ForecastDistribution(
@@ -265,12 +286,11 @@ class OperableNeuralPredictor(nn.Module, ABC):
         if basis is None or basis.shape[0] != base.shape[site.feature_axis]:
             raise ValueError("subspace basis does not match the site feature width")
         delta = source[selected] - base[selected]
-        projected = delta @ basis @ basis.transpose(0, 1)
-        replacement[selected] = base[selected] + projected
+        replacement[selected] = base[selected] + delta @ basis @ basis.transpose(0, 1)
         return replacement
 
 
-class SmallPatchTST(OperableNeuralPredictor):
+class PatchTSTReference(OperableNeuralPredictor):
     def __init__(
         self,
         history_length: int,
@@ -279,57 +299,69 @@ class SmallPatchTST(OperableNeuralPredictor):
         d_model: int,
         n_layers: int,
         n_heads: int,
+        d_ff: int,
         dropout: float,
-        patch_size: int = 4,
+        patch_length: int,
+        patch_stride: int,
     ) -> None:
         super().__init__(
-            history_length,
-            horizon,
-            input_dimension,
-            d_model,
-            n_layers,
-            n_heads,
-            dropout,
+            history_length, horizon, input_dimension, d_model, n_layers, n_heads, d_ff, dropout
         )
-        if self.history_length % patch_size:
-            raise ValueError("PatchTST history length must be divisible by patch_size")
-        self.patch_size = patch_size
-        self.patch_count = self.history_length // patch_size
-        self.input_projection = nn.Linear(patch_size * self.input_dimension, self.d_model)
-        self.position = nn.Parameter(torch.zeros(1, self.patch_count, self.d_model))
-        self.output_head = nn.Linear(self.d_model, self.horizon * self.input_dimension)
+        if patch_length > history_length or (history_length - patch_length) % patch_stride:
+            raise ValueError("PatchTST patches must exactly cover the history")
+        self.patch_length = patch_length
+        self.patch_stride = patch_stride
+        self.patch_count = 1 + (history_length - patch_length) // patch_stride
+        self.input_projection = nn.Linear(patch_length, d_model)
+        self.position = nn.Parameter(torch.zeros(1, 1, self.patch_count, d_model))
+        flattened = self.patch_count * d_model
+        self.mean_head = nn.Linear(flattened, horizon)
+        self.scale_head = nn.Linear(flattened, horizon)
+        nn.init.constant_(self.scale_head.bias, -1.0)
 
     @property
     def adapter_name(self) -> str:
-        return "SmallPatchTST"
+        return "PatchTSTReference"
 
-    def _tokenize(self, histories: Tensor) -> Tensor:
-        patches = histories.reshape(
-            histories.shape[0], self.patch_count, self.patch_size * self.input_dimension
-        )
+    def _reset_adapter_parameters(self) -> None:
+        nn.init.zeros_(self.position)
+        nn.init.constant_(self.scale_head.bias, -1.0)
+
+    def _tokenize(self, normalized_histories: Tensor) -> Tensor:
+        channels = normalized_histories.transpose(1, 2)
+        patches = channels.unfold(dimension=2, size=self.patch_length, step=self.patch_stride)
         return cast(Tensor, self.input_projection(patches) + self.position)
 
-    def _decode(self, representation: Tensor) -> Tensor:
-        pooled = representation.mean(dim=1)
-        decoded = self.output_head(pooled).reshape(
-            representation.shape[0], self.horizon, self.input_dimension
+    def _apply_encoder_layer(self, tokens: Tensor, layer: nn.Module) -> Tensor:
+        batch, variables, patches, features = tokens.shape
+        encoded = layer(tokens.reshape(batch * variables, patches, features))
+        return cast(Tensor, encoded.reshape(batch, variables, patches, features))
+
+    def _decode(
+        self, representation: Tensor, context: NormalizationContext
+    ) -> tuple[Tensor, Tensor]:
+        flattened = representation.flatten(start_dim=2)
+        normalized_mean = self.mean_head(flattened).transpose(1, 2)
+        normalized_scale = functional.softplus(self.scale_head(flattened)).transpose(1, 2)
+        return (
+            normalized_mean * context.scale + context.center,
+            normalized_scale * context.scale,
         )
-        return cast(Tensor, decoded)
 
     def _site(self, site_name: str, layer: int | None) -> InterventionSite:
         return InterventionSite(
             site_name=site_name,
             layer=layer,
-            tensor_rank=3,
+            tensor_rank=4,
             batch_axis=0,
-            variable_axis=None,
-            patch_axis=1,
-            feature_axis=2,
-            shape_template=(None, self.patch_count, self.d_model),
+            variable_axis=1,
+            patch_axis=2,
+            feature_axis=3,
+            shape_template=(None, self.input_dimension, self.patch_count, self.d_model),
         )
 
 
-class SmallITransformer(OperableNeuralPredictor):
+class ITransformerReference(OperableNeuralPredictor):
     def __init__(
         self,
         history_length: int,
@@ -338,33 +370,44 @@ class SmallITransformer(OperableNeuralPredictor):
         d_model: int,
         n_layers: int,
         n_heads: int,
+        d_ff: int,
         dropout: float,
     ) -> None:
         super().__init__(
-            history_length,
-            horizon,
-            input_dimension,
-            d_model,
-            n_layers,
-            n_heads,
-            dropout,
+            history_length, horizon, input_dimension, d_model, n_layers, n_heads, d_ff, dropout
         )
-        self.input_projection = nn.Linear(self.history_length, self.d_model)
-        self.variable_embedding = nn.Parameter(
-            torch.zeros(1, self.input_dimension, self.d_model)
-        )
-        self.output_head = nn.Linear(self.d_model, self.horizon)
+        self.input_projection = nn.Linear(history_length, d_model)
+        self.variable_embedding = nn.Parameter(torch.zeros(1, input_dimension, d_model))
+        self.mean_head = nn.Linear(d_model, horizon)
+        self.scale_head = nn.Linear(d_model, horizon)
+        nn.init.constant_(self.scale_head.bias, -1.0)
 
     @property
     def adapter_name(self) -> str:
-        return "SmallITransformer"
+        return "ITransformerReference"
 
-    def _tokenize(self, histories: Tensor) -> Tensor:
-        tokens = self.input_projection(histories.transpose(1, 2)) + self.variable_embedding
-        return cast(Tensor, tokens)
+    def _reset_adapter_parameters(self) -> None:
+        nn.init.zeros_(self.variable_embedding)
+        nn.init.constant_(self.scale_head.bias, -1.0)
 
-    def _decode(self, representation: Tensor) -> Tensor:
-        return cast(Tensor, self.output_head(representation).transpose(1, 2))
+    def _tokenize(self, normalized_histories: Tensor) -> Tensor:
+        return cast(
+            Tensor,
+            self.input_projection(normalized_histories.transpose(1, 2)) + self.variable_embedding,
+        )
+
+    def _apply_encoder_layer(self, tokens: Tensor, layer: nn.Module) -> Tensor:
+        return cast(Tensor, layer(tokens))
+
+    def _decode(
+        self, representation: Tensor, context: NormalizationContext
+    ) -> tuple[Tensor, Tensor]:
+        normalized_mean = self.mean_head(representation).transpose(1, 2)
+        normalized_scale = functional.softplus(self.scale_head(representation)).transpose(1, 2)
+        return (
+            normalized_mean * context.scale + context.center,
+            normalized_scale * context.scale,
+        )
 
     def _site(self, site_name: str, layer: int | None) -> InterventionSite:
         return InterventionSite(

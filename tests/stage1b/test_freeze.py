@@ -21,48 +21,48 @@ def test_freeze_fails_when_suite_gate_does_not_pass(tmp_path: Path) -> None:
     receipt["suite_decision"] = {
         "status": "FAIL",
         "passed_world_ids": [],
-        "failed_world_ids": ["network_cml_v1"],
+        "failed_world_ids": ["lorenz96_f10_v2"],
         "primary_families": [],
-        "failed_checks": ["all_primary_worlds"],
+        "failed_checks": ["independent_primary_families"],
     }
 
     with pytest.raises(FreezeRejected, match="suite gate"):
-        freeze_suite(receipt, tmp_path, version="v1")
+        freeze_suite(receipt, tmp_path, version="v2")
 
     assert not (tmp_path / "active.json").exists()
 
 
-def test_authorized_override_keeps_v1_and_moves_active_pointer(tmp_path: Path) -> None:
-    first = freeze_suite(passing_receipt(), tmp_path, version="v1")
+def test_authorized_override_keeps_v2_and_moves_active_pointer(tmp_path: Path) -> None:
+    first = freeze_suite(passing_receipt(), tmp_path, version="v2")
     second = freeze_suite(
-        passing_receipt("stage1b-qualification-v2"),
+        passing_receipt("stage1b-qualification-v3"),
         tmp_path,
-        version="v2",
+        version="v3",
         authorization=OverrideAuthorization(
             authorized_by="user",
             reason="User approved a new world-suite version",
-            prior_version="v1",
+            prior_version="v2",
         ),
     )
 
-    assert (tmp_path / "versions/v1/manifest.json").is_file()
     assert (tmp_path / "versions/v2/manifest.json").is_file()
-    assert load_active_pointer(tmp_path)["version"] == "v2"
-    assert first["version"] == "v1"
-    assert second["version"] == "v2"
+    assert (tmp_path / "versions/v3/manifest.json").is_file()
+    assert load_active_pointer(tmp_path)["version"] == "v3"
+    assert first["version"] == "v2"
+    assert second["version"] == "v3"
     assert verify_frozen_suite(tmp_path)["status"] == "PASS"
 
 
 def test_override_without_authorization_is_rejected(tmp_path: Path) -> None:
-    freeze_suite(passing_receipt(), tmp_path, version="v1")
+    freeze_suite(passing_receipt(), tmp_path, version="v2")
 
     with pytest.raises(FreezeRejected, match="authorization"):
-        freeze_suite(passing_receipt("stage1b-qualification-v2"), tmp_path, version="v2")
+        freeze_suite(passing_receipt("stage1b-qualification-v3"), tmp_path, version="v3")
 
 
 def test_frozen_manifest_detects_tampering(tmp_path: Path) -> None:
-    freeze_suite(passing_receipt(), tmp_path, version="v1")
-    manifest_path = tmp_path / "versions/v1/manifest.json"
+    freeze_suite(passing_receipt(), tmp_path, version="v2")
+    manifest_path = tmp_path / "versions/v2/manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["qualification_id"] = "tampered"
     manifest_path.chmod(0o644)

@@ -65,10 +65,7 @@ def test_normalizer_uses_qual_train_only() -> None:
 def test_window_lineage_stays_inside_owning_trajectory_and_partition() -> None:
     values = torch.arange(24, dtype=torch.float64).reshape(12, 2)
     split = build_qualification_split(
-        tuple(
-            _record(partition.value, partition, values)
-            for partition in QualificationPartition
-        )
+        tuple(_record(partition.value, partition, values) for partition in QualificationPartition)
     )
 
     dataset = prepare_dataset(split, history_length=4, horizon=2, stride=2)
@@ -92,9 +89,9 @@ def test_dataset_has_no_formal_test_surface() -> None:
 
 
 def test_real_world_generation_uses_all_qualification_partitions_deterministically() -> None:
-    suite = load_world_suite(REPOSITORY_ROOT / "configs/stage1b/worlds_v1.yaml")
+    suite = load_world_suite(REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml")
     qualification = load_qualification_config(
-        REPOSITORY_ROOT / "configs/stage1b/qualification_v1.yaml"
+        REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml"
     ).model_copy(
         update={
             "trajectory_length": 48,
@@ -107,19 +104,20 @@ def test_real_world_generation_uses_all_qualification_partitions_deterministical
             ),
         }
     )
-    world = build_world(suite.world("network_cml_v1"))
+    world = build_world(suite.world("corrected_cml_v2"))
+    source_commit = suite.source(world.config.source_id).commit
 
     first = generate_world_split(
         world,
         qualification,
         qualification_seed=104729,
-        source_commit=suite.sources[0].commit,
+        source_commit=source_commit,
     )
     second = generate_world_split(
         world,
         qualification,
         qualification_seed=104729,
-        source_commit=suite.sources[0].commit,
+        source_commit=source_commit,
     )
 
     assert len(first.records) == 4

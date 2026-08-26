@@ -1,0 +1,13 @@
+schema_version: 2.0.0
+verified_at: 2026-08-25
+runtime_code_owner: TARCA
+upstream_code_copied: false
+active_config: configs/stage1b/worlds_v2.yaml
+policy: Published equations and parameters are reimplemented locally; upstream files are hash-pinned evidence only.
+source_commits:
+  neural_gc: c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf
+  gvar: e06268f87fbe923580af14b2cab26399191747a6
+  scoring_rules_l96: 6f28942f6a703c2b52501d01258ca2708539f209
+  interfere_cml: adfa3f730019f17c3554dd7e0c181248f785bb8b
+  patchtst: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
+  itransformer: 4e938a1767106324dd753b2a44832bf870a0252e

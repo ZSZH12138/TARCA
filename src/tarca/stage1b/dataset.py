@@ -12,7 +12,7 @@ from tarca.stage1b.config import (
     QualificationPartition,
     RegimeSplitRole,
 )
-from tarca.stage1b.worlds import ExternalWorldAdapter, SimulationRequest
+from tarca.stage1b.worlds import PublishedWorldAdapter, SimulationRequest
 
 if TYPE_CHECKING:
     from tarca.stage1b.splits import QualificationSplit
@@ -197,7 +197,7 @@ def prepare_dataset(
 
 
 def _config_sha256(
-    world: ExternalWorldAdapter,
+    world: PublishedWorldAdapter,
     qualification: QualificationConfig,
 ) -> str:
     payload = {
@@ -219,7 +219,7 @@ def _trajectory_seed(
 
 
 def generate_world_split(
-    world: ExternalWorldAdapter,
+    world: PublishedWorldAdapter,
     qualification: QualificationConfig,
     qualification_seed: int,
     source_commit: str,
@@ -236,14 +236,10 @@ def generate_world_split(
     }
     regimes = {
         RegimeSplitRole.SEEN: tuple(
-            regime
-            for regime in world.config.regimes
-            if regime.split_role is RegimeSplitRole.SEEN
+            regime for regime in world.config.regimes if regime.split_role is RegimeSplitRole.SEEN
         ),
         RegimeSplitRole.UNSEEN: tuple(
-            regime
-            for regime in world.config.regimes
-            if regime.split_role is RegimeSplitRole.UNSEEN
+            regime for regime in world.config.regimes if regime.split_role is RegimeSplitRole.UNSEEN
         ),
     }
     config_sha256 = _config_sha256(world, qualification)
@@ -276,8 +272,7 @@ def generate_world_split(
             )
             identity = hashlib.sha256(
                 (
-                    f"{world.config.world_id}|{qualification_seed}|"
-                    f"{partition.value}|{index}|{seed}"
+                    f"{world.config.world_id}|{qualification_seed}|{partition.value}|{index}|{seed}"
                 ).encode()
             ).hexdigest()[:24]
             records.append(

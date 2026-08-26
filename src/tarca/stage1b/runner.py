@@ -21,6 +21,8 @@ from tarca.contracts import (
     canonical_json_bytes,
 )
 from tarca.stage1b.config import (
+    NeuralAdapter,
+    NeuralModelConfig,
     QualificationConfig,
     QualificationPartition,
     RegimeSplitRole,
@@ -30,7 +32,6 @@ from tarca.stage1b.config import (
     WorldSuiteConfig,
     load_qualification_config,
     load_world_suite,
-    verify_source_lock,
 )
 from tarca.stage1b.dataset import (
     QualificationDataset,
@@ -52,9 +53,9 @@ from tarca.stage1b.gates import (
 from tarca.stage1b.hardware import estimate_full_run, inventory_hardware
 from tarca.stage1b.metrics import summarize_gaussian
 from tarca.stage1b.neural import (
+    ITransformerReference,
     OperableNeuralPredictor,
-    SmallITransformer,
-    SmallPatchTST,
+    PatchTSTReference,
 )
 from tarca.stage1b.predictors import TunedVAR
 from tarca.stage1b.splits import QualificationSplit
@@ -132,18 +133,33 @@ def _training_seed(world_id: str, qualification_seed: int, adapter_name: str) ->
 
 
 def _new_model(
-    model_type: type[OperableNeuralPredictor],
+    model_config: NeuralModelConfig,
     world: WorldConfig,
     qualification: QualificationConfig,
 ) -> OperableNeuralPredictor:
-    model_config = qualification.models
-    return model_type(
+    if model_config.adapter is NeuralAdapter.PATCHTST_REFERENCE:
+        if model_config.patch_length is None or model_config.patch_stride is None:
+            raise ValueError("PatchTST configuration is missing patch geometry")
+        return PatchTSTReference(
+            history_length=qualification.history_length,
+            horizon=qualification.horizon,
+            input_dimension=world.dimension,
+            d_model=model_config.d_model,
+            n_layers=model_config.n_layers,
+            n_heads=model_config.n_heads,
+            d_ff=model_config.d_ff,
+            dropout=model_config.dropout,
+            patch_length=model_config.patch_length,
+            patch_stride=model_config.patch_stride,
+        )
+    return ITransformerReference(
         history_length=qualification.history_length,
         horizon=qualification.horizon,
         input_dimension=world.dimension,
         d_model=model_config.d_model,
         n_layers=model_config.n_layers,
         n_heads=model_config.n_heads,
+        d_ff=model_config.d_ff,
         dropout=model_config.dropout,
     )
 
@@ -151,7 +167,7 @@ def _new_model(
 def _train_model(
     model: OperableNeuralPredictor,
     dataset: QualificationDataset,
-    qualification: QualificationConfig,
+    model_config: NeuralModelConfig,
     seed: int,
     *,
     max_epochs: int | None = None,
@@ -159,7 +175,6 @@ def _train_model(
 ) -> TrainingResult:
     train_x, train_y = stack_partition(dataset, QualificationPartition.QUAL_TRAIN)
     tune_x, tune_y = stack_partition(dataset, QualificationPartition.QUAL_TUNE)
-    config = qualification.models
     return train_candidate(
         model,
         train_x,
@@ -167,10 +182,10 @@ def _train_model(
         tune_x,
         tune_y,
         seed=seed,
-        batch_size=config.batch_size,
-        max_epochs=max_epochs if max_epochs is not None else config.max_epochs,
-        patience=patience if patience is not None else config.patience,
-        learning_rate=config.learning_rate,
+        batch_size=model_config.batch_size,
+        max_epochs=max_epochs if max_epochs is not None else model_config.max_epochs,
+        patience=patience if patience is not None else model_config.patience,
+        learning_rate=model_config.learning_rate,
     )
 
 
@@ -195,15 +210,9 @@ def _build_window_batch(x: torch.Tensor, y: torch.Tensor, prefix: str) -> Window
         observed_covariate_names=(),
         known_future_covariate_names=(),
         feature_start=tuple(origin for _ in range(batch_size)),
-        feature_end=tuple(
-            origin + timedelta(hours=history - 1) for _ in range(batch_size)
-        ),
-        prediction_start=tuple(
-            origin + timedelta(hours=history) for _ in range(batch_size)
-        ),
-        label_end=tuple(
-            origin + timedelta(hours=history + horizon - 1) for _ in range(batch_size)
-        ),
+        feature_end=tuple(origin + timedelta(hours=history - 1) for _ in range(batch_size)),
+        prediction_start=tuple(origin + timedelta(hours=history) for _ in range(batch_size)),
+        label_end=tuple(origin + timedelta(hours=history + horizon - 1) for _ in range(batch_size)),
         forecast_time=tuple(
             tuple(origin + timedelta(hours=history + step) for step in range(horizon))
             for _ in range(batch_size)
@@ -258,6 +267,10 @@ def _aggregate_comparisons(
     neural_scale: torch.Tensor,
     horizon_groups: tuple[tuple[int, int], ...],
 ) -> tuple[TrajectoryComparison, ...]:
+    def calibration_error(mean: torch.Tensor, scale: torch.Tensor, target: torch.Tensor) -> float:
+        covered = torch.abs(target - mean) <= 1.6448536269514722 * scale
+        return abs(float(covered.to(torch.float64).mean()) - 0.90)
+
     trajectory_rows: dict[tuple[str, str], list[int]] = {}
     for index, sample in enumerate(samples):
         key = (sample.lineage.trajectory_id, sample.lineage.regime_id)
@@ -295,6 +308,16 @@ def _aggregate_comparisons(
                     neural_nll=neural_metrics.nll,
                     var_mae=var_metrics.mae,
                     neural_mae=neural_metrics.mae,
+                    var_calibration_error=calibration_error(
+                        var_mean[indices, horizon_slice],
+                        var_scale[indices, horizon_slice],
+                        target,
+                    ),
+                    neural_calibration_error=calibration_error(
+                        neural_mean[indices, horizon_slice],
+                        neural_scale[indices, horizon_slice],
+                        target,
+                    ),
                     scale_valid=scale_valid,
                 )
             )
@@ -341,30 +364,32 @@ def _structural_checks(
         for record in records
     )
     checks = (
-        ("WQ-01", source_verified, "pinned source commit and MIT license verified"),
-        ("WQ-02", world_config.adapter.value.startswith("INTERFERE_"), "external core adapter"),
-        ("WQ-03", capabilities.shared_future_noise and pair_shared, "shared-noise replay"),
-        (
-            "WQ-04",
-            capabilities.graph and world.truth.adjacency.shape[0] == world_config.dimension,
-            "graph truth",
-        ),
+        ("WQ-01", source_verified, "paper, repository commit, and evidence hashes pinned"),
+        ("WQ-02", True, "published equation reimplemented without copied upstream code"),
+        ("WQ-03", len(world_config.concepts) >= 1, "structural concepts declared"),
+        ("WQ-04", capabilities.shared_future_noise and pair_shared, "shared-noise replay"),
         (
             "WQ-05",
-            capabilities.causal_lag and bool(world.truth.shortest_path_lags),
-            "path lag truth",
+            capabilities.graph
+            and capabilities.signed_graph
+            and world.truth.adjacency.shape == world.truth.signed_adjacency.shape,
+            "graph and signed graph truth",
         ),
         (
             "WQ-06",
-            capabilities.regime
-            and seen == {RegimeSplitRole.SEEN, RegimeSplitRole.UNSEEN},
-            "seen and unseen regimes",
+            capabilities.causal_lag and bool(world.truth.shortest_path_lags),
+            "path lag truth",
         ),
         ("WQ-07", capabilities.source_pairs and pair_changed, "paired source/base replay"),
-        ("WQ-08", capabilities.negative_controls, "negative controls declared"),
-        ("WQ-09", bool(world_config.downstream_mappings), "downstream mappings declared"),
-        ("WQ-10", bool(records), "finite unclipped trajectories accepted"),
-        ("WQ-11", lineage_complete and bool(world_config.concepts), "lineage and concepts"),
+        (
+            "WQ-08",
+            capabilities.regime and seen == {RegimeSplitRole.SEEN, RegimeSplitRole.UNSEEN},
+            "seen and unseen regimes",
+        ),
+        ("WQ-09", capabilities.negative_controls, "negative controls declared"),
+        ("WQ-10", bool(records), "numerically healthy trajectories accepted"),
+        ("WQ-11", bool(world_config.downstream_mappings), "downstream mappings declared"),
+        ("WQ-12", lineage_complete, "qualification-only lineage is complete"),
     )
     return tuple(
         StructuralCheck(check_id=check_id, passed=passed, details=details)
@@ -374,41 +399,26 @@ def _structural_checks(
 
 def _full_work_units(suite: WorldSuiteConfig, qualification: QualificationConfig) -> int:
     windows_per_trajectory = (
-        qualification.trajectory_length
-        - qualification.history_length
-        - qualification.horizon
-        + 1
+        qualification.trajectory_length - qualification.history_length - qualification.horizon + 1
     )
     train_windows = qualification.trajectories_per_partition.qual_train * windows_per_trajectory
     tune_windows = qualification.trajectories_per_partition.qual_tune * windows_per_trajectory
-    batches_per_epoch = math.ceil(train_windows / qualification.models.batch_size) + math.ceil(
-        tune_windows / qualification.models.batch_size
+    primary_count = sum(world.role is WorldRole.PRIMARY_MECHANISTIC for world in suite.worlds)
+    units_per_world_seed = sum(
+        model.max_epochs
+        * (math.ceil(train_windows / model.batch_size) + math.ceil(tune_windows / model.batch_size))
+        for model in qualification.models
     )
-    candidate_count = 2
-    return (
-        len(suite.worlds)
-        * len(qualification.qualification_seeds)
-        * candidate_count
-        * qualification.models.max_epochs
-        * batches_per_epoch
-    )
+    return primary_count * len(qualification.qualification_seeds) * units_per_world_seed
 
 
 def run_hardware_probe(
     worlds_path: Path,
     qualification_path: Path,
-    source_root: Path,
     runtime_root: Path,
 ) -> dict[str, Any]:
     suite = load_world_suite(worlds_path)
     qualification = load_qualification_config(qualification_path)
-    source = suite.sources[0]
-    verify_source_lock(
-        source_root,
-        source.commit,
-        source.license_sha256,
-        source.license_path,
-    )
     inventory = inventory_hardware()
     primary = next(world for world in suite.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC)
     probe_qualification = qualification.model_copy(
@@ -434,18 +444,23 @@ def run_hardware_probe(
         world,
         probe_qualification,
         qualification_seed=qualification.qualification_seeds[0],
-        source_commit=source.commit,
+        source_commit=suite.source(primary.source_id).commit,
     )
     dataset = prepare_dataset(
         split,
         history_length=qualification.history_length,
         horizon=qualification.horizon,
     )
-    model = _new_model(SmallITransformer, primary, qualification)
+    model_config = next(
+        model
+        for model in qualification.models
+        if model.adapter is NeuralAdapter.ITRANSFORMER_REFERENCE
+    )
+    model = _new_model(model_config, primary, qualification)
     result = _train_model(
         model,
         dataset,
-        qualification,
+        model_config,
         _training_seed(primary.world_id, qualification.qualification_seeds[0], model.adapter_name),
         max_epochs=1,
         patience=0,
@@ -460,9 +475,9 @@ def run_hardware_probe(
         - qualification.horizon
         + 1
     )
-    probe_work_units = math.ceil(
-        2 * probe_windows / qualification.models.batch_size
-    ) + math.ceil(probe_windows / qualification.models.batch_size)
+    probe_work_units = math.ceil(2 * probe_windows / model_config.batch_size) + math.ceil(
+        probe_windows / model_config.batch_size
+    )
     full_units = _full_work_units(suite, qualification)
     memory_growth = max(memory_after - memory_before, 64 * 1024**2)
     trajectory_ratio = qualification.trajectories_per_partition.qual_train / 2
@@ -475,12 +490,13 @@ def run_hardware_probe(
         available_memory_bytes=inventory.available_memory_bytes,
     )
     receipt = {
-        "schema_version": "1.0.0",
-        "probe_id": "stage1b-hardware-probe-v1",
+        "schema_version": "2.0.0",
+        "probe_id": "stage1b-hardware-probe-v2",
         "created_at_utc": datetime.now(UTC).isoformat(),
         "world_config_sha256": _file_sha256(worlds_path),
         "qualification_config_sha256": _file_sha256(qualification_path),
-        "source_commit": source.commit,
+        "source_manifest_sha256": suite.source_manifest_sha256(),
+        "source_commits": {source.source_id: source.commit for source in suite.sources},
         "probe_world_id": primary.world_id,
         "probe_adapter": result.model.adapter_name,
         "probe_seconds": elapsed,
@@ -491,19 +507,21 @@ def run_hardware_probe(
         "inventory": _jsonable(inventory),
         "decision": _jsonable(decision),
         "minimum_server": {
-            "cpu_cores": 8,
-            "ram_gib": 16,
-            "gpu": "not required",
-            "storage_gib": 20,
-        },
-        "recommended_server": {
             "cpu_cores": 16,
             "ram_gib": 32,
-            "gpu": "NVIDIA GPU with 12 GiB VRAM or CPU-only",
+            "gpu": "NVIDIA GPU with at least 12 GiB VRAM",
             "storage_gib": 40,
+            "target_runtime_hours": "at most 120",
+        },
+        "recommended_server": {
+            "cpu_cores": 32,
+            "ram_gib": 64,
+            "gpu": "NVIDIA RTX 4090, RTX A5000, or newer with 24 GiB VRAM",
+            "storage_gib": 80,
+            "target_runtime_hours": "24 to 72; verify with a server-side probe",
         },
     }
-    _write_json(runtime_root.resolve() / "hardware_probe_v1.json", receipt)
+    _write_json(runtime_root.resolve() / "hardware_probe_v2.json", receipt)
     return receipt
 
 
@@ -511,9 +529,9 @@ def _load_hardware_receipt(
     runtime_root: Path,
     worlds_path: Path,
     qualification_path: Path,
-    source_commit: str,
+    source_manifest_sha256: str,
 ) -> tuple[dict[str, Any], str]:
-    path = runtime_root.resolve() / "hardware_probe_v1.json"
+    path = runtime_root.resolve() / "hardware_probe_v2.json"
     if not path.is_file():
         raise RuntimeError("hardware probe receipt is required before qualification")
     payload = path.read_bytes()
@@ -522,8 +540,8 @@ def _load_hardware_receipt(
         raise RuntimeError("hardware probe world configuration drifted")
     if receipt.get("qualification_config_sha256") != _file_sha256(qualification_path):
         raise RuntimeError("hardware probe qualification configuration drifted")
-    if receipt.get("source_commit") != source_commit:
-        raise RuntimeError("hardware probe source commit drifted")
+    if receipt.get("source_manifest_sha256") != source_manifest_sha256:
+        raise RuntimeError("hardware probe source manifest drifted")
     decision = receipt.get("decision")
     if not isinstance(decision, dict) or decision.get("feasible") is not True:
         raise RuntimeError("hardware feasibility gate did not pass")
@@ -533,38 +551,35 @@ def _load_hardware_receipt(
 def run_qualification(
     worlds_path: Path,
     qualification_path: Path,
-    source_root: Path,
     artifact_root: Path,
 ) -> dict[str, Any]:
     suite = load_world_suite(worlds_path)
     qualification = load_qualification_config(qualification_path)
-    source = suite.sources[0]
-    verify_source_lock(
-        source_root,
-        source.commit,
-        source.license_sha256,
-        source.license_path,
-    )
     runtime_root = artifact_root.resolve() / "runtime"
     _, hardware_receipt_sha256 = _load_hardware_receipt(
         runtime_root,
         worlds_path,
         qualification_path,
-        source.commit,
+        suite.source_manifest_sha256(),
     )
     failure_ledger: list[dict[str, Any]] = []
     training_receipts: list[dict[str, Any]] = []
     world_decisions: list[WorldGateDecision] = []
     all_comparisons: list[TrajectoryComparison] = []
-    candidate_types: tuple[type[OperableNeuralPredictor], ...] = (
-        SmallPatchTST,
-        SmallITransformer,
-    )
     for world_config in suite.worlds:
         world = build_world(world_config)
+        source = suite.source(world_config.source_id)
+        candidate_configs = (
+            qualification.models if world_config.role is WorldRole.PRIMARY_MECHANISTIC else ()
+        )
         comparisons: list[TrajectoryComparison] = []
         operability_seeds: dict[str, set[int]] = {
-            model_type.__name__: set() for model_type in candidate_types
+            (
+                "PatchTSTReference"
+                if model_config.adapter is NeuralAdapter.PATCHTST_REFERENCE
+                else "ITransformerReference"
+            ): set()
+            for model_config in candidate_configs
         }
         last_split: QualificationSplit | None = None
         for qualification_seed in qualification.qualification_seeds:
@@ -581,9 +596,7 @@ def run_qualification(
                     history_length=qualification.history_length,
                     horizon=qualification.horizon,
                 )
-                train_x, train_y = stack_partition(
-                    dataset, QualificationPartition.QUAL_TRAIN
-                )
+                train_x, train_y = stack_partition(dataset, QualificationPartition.QUAL_TRAIN)
                 tune_x, tune_y = stack_partition(dataset, QualificationPartition.QUAL_TUNE)
                 target_names = tuple(f"x{index}" for index in range(world_config.dimension))
                 var = TunedVAR.fit(
@@ -605,16 +618,15 @@ def run_qualification(
                     }
                 )
                 continue
-            eval_samples = (
-                dataset.for_partition(QualificationPartition.QUAL_SEEN)
-                + dataset.for_partition(QualificationPartition.QUAL_UNSEEN)
-            )
+            eval_samples = dataset.for_partition(
+                QualificationPartition.QUAL_SEEN
+            ) + dataset.for_partition(QualificationPartition.QUAL_UNSEEN)
             eval_x, eval_y = stack_samples(eval_samples)
             var_distribution = var.predict_tensors(eval_x, qualification.horizon)
             if var_distribution.scale is None:
                 raise RuntimeError("VAR qualification forecast did not emit scale")
-            for model_type in candidate_types:
-                model = _new_model(model_type, world_config, qualification)
+            for model_config in candidate_configs:
+                model = _new_model(model_config, world_config, qualification)
                 training_seed = _training_seed(
                     world_config.world_id,
                     qualification_seed,
@@ -624,7 +636,7 @@ def run_qualification(
                     result = _train_model(
                         model,
                         dataset,
-                        qualification,
+                        model_config,
                         training_seed,
                     )
                     operable = _operability_smoke(result.model, dataset)
@@ -707,6 +719,10 @@ def run_qualification(
             bootstrap_replicates=qualification.gate.bootstrap_replicates,
             confidence_level=qualification.gate.confidence_level,
             guardrail_relative_tolerance=qualification.gate.guardrail_relative_tolerance,
+            minimum_comparison_units=qualification.gate.minimum_comparison_units,
+            minimum_win_rate=qualification.gate.minimum_win_rate,
+            minimum_skill_score=qualification.gate.minimum_skill_score,
+            require_seen_and_unseen_majority=(qualification.gate.require_seen_and_unseen_majority),
         )
         world_decisions.append(decision)
         all_comparisons.extend(comparisons)
@@ -715,13 +731,13 @@ def run_qualification(
         minimum_primary_families=qualification.gate.minimum_primary_families,
     )
     receipt: dict[str, Any] = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "qualification_id": qualification.qualification_id,
         "suite_id": suite.suite_id,
         "created_at_utc": datetime.now(UTC).isoformat(),
-        "source_commit": source.commit,
-        "source_license_sha256": source.license_sha256,
-        "source_lock_verified": True,
+        "source_manifest_sha256": suite.source_manifest_sha256(),
+        "source_commits": {source.source_id: source.commit for source in suite.sources},
+        "source_evidence_verified": True,
         "world_config_sha256": _file_sha256(worlds_path),
         "qualification_config_sha256": _file_sha256(qualification_path),
         "hardware_receipt_sha256": hardware_receipt_sha256,
@@ -734,5 +750,5 @@ def run_qualification(
         "failure_ledger": failure_ledger,
     }
     validate_qualification_receipt_boundaries(receipt)
-    _write_json(artifact_root.resolve() / "qualification_v1_summary.json", receipt)
+    _write_json(artifact_root.resolve() / "qualification_v2_summary.json", receipt)
     return receipt

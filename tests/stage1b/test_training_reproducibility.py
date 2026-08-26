@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from tarca.stage1b.neural import SmallITransformer
+from tarca.stage1b.neural import ITransformerReference
 from tarca.stage1b.training import train_candidate
 
 
@@ -13,14 +13,15 @@ def test_same_seed_produces_identical_receipt_and_predictions() -> None:
     tune_x = torch.randn(8, 8, 3, generator=generator)
     tune_y = tune_x[:, -1:, :].repeat(1, 2, 1) ** 2
 
-    def model() -> SmallITransformer:
-        return SmallITransformer(
+    def model() -> ITransformerReference:
+        return ITransformerReference(
             history_length=8,
             horizon=2,
             input_dimension=3,
             d_model=12,
             n_layers=1,
             n_heads=3,
+            d_ff=24,
             dropout=0.0,
         )
 
@@ -48,7 +49,6 @@ def test_same_seed_produces_identical_receipt_and_predictions() -> None:
         patience=1,
         learning_rate=1e-3,
     )
-
     assert first.receipt == second.receipt
     torch.testing.assert_close(
         first.model.forward_distribution(tune_x).mean,

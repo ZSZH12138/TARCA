@@ -140,9 +140,9 @@ class TunedVAR:
             best.lag,
             tune_y.shape[1],
         )
-        residual_scale = (tune_y.to(torch.float64) - tune_mean).std(
-            dim=0, unbiased=False
-        ).clamp_min(1e-4)
+        residual_scale = (
+            (tune_y.to(torch.float64) - tune_mean).std(dim=0, unbiased=False).clamp_min(1e-4)
+        )
         return cls(
             coefficients=best.coefficients,
             intercept=best.intercept,

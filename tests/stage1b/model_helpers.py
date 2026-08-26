@@ -18,9 +18,7 @@ def window_batch(
     feature_start = tuple(origin for _ in range(batch_size))
     feature_end = tuple(origin + timedelta(hours=history - 1) for _ in range(batch_size))
     prediction_start = tuple(origin + timedelta(hours=history) for _ in range(batch_size))
-    label_end = tuple(
-        origin + timedelta(hours=history + horizon - 1) for _ in range(batch_size)
-    )
+    label_end = tuple(origin + timedelta(hours=history + horizon - 1) for _ in range(batch_size))
     forecast_time = tuple(
         tuple(origin + timedelta(hours=history + step) for step in range(horizon))
         for _ in range(batch_size)

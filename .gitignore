@@ -19,6 +19,7 @@ Thumbs.db
 /data/
 checkpoints/
 artifacts/**/runtime/
+/artifacts/test-tmp-*/
 
 # Stage 0 的小型合同和 Gate artifact 应保留。
 !artifacts/stage0/

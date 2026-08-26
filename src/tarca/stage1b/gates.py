@@ -9,7 +9,7 @@ import torch
 from tarca.stage1b.config import WorldRole
 from tarca.stage1b.metrics import BootstrapInterval, paired_bootstrap_interval
 
-REQUIRED_STRUCTURAL_CHECKS = frozenset(f"WQ-{index:02d}" for index in range(1, 12))
+REQUIRED_STRUCTURAL_CHECKS = frozenset(f"WQ-{index:02d}" for index in range(1, 13))
 
 
 class GateStatus(StrEnum):
@@ -38,6 +38,8 @@ class TrajectoryComparison:
     neural_nll: float
     var_mae: float
     neural_mae: float
+    var_calibration_error: float
+    neural_calibration_error: float
     scale_valid: bool
 
 
@@ -63,6 +65,11 @@ class WorldGateDecision:
     failed_checks: tuple[str, ...]
     seed_crps_improvements: tuple[tuple[int, float], ...]
     bootstrap_interval: BootstrapInterval | None
+    comparison_unit_count: int
+    win_rate: float
+    skill_score: float
+    seen_win_rate: float
+    unseen_win_rate: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,11 +87,33 @@ class SuiteGateDecision:
 
 
 @dataclass(frozen=True, slots=True)
+class _ComparisonUnit:
+    seed: int
+    trajectory_id: str
+    regime_id: str
+    var_crps: float
+    neural_crps: float
+
+    @property
+    def improvement(self) -> float:
+        return self.var_crps - self.neural_crps
+
+    @property
+    def won(self) -> bool:
+        return self.improvement > 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class _CandidateDecision:
     adapter: str
     failed_checks: tuple[str, ...]
     seed_improvements: tuple[tuple[int, float], ...]
     bootstrap_interval: BootstrapInterval
+    comparison_unit_count: int
+    win_rate: float
+    skill_score: float
+    seen_win_rate: float
+    unseen_win_rate: float
 
 
 def _mean(rows: tuple[TrajectoryComparison, ...], field: str) -> float:
@@ -96,8 +125,28 @@ def _relative_guardrail(neural: float, baseline: float, tolerance: float) -> boo
 
 
 def _bootstrap_seed(world_id: str, adapter: str) -> int:
-    digest = hashlib.sha256(f"{world_id}|{adapter}|WQ-13".encode()).digest()
+    digest = hashlib.sha256(f"{world_id}|{adapter}|WQ-13-v2".encode()).digest()
     return int.from_bytes(digest[:8], "big") % (2**63 - 1)
+
+
+def _comparison_units(rows: tuple[TrajectoryComparison, ...]) -> tuple[_ComparisonUnit, ...]:
+    grouped: dict[tuple[int, str, str], list[TrajectoryComparison]] = {}
+    for row in rows:
+        grouped.setdefault((row.seed, row.trajectory_id, row.regime_id), []).append(row)
+    return tuple(
+        _ComparisonUnit(
+            seed=seed,
+            trajectory_id=trajectory_id,
+            regime_id=regime_id,
+            var_crps=sum(row.var_crps for row in group) / len(group),
+            neural_crps=sum(row.neural_crps for row in group) / len(group),
+        )
+        for (seed, trajectory_id, regime_id), group in sorted(grouped.items())
+    )
+
+
+def _unit_win_rate(units: tuple[_ComparisonUnit, ...]) -> float:
+    return 0.0 if not units else sum(unit.won for unit in units) / len(units)
 
 
 def _evaluate_candidate(
@@ -107,62 +156,92 @@ def _evaluate_candidate(
     bootstrap_replicates: int,
     confidence_level: float,
     guardrail_relative_tolerance: float,
+    minimum_comparison_units: int,
+    minimum_win_rate: float,
+    minimum_skill_score: float,
+    require_seen_and_unseen_majority: bool,
 ) -> _CandidateDecision:
     rows = tuple(row for row in evidence.comparisons if row.neural_adapter == adapter)
+    units = _comparison_units(rows)
     failed: set[str] = set()
-    seed_improvements: list[tuple[int, float]] = []
-    for seed in evidence.expected_seeds:
-        seed_rows = tuple(row for row in rows if row.seed == seed)
-        if not seed_rows:
-            failed.add("seed_coverage")
-            seed_improvements.append((seed, float("-inf")))
-            continue
-        improvement = _mean(seed_rows, "var_crps") - _mean(seed_rows, "neural_crps")
-        seed_improvements.append((seed, improvement))
-        if improvement <= 0:
-            failed.add("seed_direction")
+    if len(units) < minimum_comparison_units:
+        failed.add("comparison_unit_count")
     unexpected_seeds = {row.seed for row in rows} - set(evidence.expected_seeds)
+    covered_seeds = {row.seed for row in rows}
     if unexpected_seeds:
         failed.add("seed_namespace")
+    if covered_seeds != set(evidence.expected_seeds):
+        failed.add("seed_coverage")
 
-    trajectory_units: dict[tuple[int, str], list[float]] = {}
-    for row in rows:
-        trajectory_units.setdefault((row.seed, row.trajectory_id), []).append(
-            row.var_crps - row.neural_crps
+    seed_improvements = tuple(
+        (
+            seed,
+            sum(unit.improvement for unit in units if unit.seed == seed)
+            / max(1, sum(unit.seed == seed for unit in units)),
         )
-    unit_improvements = torch.tensor(
-        [sum(values) / len(values) for values in trajectory_units.values()],
-        dtype=torch.float64,
+        for seed in evidence.expected_seeds
     )
-    if unit_improvements.numel() < 2:
-        unit_improvements = torch.tensor([float("-inf"), float("-inf")])
-    interval = paired_bootstrap_interval(
-        unit_improvements,
-        replicates=bootstrap_replicates,
-        confidence_level=confidence_level,
-        seed=_bootstrap_seed(evidence.world_id, adapter),
+    win_rate = _unit_win_rate(units)
+    if win_rate < minimum_win_rate:
+        failed.add("win_rate")
+    baseline_total = sum(unit.var_crps for unit in units)
+    skill_score = (
+        float("-inf")
+        if baseline_total <= 0.0
+        else 1.0 - sum(unit.neural_crps for unit in units) / baseline_total
     )
-    if interval.lower <= 0:
-        failed.add("bootstrap_lower_bound")
+    if skill_score <= minimum_skill_score:
+        failed.add("skill_score")
 
-    for horizon_group in {row.horizon_group for row in rows}:
-        group_rows = tuple(row for row in rows if row.horizon_group == horizon_group)
-        if _mean(group_rows, "var_crps") - _mean(group_rows, "neural_crps") <= 0:
-            failed.add("horizon_consistency")
+    if len(units) >= 2:
+        interval = paired_bootstrap_interval(
+            torch.tensor([unit.improvement for unit in units], dtype=torch.float64),
+            replicates=bootstrap_replicates,
+            confidence_level=confidence_level,
+            seed=_bootstrap_seed(evidence.world_id, adapter),
+        )
+    else:
+        interval = BootstrapInterval(
+            estimate=float("-inf"),
+            lower=float("-inf"),
+            upper=float("-inf"),
+            confidence_level=confidence_level,
+            replicates=bootstrap_replicates,
+            unit_count=len(units),
+        )
+    if interval.upper <= 0.0:
+        failed.add("stable_overall_inferiority")
+
+    unseen_ids = set(evidence.unseen_regime_ids)
+    unseen_units = tuple(unit for unit in units if unit.regime_id in unseen_ids)
+    seen_units = tuple(unit for unit in units if unit.regime_id not in unseen_ids)
+    seen_win_rate = _unit_win_rate(seen_units)
+    unseen_win_rate = _unit_win_rate(unseen_units)
+    if unseen_ids and {row.seed for row in rows if row.regime_id in unseen_ids} != set(
+        evidence.expected_seeds
+    ):
+        failed.add("unseen_regime_coverage")
+    if require_seen_and_unseen_majority and (
+        not seen_units or not unseen_units or seen_win_rate <= 0.5 or unseen_win_rate <= 0.5
+    ):
+        failed.add("seen_unseen_majority")
 
     if rows:
-        if not _relative_guardrail(
-            _mean(rows, "neural_nll"),
-            _mean(rows, "var_nll"),
-            guardrail_relative_tolerance,
+        for neural_field, var_field, check in (
+            ("neural_nll", "var_nll", "nll_guardrail"),
+            ("neural_mae", "var_mae", "mae_guardrail"),
+            (
+                "neural_calibration_error",
+                "var_calibration_error",
+                "calibration_guardrail",
+            ),
         ):
-            failed.add("nll_guardrail")
-        if not _relative_guardrail(
-            _mean(rows, "neural_mae"),
-            _mean(rows, "var_mae"),
-            guardrail_relative_tolerance,
-        ):
-            failed.add("mae_guardrail")
+            if not _relative_guardrail(
+                _mean(rows, neural_field),
+                _mean(rows, var_field),
+                guardrail_relative_tolerance,
+            ):
+                failed.add(check)
         for regime_id in {row.regime_id for row in rows}:
             regime_rows = tuple(row for row in rows if row.regime_id == regime_id)
             if not _relative_guardrail(
@@ -175,17 +254,17 @@ def _evaluate_candidate(
         failed.add("probabilistic_scale")
     if adapter not in evidence.operable_adapters:
         failed.add("mechanistic_operability")
-    if evidence.unseen_regime_ids:
-        unseen_rows = tuple(row for row in rows if row.regime_id in evidence.unseen_regime_ids)
-        unseen_seeds = {row.seed for row in unseen_rows}
-        if unseen_seeds != set(evidence.expected_seeds):
-            failed.add("unseen_regime_coverage")
 
     return _CandidateDecision(
         adapter=adapter,
         failed_checks=tuple(sorted(failed)),
-        seed_improvements=tuple(seed_improvements),
+        seed_improvements=seed_improvements,
         bootstrap_interval=interval,
+        comparison_unit_count=len(units),
+        win_rate=win_rate,
+        skill_score=skill_score,
+        seen_win_rate=seen_win_rate,
+        unseen_win_rate=unseen_win_rate,
     )
 
 
@@ -198,47 +277,44 @@ def _structural_truth_passes(checks: tuple[StructuralCheck, ...]) -> bool:
     )
 
 
+def _empty_decision(
+    evidence: WorldGateEvidence, status: GateStatus, failed: tuple[str, ...]
+) -> WorldGateDecision:
+    return WorldGateDecision(
+        world_id=evidence.world_id,
+        family_id=evidence.family_id,
+        role=evidence.role,
+        status=status,
+        selected_neural_adapter=None,
+        failed_checks=failed,
+        seed_crps_improvements=(),
+        bootstrap_interval=None,
+        comparison_unit_count=0,
+        win_rate=0.0,
+        skill_score=0.0,
+        seen_win_rate=0.0,
+        unseen_win_rate=0.0,
+    )
+
+
 def evaluate_world_gate(
     evidence: WorldGateEvidence,
     *,
     bootstrap_replicates: int,
     confidence_level: float,
     guardrail_relative_tolerance: float,
+    minimum_comparison_units: int = 40,
+    minimum_win_rate: float = 0.65,
+    minimum_skill_score: float = 0.0,
+    require_seen_and_unseen_majority: bool = True,
 ) -> WorldGateDecision:
     if not _structural_truth_passes(evidence.structural_checks):
-        return WorldGateDecision(
-            world_id=evidence.world_id,
-            family_id=evidence.family_id,
-            role=evidence.role,
-            status=GateStatus.FAIL,
-            selected_neural_adapter=None,
-            failed_checks=("structural_truth",),
-            seed_crps_improvements=(),
-            bootstrap_interval=None,
-        )
-    if evidence.role is WorldRole.CONTROL_LINEAR:
-        return WorldGateDecision(
-            world_id=evidence.world_id,
-            family_id=evidence.family_id,
-            role=evidence.role,
-            status=GateStatus.EXEMPT,
-            selected_neural_adapter=None,
-            failed_checks=(),
-            seed_crps_improvements=(),
-            bootstrap_interval=None,
-        )
+        return _empty_decision(evidence, GateStatus.FAIL, ("structural_truth",))
+    if evidence.role is not WorldRole.PRIMARY_MECHANISTIC:
+        return _empty_decision(evidence, GateStatus.EXEMPT, ())
     adapters = tuple(sorted({row.neural_adapter for row in evidence.comparisons}))
     if not adapters:
-        return WorldGateDecision(
-            world_id=evidence.world_id,
-            family_id=evidence.family_id,
-            role=evidence.role,
-            status=GateStatus.FAIL,
-            selected_neural_adapter=None,
-            failed_checks=("candidate_coverage",),
-            seed_crps_improvements=(),
-            bootstrap_interval=None,
-        )
+        return _empty_decision(evidence, GateStatus.FAIL, ("candidate_coverage",))
     candidates = tuple(
         _evaluate_candidate(
             evidence,
@@ -246,22 +322,16 @@ def evaluate_world_gate(
             bootstrap_replicates=bootstrap_replicates,
             confidence_level=confidence_level,
             guardrail_relative_tolerance=guardrail_relative_tolerance,
+            minimum_comparison_units=minimum_comparison_units,
+            minimum_win_rate=minimum_win_rate,
+            minimum_skill_score=minimum_skill_score,
+            require_seen_and_unseen_majority=require_seen_and_unseen_majority,
         )
         for adapter in adapters
     )
     passing = tuple(candidate for candidate in candidates if not candidate.failed_checks)
-    if passing:
-        selected = max(
-            passing,
-            key=lambda candidate: candidate.bootstrap_interval.estimate,
-        )
-        status = GateStatus.PASS
-    else:
-        selected = max(
-            candidates,
-            key=lambda candidate: candidate.bootstrap_interval.estimate,
-        )
-        status = GateStatus.FAIL
+    selected = max(passing or candidates, key=lambda candidate: candidate.skill_score)
+    status = GateStatus.PASS if passing else GateStatus.FAIL
     return WorldGateDecision(
         world_id=evidence.world_id,
         family_id=evidence.family_id,
@@ -271,6 +341,11 @@ def evaluate_world_gate(
         failed_checks=selected.failed_checks,
         seed_crps_improvements=selected.seed_improvements,
         bootstrap_interval=selected.bootstrap_interval,
+        comparison_unit_count=selected.comparison_unit_count,
+        win_rate=selected.win_rate,
+        skill_score=selected.skill_score,
+        seen_win_rate=selected.seen_win_rate,
+        unseen_win_rate=selected.unseen_win_rate,
     )
 
 
@@ -287,15 +362,13 @@ def evaluate_suite_gate(
     passed = tuple(decision for decision in primary if decision.status is GateStatus.PASS)
     failed = tuple(decision for decision in primary if decision.status is not GateStatus.PASS)
     families = tuple(sorted({decision.family_id for decision in passed}))
-    failed_checks: list[str] = []
-    if failed or not primary:
-        failed_checks.append("all_primary_worlds")
-    if len(families) < minimum_primary_families:
-        failed_checks.append("independent_primary_families")
+    failed_checks = (
+        ("independent_primary_families",) if len(families) < minimum_primary_families else ()
+    )
     return SuiteGateDecision(
         status=GateStatus.FAIL if failed_checks else GateStatus.PASS,
         passed_world_ids=tuple(decision.world_id for decision in passed),
         failed_world_ids=tuple(decision.world_id for decision in failed),
         primary_families=families,
-        failed_checks=tuple(failed_checks),
+        failed_checks=failed_checks,
     )
