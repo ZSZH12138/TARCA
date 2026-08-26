@@ -107,6 +107,33 @@ def test_materializer_rejects_checkout_hash_drift(tmp_path: Path) -> None:
         verify_materialized_source(receipt, tmp_path)
 
 
+def test_materializer_rejects_untracked_checkout_drift(tmp_path: Path) -> None:
+    source = _source()
+    materialize_source(
+        source,
+        tmp_path,
+        FakeGit({"src/generator.py": OFFICIAL_BYTES}),
+    )
+
+    class DirtyGit(FakeGit):
+        def run(self, arguments: tuple[str, ...], cwd: Path | None = None) -> str:
+            if arguments == (
+                "status",
+                "--porcelain",
+                "--ignored=matching",
+                "--untracked-files=all",
+            ):
+                return "?? src/__pycache__/generator.pyc"
+            return super().run(arguments, cwd)
+
+    with pytest.raises(SourceVerificationError, match="working tree drift"):
+        materialize_source(
+            source,
+            tmp_path,
+            DirtyGit({"src/generator.py": OFFICIAL_BYTES}),
+        )
+
+
 def test_materializer_rejects_wrong_checkout_commit(tmp_path: Path) -> None:
     with pytest.raises(SourceVerificationError, match="commit"):
         materialize_source(

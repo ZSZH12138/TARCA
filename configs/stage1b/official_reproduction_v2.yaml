@@ -1,0 +1,88 @@
+schema_version: 2.0.0
+suite_id: stage1b-v2-official-reproduction
+channel: OFFICIAL_REPRODUCTION
+cases:
+  - schema_version: 2.0.0
+    case_id: neural-gc-l96-generator
+    kind: GENERATOR
+    source_id: neural_gc
+    source_commit: c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf
+    asset_id: synthetic_generator
+    adapter_key: neural_gc_l96
+    input_artifact:
+      artifact_id: neural-gc-l96-reproduction-input
+      artifact_type: official_reproduction_input
+      content_hash: d6d86515c446da5fe62f2cc7cafc2c291c5e5d6c56ab2f8a9c7960a161e83fdb
+      schema_version: 2.0.0
+      relative_path: configs/stage1b/reproduction_inputs_v2/neural_gc_l96.json
+    absolute_tolerance: 1.0e-10
+  - schema_version: 2.0.0
+    case_id: gvar-predator-prey-generator
+    kind: GENERATOR
+    source_id: gvar
+    source_commit: e06268f87fbe923580af14b2cab26399191747a6
+    asset_id: predator_prey_generator
+    adapter_key: gvar_predator_prey
+    input_artifact:
+      artifact_id: gvar-predator-prey-reproduction-input
+      artifact_type: official_reproduction_input
+      content_hash: 183e3ead1818bae912540d7181a29fe06a93eab66f041635b92a2c08912dddab
+      schema_version: 2.0.0
+      relative_path: configs/stage1b/reproduction_inputs_v2/gvar_predator_prey.json
+    absolute_tolerance: 1.0e-10
+  - schema_version: 2.0.0
+    case_id: jmlr-two-scale-l96-generator
+    kind: GENERATOR
+    source_id: scoring_rules_l96
+    source_commit: 6f28942f6a703c2b52501d01258ca2708539f209
+    asset_id: two_scale_model_source
+    adapter_key: jmlr_two_scale_l96
+    input_artifact:
+      artifact_id: jmlr-two-scale-l96-reproduction-input
+      artifact_type: official_reproduction_input
+      content_hash: 5628f8370163d310b1e662085671d729eea93eb0906f5a229d3c570673e91097
+      schema_version: 2.0.0
+      relative_path: configs/stage1b/reproduction_inputs_v2/jmlr_two_scale_l96.json
+    absolute_tolerance: 1.0e-10
+  - schema_version: 2.0.0
+    case_id: interfere-cml-generator
+    kind: GENERATOR
+    source_id: interfere_cml
+    source_commit: adfa3f730019f17c3554dd7e0c181248f785bb8b
+    asset_id: coupled_map_lattice
+    adapter_key: interfere_cml
+    input_artifact:
+      artifact_id: interfere-cml-reproduction-input
+      artifact_type: official_reproduction_input
+      content_hash: 92ba28bebbd69df9e85390b3ef8039b44ffd56ae40d7eeb170ca07f64c3350b3
+      schema_version: 2.0.0
+      relative_path: configs/stage1b/reproduction_inputs_v2/interfere_cml.json
+    absolute_tolerance: 1.0e-10
+  - schema_version: 2.0.0
+    case_id: patchtst-model-forward
+    kind: MODEL_FORWARD
+    source_id: patchtst
+    source_commit: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
+    asset_id: patchtst_backbone
+    adapter_key: patchtst_forward
+    input_artifact:
+      artifact_id: patchtst-forward-reproduction-input
+      artifact_type: official_reproduction_input
+      content_hash: e9736e2117072354b8f5d1600c94032e27225719f2ba028a30ccb72f4828966f
+      schema_version: 2.0.0
+      relative_path: configs/stage1b/reproduction_inputs_v2/patchtst_forward.json
+    absolute_tolerance: 1.0e-6
+  - schema_version: 2.0.0
+    case_id: itransformer-model-forward
+    kind: MODEL_FORWARD
+    source_id: itransformer
+    source_commit: 4e938a1767106324dd753b2a44832bf870a0252e
+    asset_id: itransformer_model
+    adapter_key: itransformer_forward
+    input_artifact:
+      artifact_id: itransformer-forward-reproduction-input
+      artifact_type: official_reproduction_input
+      content_hash: 1cfddffe8797db822f0a6d828ffd284effeffc30893e6c93ea6fcf9c9c698635
+      schema_version: 2.0.0
+      relative_path: configs/stage1b/reproduction_inputs_v2/itransformer_forward.json
+    absolute_tolerance: 1.0e-6

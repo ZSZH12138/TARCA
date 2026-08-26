@@ -183,6 +183,20 @@ def _verify_git_commit(runner: GitRunner, checkout_root: Path, expected_commit: 
         )
 
 
+def _verify_git_clean(runner: GitRunner, checkout_root: Path) -> None:
+    status = runner.run(
+        (
+            "status",
+            "--porcelain",
+            "--ignored=matching",
+            "--untracked-files=all",
+        ),
+        cwd=checkout_root,
+    )
+    if status:
+        raise SourceVerificationError(f"official source working tree drift: {status[:1000]}")
+
+
 def materialize_source(
     source: SourceConfig,
     cache_root: Path,
@@ -204,6 +218,7 @@ def materialize_source(
 
     if checkout_root.exists():
         _verify_git_commit(runner, checkout_root, source.commit)
+        _verify_git_clean(runner, checkout_root)
         receipt = _receipt_for_checkout(source, checkout_root)
         verify_materialized_source(receipt, resolved_cache)
         return receipt
@@ -222,6 +237,7 @@ def materialize_source(
         )
         runner.run(("checkout", "--detach", "FETCH_HEAD"), cwd=temporary)
         _verify_git_commit(runner, temporary, source.commit)
+        _verify_git_clean(runner, temporary)
         _receipt_for_checkout(source, temporary)
         os.replace(temporary, checkout_root)
         published = True
