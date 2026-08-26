@@ -146,7 +146,25 @@ def _json_payload(value: object) -> str:
         serializable = dict(value)
     else:
         raise TypeError("state event payload must be a model, dataclass, or mapping")
-    return canonical_json_bytes(serializable).decode("utf-8")
+    return canonical_json_bytes(_json_safe(serializable)).decode("utf-8")
+
+
+def _json_safe(value: object) -> object:
+    if isinstance(value, datetime):
+        return _timestamp(value)
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, Path):
+        return value.as_posix()
+    if is_dataclass(value) and not isinstance(value, type):
+        return _json_safe(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"state event payload contains unsupported type: {type(value).__name__}")
 
 
 _SCHEMA = """
