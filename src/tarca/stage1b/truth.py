@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections import deque
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -20,6 +21,7 @@ class WorldTruth:
     graph_sha256: str
     concepts: tuple[str, ...]
     latent_dimension: int
+    truth_authority: Literal["GENERATOR_CONFIG"] = "GENERATOR_CONFIG"
 
 
 def ring_adjacency(dimension: int, *, directed: bool, include_self: bool = False) -> torch.Tensor:

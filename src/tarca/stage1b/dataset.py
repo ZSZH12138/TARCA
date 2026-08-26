@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import torch
 
+from tarca.contracts import (
+    DatasetWindowPartition,
+    WindowBatch,
+    audit_partition_isolation,
+    validate_window_batch,
+)
 from tarca.stage1b.config import (
     QualificationConfig,
     QualificationPartition,
@@ -86,6 +93,96 @@ class QualificationDataset:
             if candidate is partition:
                 return samples
         raise KeyError(partition)
+
+
+_PHYSICAL_PARTITIONS = {
+    QualificationPartition.QUAL_TRAIN: DatasetWindowPartition.TRAIN,
+    QualificationPartition.QUAL_TUNE: DatasetWindowPartition.VALIDATION,
+    QualificationPartition.QUAL_SEEN: DatasetWindowPartition.TEST_SEEN_REGIME,
+    QualificationPartition.QUAL_UNSEEN: DatasetWindowPartition.TEST_UNSEEN_REGIME,
+}
+
+
+def partition_for_qualification(
+    partition: QualificationPartition,
+) -> DatasetWindowPartition:
+    try:
+        return _PHYSICAL_PARTITIONS[partition]
+    except KeyError as error:
+        raise ValueError("unknown qualification partition") from error
+
+
+_TRUTH_METADATA_FRAGMENTS = (
+    "truth",
+    "oracle",
+    "future_noise",
+    "shock_sequence",
+    "latent_concept",
+    "true_graph",
+    "true_lag",
+)
+
+
+def validate_qualification_window(batch: WindowBatch) -> WindowBatch:
+    validated = validate_window_batch(batch)
+    reserved = tuple(
+        key
+        for key in validated.metadata
+        if any(fragment in key.lower() for fragment in _TRUTH_METADATA_FRAGMENTS)
+    )
+    if reserved:
+        raise ValueError(
+            "truth and oracle metadata are forbidden in qualification windows: "
+            f"{', '.join(sorted(reserved))}"
+        )
+    return validated
+
+
+@dataclass(frozen=True, slots=True)
+class QualificationWindowBridge:
+    entries: tuple[
+        tuple[QualificationPartition, DatasetWindowPartition, WindowBatch], ...
+    ]
+    normalization_mean: torch.Tensor
+    normalization_standard_deviation: torch.Tensor
+    fitted_partition: DatasetWindowPartition
+
+    def batch_for(self, partition: QualificationPartition) -> WindowBatch:
+        matches = tuple(batch for candidate, _, batch in self.entries if candidate is partition)
+        if len(matches) != 1:
+            raise KeyError(partition)
+        return matches[0]
+
+
+def bridge_qualification_windows(
+    batches: Mapping[QualificationPartition, WindowBatch],
+) -> QualificationWindowBridge:
+    if set(batches) != set(QualificationPartition):
+        raise ValueError("qualification bridge requires exactly four registered partitions")
+    entries: list[tuple[QualificationPartition, DatasetWindowPartition, WindowBatch]] = []
+    physical_batches: dict[DatasetWindowPartition, WindowBatch] = {}
+    for partition in QualificationPartition:
+        physical = partition_for_qualification(partition)
+        batch = validate_qualification_window(batches[partition])
+        if batch.metadata.get("qualification_partition") != partition.value:
+            raise ValueError("qualification window metadata has the wrong qualification partition")
+        if batch.metadata.get("physical_partition") != physical.value:
+            raise ValueError("qualification window metadata has the wrong physical partition")
+        entries.append((partition, physical, batch))
+        physical_batches[physical] = batch
+    audit = audit_partition_isolation(physical_batches)
+    if not audit.passed:
+        raise ValueError(f"partition isolation failed: {'; '.join(audit.findings)}")
+    train = batches[QualificationPartition.QUAL_TRAIN].x.to(torch.float64)
+    flattened = train.reshape(-1, train.shape[-1])
+    mean = flattened.mean(dim=0)
+    deviation = flattened.std(dim=0, unbiased=False).clamp_min(1e-8)
+    return QualificationWindowBridge(
+        entries=tuple(entries),
+        normalization_mean=mean.to(train.dtype).clone(),
+        normalization_standard_deviation=deviation.to(train.dtype).clone(),
+        fitted_partition=DatasetWindowPartition.TRAIN,
+    )
 
 
 def stack_samples(samples: tuple[WindowSample, ...]) -> tuple[torch.Tensor, torch.Tensor]:
