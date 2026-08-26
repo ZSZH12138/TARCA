@@ -63,9 +63,15 @@ class LocalArtifactStore:
         producer_task_id: str,
         scientific_identity_hash: str,
         dependencies: tuple[ArtifactRef, ...] = (),
+        store_relative_root: str = "artifacts/stage1a/store",
     ) -> None:
         self.repo_root = repo_root.resolve()
-        self.store_root = self.repo_root / "artifacts" / "stage1a" / "store"
+        relative_store = Path(store_relative_root)
+        if relative_store.is_absolute() or ".." in relative_store.parts:
+            raise ValueError("artifact store root must be a repository-relative path")
+        self.store_root = (self.repo_root / relative_store).resolve()
+        if self.store_root == self.repo_root or self.repo_root not in self.store_root.parents:
+            raise ValueError("artifact store root must stay below the repository")
         self.producer_stage = self._validate_logical_key(producer_stage, "producer_stage")
         self.producer_task_id = self._validate_logical_key(producer_task_id, "producer_task_id")
         if re.fullmatch(r"[0-9a-f]{64}", scientific_identity_hash) is None:
@@ -322,7 +328,7 @@ class LocalArtifactStore:
         if candidate == self.repo_root or self.repo_root not in candidate.parents:
             raise ValueError(f"artifact path escapes repository: {relative_path}")
         if candidate != self.store_root and self.store_root not in candidate.parents:
-            raise ValueError(f"artifact path is outside the Stage 1 store: {relative_path}")
+            raise ValueError(f"artifact path is outside the configured store: {relative_path}")
         return candidate
 
     @staticmethod

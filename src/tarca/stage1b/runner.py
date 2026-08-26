@@ -4,12 +4,13 @@ import hashlib
 import json
 import math
 import os
+import shutil
 import time
 from dataclasses import asdict, fields, is_dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psutil
 import torch
@@ -755,3 +756,76 @@ def run_qualification(
     validate_qualification_receipt_boundaries(receipt)
     _write_json(artifact_root.resolve() / "qualification_v2_summary.json", receipt)
     return receipt
+
+
+def run_scheduled_qualification(
+    repository_root: Path,
+    artifact_root: Path,
+) -> dict[str, Any]:
+    """Execute the frozen official Stage1B graph through isolated local workers."""
+    from tarca.execution.resources import ResourceCapacity
+    from tarca.execution.scheduler import LocalMultiProcessBackend, RunTerminalStatus, Scheduler
+    from tarca.execution.state import ExecutionStateStore
+    from tarca.stage1b.compiler import (
+        compile_ready_manifest,
+        compile_stage1b_graph,
+        repository_v2_inputs,
+    )
+    from tarca.stage1b.jobs import stage1b_artifact_store
+
+    root = repository_root.resolve()
+    resolved_artifact_root = artifact_root.resolve()
+    worlds_path = root / "configs/stage1b/worlds_v2.yaml"
+    qualification_path = root / "configs/stage1b/qualification_v2.yaml"
+    inputs = repository_v2_inputs(root)
+    _load_hardware_receipt(
+        resolved_artifact_root / "runtime",
+        worlds_path,
+        qualification_path,
+        inputs.world_suite.source_manifest_sha256(),
+    )
+    inventory = inventory_hardware()
+    if len(inventory.gpu_vram_bytes) < 2:
+        raise RuntimeError("scheduled Stage1B qualification requires the authorized two-GPU host")
+    disk = shutil.disk_usage(resolved_artifact_root.parent)
+    capacity = ResourceCapacity(
+        logical_cpu_count=inventory.logical_cpu_count,
+        physical_cpu_count=inventory.physical_cpu_count,
+        available_memory_bytes=inventory.available_memory_bytes,
+        gpu_memory_bytes=inventory.gpu_vram_bytes,
+        local_storage_available=True,
+        local_storage_free_bytes=disk.free,
+    )
+    graph = compile_stage1b_graph(inputs)
+    run_id = f"run-{graph.graph_id.removeprefix('stage1b-graph-')}"
+    database_path = resolved_artifact_root / "runtime/execution.sqlite3"
+    verifier = stage1b_artifact_store(root).verify_artifact
+    state = ExecutionStateStore(database_path, artifact_verifier=verifier)
+    state.create_run(run_id, graph.graph_id)
+    backend = LocalMultiProcessBackend(root)
+    scheduler = Scheduler(state, backend, capacity)
+    node_by_id = {node.node_id: node for node in graph.nodes}
+    while True:
+        completed = state.completed_artifacts(run_id)
+        if len(completed) == len(graph.nodes):
+            final_node = graph.nodes[-1]
+            final_ref = completed[final_node.node_id]
+            payload = stage1b_artifact_store(root).load_bytes(final_ref)
+            result = json.loads(payload)
+            if not isinstance(result, dict):
+                raise RuntimeError("final Stage1B receipt artifact is invalid")
+            return cast(dict[str, Any], result)
+        manifest = compile_ready_manifest(graph, completed)
+        if not manifest.tasks:
+            raise RuntimeError("Stage1B task graph has no ready work before completion")
+        for task in manifest.tasks:
+            node = node_by_id[task.task_id]
+            state.enqueue_task(
+                run_id,
+                task,
+                node.executor_key,
+                dependency_task_ids=node.dependency_ids,
+            )
+        status = scheduler.run_until_terminal(run_id)
+        if status is not RunTerminalStatus.COMPLETED:
+            raise RuntimeError(f"Stage1B scheduled execution stopped with {status.value}")

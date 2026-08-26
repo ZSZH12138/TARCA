@@ -12,7 +12,10 @@ from tarca.stage1b.freeze import (  # noqa: E402
     OverrideAuthorization,
     freeze_suite,
 )
-from tarca.stage1b.runner import run_hardware_probe, run_qualification  # noqa: E402
+from tarca.stage1b.runner import (  # noqa: E402
+    run_hardware_probe,
+    run_scheduled_qualification,
+)
 
 
 def _common_paths(parser: argparse.ArgumentParser) -> None:
@@ -70,9 +73,19 @@ def main() -> int:
                 args.artifact_root / "runtime",
             )
         elif args.command == "qualify":
-            result = run_qualification(
-                args.worlds,
-                args.qualification,
+            official_worlds = (
+                REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml"
+            ).resolve()
+            if args.worlds.resolve() != official_worlds:
+                raise ValueError("scheduled qualification uses the official v2 world configuration")
+            if args.qualification.resolve() != (
+                REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml"
+            ).resolve():
+                raise ValueError(
+                    "scheduled qualification uses the official v2 qualification configuration"
+                )
+            result = run_scheduled_qualification(
+                REPOSITORY_ROOT,
                 args.artifact_root,
             )
         else:

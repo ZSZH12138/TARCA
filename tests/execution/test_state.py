@@ -135,6 +135,30 @@ def test_concurrent_workers_cannot_claim_the_same_attempt(tmp_path: Path) -> Non
     assert claimed_ids == ("task-a-attempt-1",)
 
 
+def test_ready_tasks_can_be_inspected_then_claimed_exactly_once(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    attempt_id = store.enqueue_task("run-a", _task(), "test.execute")
+
+    queued = store.ready_tasks("run-a")
+    claim = store.claim_attempt(attempt_id, "worker-a")
+
+    assert tuple(item.attempt_id for item in queued) == (attempt_id,)
+    assert claim is not None and claim.task.task_id == "task-a"
+    assert store.claim_attempt(attempt_id, "worker-b") is None
+
+
+def test_run_status_and_completed_artifacts_are_read_only_views(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    task = _task()
+    attempt_id = store.enqueue_task("run-a", task, "test.execute")
+    assert store.claim_attempt(attempt_id, "worker-a") is not None
+    artifact = _artifact()
+    store.complete_attempt(attempt_id, artifact)
+
+    assert store.run_attempt_counts("run-a") == {"COMPLETED": 1}
+    assert store.completed_artifacts("run-a") == {"task-a": artifact}
+
+
 class _Probe:
     def __init__(self, identities: dict[int, ProcessIdentity]) -> None:
         self.identities = identities

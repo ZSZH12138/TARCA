@@ -12,11 +12,13 @@ from tarca.execution.state import ExecutionStateStore, StateTransitionConflict
 
 
 class _StateProgressSink:
-    def __init__(self, store: ExecutionStateStore, attempt_id: str) -> None:
+    def __init__(self, store: ExecutionStateStore, attempt_id: str, worker_id: str) -> None:
         self._store = store
         self._attempt_id = attempt_id
+        self._worker_id = worker_id
 
     def report(self, progress: object) -> None:
+        self._store.heartbeat(self._attempt_id, self._worker_id)
         self._store.record_progress(self._attempt_id, progress)
 
 
@@ -53,7 +55,11 @@ def run_worker(
         _context_error("task_id")
     if claim.worker_id != context.worker_identity:
         _context_error("worker_identity")
-    progress: ProgressSink = _StateProgressSink(store, context.attempt_id)
+    progress: ProgressSink = _StateProgressSink(
+        store,
+        context.attempt_id,
+        context.worker_identity,
+    )
     try:
         executor = registry.resolve(claim.executor_key)
         artifact: ArtifactRef = executor(claim.task, context, progress)

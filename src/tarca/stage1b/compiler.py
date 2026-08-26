@@ -223,7 +223,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
         source.source_id: add_node(
             phase="SOURCE_MATERIALIZE",
             data_id=source.source_id,
-            output_artifact_type="official_source_receipt",
+            output_artifact_type="OFFICIAL_SOURCE_RECEIPT",
             executor_key="stage1b.materialize_source",
         )
         for source in inputs.world_suite.sources
@@ -233,7 +233,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
             phase="OFFICIAL_REPRODUCTION",
             data_id=case.source_id,
             dependencies=(source_nodes[case.source_id],),
-            output_artifact_type="official_reproduction_receipt",
+            output_artifact_type="OFFICIAL_REPRODUCTION_RECEIPT",
             executor_key="stage1b.reproduce_official_case",
             discriminator=case.case_id,
         )
@@ -256,7 +256,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
             phase="WORLD_HEALTH",
             data_id=world.world_id,
             dependencies=dependencies,
-            output_artifact_type="world_health_receipt",
+            output_artifact_type="WORLD_HEALTH_RECEIPT",
             executor_key="stage1b.check_world_health",
         )
 
@@ -273,7 +273,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
                 data_id=world.world_id,
                 seed=seed,
                 dependencies=(health_nodes[world.world_id],),
-                output_artifact_type="qualification_dataset",
+                output_artifact_type="QUALIFICATION_DATASET",
                 executor_key="stage1b.generate_dataset",
             )
             validated = add_node(
@@ -281,7 +281,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
                 data_id=world.world_id,
                 seed=seed,
                 dependencies=(generated,),
-                output_artifact_type="validated_qualification_dataset",
+                output_artifact_type="VALIDATED_QUALIFICATION_DATASET",
                 executor_key="stage1b.validate_dataset",
             )
             var_score = add_node(
@@ -290,7 +290,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
                 model_id="tuned_var",
                 seed=seed,
                 dependencies=(validated,),
-                output_artifact_type="var_evaluation",
+                output_artifact_type="VAR_EVALUATION",
                 executor_key="stage1b.score_var",
             )
             for model in inputs.qualification.models:
@@ -304,7 +304,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
                     model_id=model.model_id,
                     seed=seed,
                     dependencies=(validated, reproduction_nodes[model_source]),
-                    output_artifact_type="trained_neural_checkpoint",
+                    output_artifact_type="TRAINED_NEURAL_CHECKPOINT",
                     executor_key="stage1b.train_neural",
                 )
                 frozen = add_node(
@@ -312,8 +312,8 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
                     data_id=world.world_id,
                     model_id=model.model_id,
                     seed=seed,
-                    dependencies=(trained,),
-                    output_artifact_type="frozen_model_receipt",
+                    dependencies=(trained, validated),
+                    output_artifact_type="FROZEN_MODEL_RECEIPT",
                     executor_key="stage1b.freeze_check_model",
                 )
                 score_nodes.append(
@@ -323,7 +323,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
                         model_id=model.model_id,
                         seed=seed,
                         dependencies=(validated, var_score, frozen),
-                        output_artifact_type="qualification_comparison",
+                        output_artifact_type="QUALIFICATION_COMPARISON",
                         executor_key="stage1b.score_bootstrap",
                     )
                 )
@@ -332,14 +332,14 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
         phase="QUALIFICATION_AGGREGATE",
         data_id=inputs.world_suite.suite_id,
         dependencies=(*tuple(health_nodes.values()), *tuple(score_nodes)),
-        output_artifact_type="qualification_gate_evidence",
+        output_artifact_type="QUALIFICATION_GATE_EVIDENCE",
         executor_key="stage1b.aggregate_qualification",
     )
     add_node(
         phase="QUALIFICATION_RECEIPT",
         data_id=inputs.world_suite.suite_id,
         dependencies=(aggregate, *tuple(reproduction_nodes.values())),
-        output_artifact_type="stage1b_qualification_receipt",
+        output_artifact_type="STAGE1B_QUALIFICATION_RECEIPT",
         executor_key="stage1b.publish_qualification_receipt",
     )
     graph_id = f"stage1b-graph-{canonical_json_hash({'nodes': [node.node_id for node in nodes]})}"

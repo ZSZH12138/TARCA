@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from tarca.contracts import ArtifactRef, canonical_json_hash
+from tarca.execution.contracts import (
+    ExecutionContext,
+    ResourceRequest,
+    ScientificIdentity,
+    TaskSpec,
+)
+from tarca.execution.registry import ExecutorRegistry
+from tarca.execution.resources import ResourceCapacity
+from tarca.execution.scheduler import (
+    LocalMultiProcessBackend,
+    RunTerminalStatus,
+    Scheduler,
+    SynchronousTestBackend,
+)
+from tarca.execution.state import AttemptState, ExecutionStateStore
+from tarca.stage1b.compiler import compile_stage1b_graph, repository_v2_inputs
+from tarca.stage1b.jobs import stage1b_executor_registry
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _task(index: int, *, gpu: bool = True) -> TaskSpec:
+    return TaskSpec(
+        identity=ScientificIdentity(
+            protocol_id="tarca-v1",
+            experiment_id="stage1b-v2",
+            task_id=f"task-{index}",
+            model_id="itransformer" if gpu else "var",
+            data_id="world-a",
+            seed=index,
+        ),
+        phase="NEURAL_TRAIN" if gpu else "VAR_SCORE",
+        inputs=(),
+        output_artifact_type="TEST_ARTIFACT",
+        resource_request=ResourceRequest(
+            cpu_threads=2,
+            gpu_count=1 if gpu else 0,
+            gpu_memory_gib=4.0 if gpu else 0.0,
+            host_memory_gib=2.0,
+        ),
+    )
+
+
+def _capacity() -> ResourceCapacity:
+    return ResourceCapacity(
+        logical_cpu_count=28,
+        physical_cpu_count=28,
+        available_memory_bytes=224 * 1024**3,
+        gpu_memory_bytes=(24 * 1024**3, 24 * 1024**3),
+        local_storage_available=True,
+        local_storage_free_bytes=500 * 1024**3,
+    )
+
+
+class _FakeProcess:
+    pid = 321
+
+    def poll(self) -> int | None:
+        return None
+
+
+class _RecordingBackend:
+    backend_id = "recording"
+
+    def __init__(self) -> None:
+        self.launched: list[object] = []
+
+    def launch(self, task: object, database_path: Path) -> object:
+        del database_path
+        self.launched.append(task)
+        return _FakeProcess()
+
+    def poll(self) -> tuple[object, ...]:
+        return ()
+
+
+def test_scheduler_never_exposes_scientific_result_columns() -> None:
+    lowered = {column.lower() for column in Scheduler.visible_columns}
+    assert lowered.isdisjoint({"crps", "nll", "mae", "ranking", "truth", "best_seed"})
+
+
+def test_every_compiled_stage1b_executor_is_exactly_allowlisted() -> None:
+    graph = compile_stage1b_graph(repository_v2_inputs(REPOSITORY_ROOT))
+    registry = stage1b_executor_registry(REPOSITORY_ROOT)
+
+    assert set(registry.keys) == {node.executor_key for node in graph.nodes}
+
+
+def test_two_gpus_launch_two_of_three_ready_gpu_jobs(tmp_path: Path) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    for index in range(3):
+        store.enqueue_task("run-a", _task(index), "test.execute")
+    scheduler = Scheduler(store, _RecordingBackend(), _capacity())
+
+    launches = scheduler.tick("run-a")
+
+    assert len(launches) == 2
+    assert {launch.task.allocation.gpu_ids for launch in launches} == {(0,), (1,)}
+    assert store.attempt_state("task-2-attempt-1") is AttemptState.READY
+
+
+def test_backend_choice_does_not_change_scientific_identity(tmp_path: Path) -> None:
+    task = _task(1)
+    store_a = ExecutionStateStore(tmp_path / "a.sqlite", artifact_verifier=lambda ref: True)
+    store_b = ExecutionStateStore(tmp_path / "b.sqlite", artifact_verifier=lambda ref: True)
+    for store, run_id in ((store_a, "run-a"), (store_b, "run-b")):
+        store.create_run(run_id, "graph-a")
+        store.enqueue_task(run_id, task, "test.execute")
+    launch_a = Scheduler(store_a, _RecordingBackend(), _capacity()).tick("run-a")[0]
+    launch_b = Scheduler(store_b, _RecordingBackend(), _capacity()).tick("run-b")[0]
+
+    assert launch_a.scientific_identity_sha256 == launch_b.scientific_identity_sha256
+    assert launch_a.scientific_identity_sha256 == canonical_json_hash(task)
+
+
+class _PopenRecorder:
+    def __init__(self) -> None:
+        self.arguments: tuple[str, ...] | None = None
+        self.options: dict[str, Any] = {}
+
+    def __call__(self, arguments: tuple[str, ...], **options: Any) -> _FakeProcess:
+        self.arguments = arguments
+        self.options = options
+        return _FakeProcess()
+
+
+def test_local_backend_launches_tuple_without_shell_and_sets_resource_environment(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    store.enqueue_task("run-a", _task(1), "test.execute")
+    recorder = _PopenRecorder()
+    backend = LocalMultiProcessBackend(
+        repository_root=tmp_path,
+        popen_factory=recorder,
+        python_executable="python",
+        cpu_ids=tuple(range(24)),
+    )
+
+    Scheduler(store, backend, _capacity()).tick("run-a")
+
+    assert isinstance(recorder.arguments, tuple)
+    assert recorder.options["shell"] is False
+    environment = recorder.options["env"]
+    assert environment["CUDA_VISIBLE_DEVICES"] in {"0", "1"}
+    assert environment["OMP_NUM_THREADS"] == "2"
+    assert environment["MKL_NUM_THREADS"] == "2"
+    assert environment["TARCA_CPU_AFFINITY"]
+
+
+def test_synchronous_backend_reaches_terminal_completion(tmp_path: Path) -> None:
+    artifacts: dict[str, bytes] = {}
+
+    def executor(task: TaskSpec, context: ExecutionContext, progress: object) -> ArtifactRef:
+        del context, progress
+        content_hash = canonical_json_hash(task)
+        ref = ArtifactRef(
+            artifact_id=f"test-{content_hash}",
+            artifact_type=task.output_artifact_type,
+            content_hash=content_hash,
+            schema_version="1.0.0",
+            relative_path=f"artifacts/{content_hash}.bin",
+        )
+        artifacts[ref.artifact_id] = b"verified"
+        return ref
+
+    store = ExecutionStateStore(
+        tmp_path / "state.sqlite",
+        artifact_verifier=lambda ref: ref.artifact_id in artifacts,
+    )
+    store.create_run("run-a", "graph-a")
+    store.enqueue_task("run-a", _task(1, gpu=False), "test.execute")
+    backend = SynchronousTestBackend(store, ExecutorRegistry({"test.execute": executor}))
+    scheduler = Scheduler(store, backend, _capacity(), poll_interval_seconds=0.001)
+
+    assert scheduler.run_until_terminal("run-a") is RunTerminalStatus.COMPLETED
+
+
+def test_scheduler_retries_one_transient_worker_failure(tmp_path: Path) -> None:
+    calls = 0
+    artifacts: set[str] = set()
+
+    def executor(task: TaskSpec, context: ExecutionContext, progress: object) -> ArtifactRef:
+        nonlocal calls
+        del context, progress
+        calls += 1
+        if calls == 1:
+            raise OSError("temporary local I/O failure")
+        content_hash = canonical_json_hash(task)
+        artifact = ArtifactRef(
+            artifact_id=f"test-{content_hash}",
+            artifact_type=task.output_artifact_type,
+            content_hash=content_hash,
+            schema_version="1.0.0",
+            relative_path=f"artifacts/{content_hash}.bin",
+        )
+        artifacts.add(artifact.artifact_id)
+        return artifact
+
+    store = ExecutionStateStore(
+        tmp_path / "state.sqlite",
+        artifact_verifier=lambda ref: ref.artifact_id in artifacts,
+    )
+    store.create_run("run-a", "graph-a")
+    store.enqueue_task("run-a", _task(1, gpu=False), "test.execute")
+    scheduler = Scheduler(
+        store,
+        SynchronousTestBackend(store, ExecutorRegistry({"test.execute": executor})),
+        _capacity(),
+        poll_interval_seconds=0.001,
+    )
+
+    assert scheduler.run_until_terminal("run-a") is RunTerminalStatus.COMPLETED
+    assert calls == 2

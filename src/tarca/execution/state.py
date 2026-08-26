@@ -16,7 +16,7 @@ from typing import Any, Protocol, cast
 from pydantic import BaseModel
 
 from tarca.contracts import ArtifactRef, canonical_json_bytes
-from tarca.execution.contracts import TaskSpec
+from tarca.execution.contracts import ResourceAllocation, TaskSpec
 
 ArtifactVerifier = Callable[[ArtifactRef], bool]
 
@@ -61,6 +61,22 @@ class ClaimedTask:
     task: TaskSpec
     executor_key: str
     worker_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedTask:
+    run_id: str
+    attempt_id: str
+    task: TaskSpec
+    executor_key: str
+    packing_level: int
+
+
+@dataclass(frozen=True, slots=True)
+class FailedAttempt:
+    attempt_id: str
+    error_category: str
+    packing_level: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +182,7 @@ CREATE TABLE IF NOT EXISTS attempts (
     attempt_number INTEGER NOT NULL CHECK (attempt_number >= 1),
     state TEXT NOT NULL CHECK (state IN ('READY','RUNNING','COMPLETED','FAILED','STALLED')),
     worker_id TEXT,
+    allocation_json TEXT,
     pid INTEGER,
     process_started_at_utc TEXT,
     heartbeat_at_utc TEXT,
@@ -466,6 +483,169 @@ class ExecutionStateStore:
                     )
                 )
         return tuple(claimed)
+
+    def ready_tasks(self, run_id: str) -> tuple[QueuedTask, ...]:
+        """Return dependency-ready attempts without changing their state."""
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT attempts.attempt_id, attempts.packing_level,
+                       job_nodes.run_id, job_nodes.executor_key, task_specs.spec_json
+                FROM attempts
+                JOIN task_specs USING(task_id)
+                JOIN job_nodes USING(task_id)
+                WHERE job_nodes.run_id = ? AND attempts.state = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM dependencies
+                      WHERE dependencies.task_id = attempts.task_id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM attempts AS dependency_attempt
+                            WHERE dependency_attempt.task_id = dependencies.dependency_task_id
+                              AND dependency_attempt.state = 'COMPLETED'
+                        )
+                  )
+                ORDER BY attempts.created_at_utc, attempts.attempt_id
+                """,
+                (run_id, AttemptState.READY.value),
+            ).fetchall()
+        return tuple(
+            QueuedTask(
+                run_id=str(row["run_id"]),
+                attempt_id=str(row["attempt_id"]),
+                task=TaskSpec.model_validate_json(row["spec_json"]),
+                executor_key=str(row["executor_key"]),
+                packing_level=int(row["packing_level"]),
+            )
+            for row in rows
+        )
+
+    def claim_attempt(
+        self,
+        attempt_id: str,
+        worker_id: str,
+        allocation: ResourceAllocation | None = None,
+    ) -> ClaimedTask | None:
+        """Atomically claim one previously inspected attempt by its exact ID."""
+        _safe_identifier(attempt_id, "attempt_id")
+        _safe_identifier(worker_id, "worker_id")
+        if allocation is not None and allocation.worker_id != worker_id:
+            raise ValueError("allocation worker identity does not match claim")
+        now = _timestamp(_utc_now())
+        allocation_json = None if allocation is None else allocation.model_dump_json()
+        with self._transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT attempts.attempt_id, job_nodes.run_id, job_nodes.executor_key,
+                       task_specs.spec_json
+                FROM attempts
+                JOIN task_specs USING(task_id)
+                JOIN job_nodes USING(task_id)
+                WHERE attempts.attempt_id = ? AND attempts.state = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM dependencies
+                      WHERE dependencies.task_id = attempts.task_id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM attempts AS dependency_attempt
+                            WHERE dependency_attempt.task_id = dependencies.dependency_task_id
+                              AND dependency_attempt.state = 'COMPLETED'
+                        )
+                  )
+                """,
+                (attempt_id, AttemptState.READY.value),
+            ).fetchone()
+            if row is None:
+                return None
+            cursor = connection.execute(
+                """
+                UPDATE attempts
+                SET state = ?, worker_id = ?, allocation_json = ?,
+                    heartbeat_at_utc = ?, updated_at_utc = ?
+                WHERE attempt_id = ? AND state = ?
+                """,
+                (
+                    AttemptState.RUNNING.value,
+                    worker_id,
+                    allocation_json,
+                    now,
+                    now,
+                    attempt_id,
+                    AttemptState.READY.value,
+                ),
+            )
+            if cursor.rowcount != 1:
+                return None
+        return ClaimedTask(
+            run_id=str(row["run_id"]),
+            attempt_id=str(row["attempt_id"]),
+            task=TaskSpec.model_validate_json(row["spec_json"]),
+            executor_key=str(row["executor_key"]),
+            worker_id=worker_id,
+        )
+
+    def run_attempt_counts(self, run_id: str) -> dict[str, int]:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT attempts.state, COUNT(*) AS count
+                FROM attempts JOIN job_nodes USING(task_id)
+                WHERE job_nodes.run_id = ?
+                  AND attempts.attempt_number = (
+                      SELECT MAX(latest.attempt_number) FROM attempts AS latest
+                      WHERE latest.task_id = attempts.task_id
+                  )
+                GROUP BY attempts.state
+                """,
+                (run_id,),
+            ).fetchall()
+        return {str(row["state"]): int(row["count"]) for row in rows}
+
+    def completed_artifacts(self, run_id: str) -> dict[str, ArtifactRef]:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT attempts.task_id, attempts.artifact_json
+                FROM attempts JOIN job_nodes USING(task_id)
+                WHERE job_nodes.run_id = ? AND attempts.state = ?
+                  AND attempts.artifact_json IS NOT NULL
+                ORDER BY attempts.task_id, attempts.attempt_number DESC
+                """,
+                (run_id, AttemptState.COMPLETED.value),
+            ).fetchall()
+        completed: dict[str, ArtifactRef] = {}
+        for row in rows:
+            task_id = str(row["task_id"])
+            if task_id not in completed:
+                completed[task_id] = ArtifactRef.model_validate_json(row["artifact_json"])
+        return completed
+
+    def latest_failed_attempts(self, run_id: str) -> tuple[FailedAttempt, ...]:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT attempts.attempt_id, attempts.error_category, attempts.packing_level
+                FROM attempts JOIN job_nodes USING(task_id)
+                WHERE job_nodes.run_id = ?
+                  AND attempts.state IN (?, ?)
+                  AND attempts.attempt_number = (
+                      SELECT MAX(latest.attempt_number) FROM attempts AS latest
+                      WHERE latest.task_id = attempts.task_id
+                  )
+                ORDER BY attempts.attempt_id
+                """,
+                (run_id, AttemptState.FAILED.value, AttemptState.STALLED.value),
+            ).fetchall()
+        return tuple(
+            FailedAttempt(
+                attempt_id=str(row["attempt_id"]),
+                error_category=str(row["error_category"] or "WORKER_DIED"),
+                packing_level=int(row["packing_level"]),
+            )
+            for row in rows
+        )
 
     def bind_running_process(
         self,
