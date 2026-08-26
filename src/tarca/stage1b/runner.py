@@ -420,6 +420,8 @@ def run_hardware_probe(
     worlds_path: Path,
     qualification_path: Path,
     runtime_root: Path,
+    *,
+    authorized_over_24_hours: bool = False,
 ) -> dict[str, Any]:
     suite = load_world_suite(worlds_path)
     qualification = load_qualification_config(qualification_path)
@@ -492,6 +494,7 @@ def run_hardware_probe(
         full_work_units=full_units,
         projected_peak_memory_bytes=projected_memory,
         available_memory_bytes=inventory.available_memory_bytes,
+        authorized_over_24_hours=authorized_over_24_hours,
     )
     receipt = {
         "schema_version": "2.0.0",

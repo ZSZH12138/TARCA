@@ -1,0 +1,38 @@
+services:
+  stage1b:
+    image: tarca-stage1b-v2:local
+    build:
+      context: ../..
+      dockerfile: deploy/stage1b/Dockerfile
+    init: true
+    read_only: true
+    shm_size: "16gb"
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      TARCA_STAGE1B_SOURCE_CACHE_ROOT: /opt/tarca/official_sources
+      TARCA_STAGE1B_DATABASE: /opt/tarca/artifacts/stage1b/runtime/execution.sqlite3
+      TARCA_STAGE1B_STATIC_ROOT: /opt/tarca/frontend/stage1b-monitor/dist
+      TARCA_STAGE1B_DEVICE: cuda
+      TARCA_STAGE1B_DATALOADER_WORKERS: "3"
+    tmpfs:
+      - /tmp:size=4g,mode=1777
+    volumes:
+      - type: volume
+        source: stage1b-artifacts
+        target: /opt/tarca/artifacts/stage1b
+      - type: bind
+        source: ../../third_party/stage1b
+        target: /opt/tarca/official_sources
+        read_only: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2
+              capabilities: [gpu]
+
+volumes:
+  stage1b-artifacts:
+    name: tarca-stage1b-v2-artifacts

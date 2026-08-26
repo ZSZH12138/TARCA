@@ -68,6 +68,11 @@ _STORE_ROOT = "artifacts/stage1b/runtime/store"
 _SCHEMA_VERSION = "2.0.0"
 
 
+def _source_cache_root(repo_root: Path) -> Path:
+    configured = os.environ.get("TARCA_STAGE1B_SOURCE_CACHE_ROOT")
+    return Path(configured).resolve() if configured else repo_root / "third_party/stage1b"
+
+
 def stage1b_artifact_store(
     repo_root: Path,
     task: TaskSpec | None = None,
@@ -174,7 +179,7 @@ def materialize_source_job(
     source = inputs.world_suite.source(task.identity.data_id)
     receipt = materialize_source(
         source,
-        repo_root / "artifacts/stage1b/runtime/official_sources",
+        _source_cache_root(repo_root),
         SubprocessGitRunner.discover(),
     )
     return _publish_json(repo_root, task, _source_receipt_payload(repo_root, receipt))
@@ -194,7 +199,7 @@ def reproduce_official_case_job(
     receipt = _source_receipt(repo_root, _load_json(repo_root, task.inputs[0]))
     verify_materialized_source(
         receipt,
-        repo_root / "artifacts/stage1b/runtime/official_sources",
+        _source_cache_root(repo_root),
     )
     result = run_reproduction(
         case,
@@ -223,7 +228,7 @@ def check_world_health_job(
     for receipt in source_receipts:
         verify_materialized_source(
             receipt,
-            repo_root / "artifacts/stage1b/runtime/official_sources",
+            _source_cache_root(repo_root),
         )
     reproductions = tuple(
         ReproductionReceipt.model_validate(_load_json(repo_root, ref))

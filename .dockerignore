@@ -1,0 +1,15 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+frontend/stage1b-monitor/node_modules
+frontend/stage1b-monitor/dist
+frontend/stage1b-monitor/coverage
+frontend/stage1b-monitor/test-results
+artifacts/**/runtime
+artifacts/test-tmp-*
+third_party/stage1b
+data
