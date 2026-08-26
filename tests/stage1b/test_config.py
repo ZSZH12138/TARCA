@@ -59,6 +59,32 @@ def _primary(world_id: str, family_id: str) -> dict[str, object]:
         "dimension": 20,
         "latent_dimension": 0,
         "concepts": ["forcing", "propagation", "scale"],
+        "concept_pairs": [
+            {
+                "pair_id": "trend_primary",
+                "concept": "trend",
+                "parameter_family": "forcing",
+                "factual_parameter_ref": "official_f10",
+                "counterfactual_parameter_ref": "official_f40",
+                "factual_value": 10.0,
+                "counterfactual_value": 40.0,
+                "shared_initial_state": True,
+                "shared_future_noise": True,
+                "evidence_asset_ids": ["world_source"],
+            },
+            {
+                "pair_id": "scale_primary",
+                "concept": "scale",
+                "parameter_family": "measurement_noise",
+                "factual_parameter_ref": "official_clean",
+                "counterfactual_parameter_ref": "official_noisy",
+                "factual_value": 0.0,
+                "counterfactual_value": 0.1,
+                "shared_initial_state": True,
+                "shared_future_noise": True,
+                "evidence_asset_ids": ["world_source"],
+            },
+        ],
         "downstream_mappings": ["weather_regime", "financial_spillover"],
         "truth_capabilities": {
             "shared_future_noise": True,
@@ -178,6 +204,42 @@ def test_world_suite_requires_two_registered_primary_families(tmp_path: Path) ->
     payload = _suite()
     payload["worlds"][1]["family_id"] = "lorenz96_single_scale"  # type: ignore[index]
     with pytest.raises(ValidationError, match="two independent primary families"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_primary_world_requires_evidenced_trend_and_scale_pairs(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["worlds"][0]["concept_pairs"] = []  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="trend and scale"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_concept_pair_rejects_unregistered_evidence_asset(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["worlds"][0]["concept_pairs"][0]["evidence_asset_ids"] = [  # type: ignore[index]
+        "invented_asset"
+    ]
+
+    with pytest.raises(ValidationError, match="evidence assets"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_concept_pair_rejects_unofficial_parameter_family(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["worlds"][0]["concept_pairs"][0]["parameter_family"] = (  # type: ignore[index]
+        "invented_parameter"
+    )
+
+    with pytest.raises(ValidationError, match="parameter family"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_scale_concept_pair_rejects_negative_scale(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["worlds"][0]["concept_pairs"][1]["factual_value"] = -0.1  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="nonnegative"):
         load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
 
 

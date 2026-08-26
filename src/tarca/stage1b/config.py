@@ -259,6 +259,62 @@ class RegimeConfig(FrozenModel):
         return dict(self.parameters)
 
 
+class ConceptPairConfig(FrozenModel):
+    pair_id: str
+    concept: Literal["trend", "scale"]
+    parameter_family: str
+    factual_parameter_ref: str
+    counterfactual_parameter_ref: str
+    factual_value: float
+    counterfactual_value: float
+    shared_initial_state: Literal[True]
+    shared_future_noise: Literal[True]
+    evidence_asset_ids: tuple[str, ...]
+
+    @field_validator(
+        "pair_id",
+        "parameter_family",
+        "factual_parameter_ref",
+        "counterfactual_parameter_ref",
+    )
+    @classmethod
+    def _logical_identifiers_are_safe(cls, value: str) -> str:
+        if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", value) is None:
+            raise ValueError("concept pair identifiers must be lowercase and safe")
+        return value
+
+    @field_validator("factual_value", "counterfactual_value")
+    @classmethod
+    def _parameter_value_is_finite(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("concept pair parameter values must be finite")
+        return value
+
+    @field_validator("evidence_asset_ids")
+    @classmethod
+    def _evidence_assets_are_safe_and_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if (
+            not value
+            or any(re.fullmatch(r"[a-z0-9][a-z0-9_-]*", item) is None for item in value)
+            or len(value) != len(set(value))
+        ):
+            raise ValueError("concept pair evidence assets must be nonempty, safe, and unique")
+        return value
+
+    @model_validator(mode="after")
+    def _counterfactual_changes_one_parameter(self) -> Self:
+        if self.factual_parameter_ref == self.counterfactual_parameter_ref:
+            raise ValueError("concept pair parameter references must differ")
+        if self.factual_value == self.counterfactual_value:
+            raise ValueError("concept pair parameter values must differ")
+        if self.concept == "scale" and min(
+            self.factual_value,
+            self.counterfactual_value,
+        ) < 0:
+            raise ValueError("scale concept pair values must be nonnegative")
+        return self
+
+
 def _freeze_numeric_mapping(value: object, label: str) -> tuple[tuple[str, float], ...]:
     if not isinstance(value, Mapping) or not value:
         raise ValueError(f"{label} must be a nonempty mapping")
@@ -286,6 +342,7 @@ class WorldConfig(FrozenModel):
     latent_dimension: int = Field(default=0, ge=0)
     boundary_policy: Literal["NONE", "DECLARED_ZERO_CLIP"] = "NONE"
     concepts: tuple[str, ...]
+    concept_pairs: tuple[ConceptPairConfig, ...] = ()
     downstream_mappings: tuple[str, ...]
     truth_capabilities: TruthCapabilities
     graph: GraphConfig
@@ -315,6 +372,16 @@ class WorldConfig(FrozenModel):
             raise ValueError("world labels must be unique")
         return value
 
+    @field_validator("concept_pairs")
+    @classmethod
+    def _concept_pairs_are_unique(
+        cls, value: tuple[ConceptPairConfig, ...]
+    ) -> tuple[ConceptPairConfig, ...]:
+        pair_ids = tuple(pair.pair_id for pair in value)
+        if len(pair_ids) != len(set(pair_ids)):
+            raise ValueError("concept pair IDs must be unique within a world")
+        return value
+
     @field_validator("generator", mode="before")
     @classmethod
     def _generator_is_immutable(cls, value: object) -> tuple[tuple[str, float], ...]:
@@ -339,6 +406,38 @@ class WorldConfig(FrozenModel):
             raise ValueError("zero clipping is declared only by the published predator-prey world")
         if self.role is not WorldRole.PRIMARY_MECHANISTIC:
             return self
+        required_parameter_families = {
+            WorldAdapter.LORENZ96: {
+                "trend": "forcing",
+                "scale": "measurement_noise",
+            },
+            WorldAdapter.LORENZ96_TWO_SCALE: {
+                "trend": "forcing",
+                "scale": "coupling_h",
+            },
+            WorldAdapter.GVAR_PREDATOR_PREY: {
+                "trend": "alpha",
+                "scale": "dynamic_noise_scale",
+            },
+            WorldAdapter.CORRECTED_CML: {
+                "trend": "alpha",
+                "scale": "epsilon",
+            },
+            WorldAdapter.TARCA_VAR: {
+                "trend": "coefficient_scale",
+                "scale": "innovation_scale",
+            },
+        }.get(self.adapter)
+        if required_parameter_families is None:
+            raise ValueError("primary world adapter has no registered concept parameter families")
+        by_concept = {pair.concept: pair for pair in self.concept_pairs}
+        if set(by_concept) != {"trend", "scale"} or len(self.concept_pairs) != 2:
+            raise ValueError("primary worlds require exactly one trend and scale concept pair")
+        for pair in self.concept_pairs:
+            if pair.parameter_family != required_parameter_families[pair.concept]:
+                raise ValueError(
+                    f"{pair.concept} concept pair uses an unsupported parameter family"
+                )
         capabilities = self.truth_capabilities
         if not capabilities.shared_future_noise:
             raise ValueError("primary worlds require shared future noise")
@@ -392,6 +491,27 @@ class WorldSuiteConfig(FrozenModel):
         unknown = sorted(referenced_sources - set(source_ids))
         if unknown:
             raise ValueError(f"worlds reference unknown sources: {', '.join(unknown)}")
+        sources_by_id = {source.source_id: source for source in self.sources}
+        for world in self.worlds:
+            authorized_sources = (
+                sources_by_id[source_id]
+                for source_id in (world.source_id, *world.supporting_source_ids)
+            )
+            oracle_assets = {
+                asset.asset_id
+                for source in authorized_sources
+                for asset in source.assets
+                if "ORACLE" in asset.required_for
+            }
+            referenced_assets = {
+                asset_id for pair in world.concept_pairs for asset_id in pair.evidence_asset_ids
+            }
+            missing_assets = sorted(referenced_assets - oracle_assets)
+            if missing_assets:
+                raise ValueError(
+                    f"world {world.world_id} concept pair evidence assets are not registered "
+                    f"for ORACLE use: {', '.join(missing_assets)}"
+                )
         primary_families = {
             world.family_id for world in self.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
         }

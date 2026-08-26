@@ -144,3 +144,21 @@ def test_oracle_request_rejects_non_target_schedule_change() -> None:
 
     with pytest.raises(ValueError, match="non-target scale"):
         paired_rollout(RecordingOracleDriver(), contaminated)
+
+
+def test_oracle_contract_supports_zero_noise_and_internal_step_noise() -> None:
+    schedule = ConceptSchedule(
+        trend=torch.ones(4, dtype=torch.float64),
+        scale=torch.zeros(4, dtype=torch.float64),
+    )
+    simulation = OfficialSimulation(
+        values=torch.zeros((4, 2), dtype=torch.float64),
+        times=torch.arange(4, dtype=torch.float64),
+        initial_state=torch.zeros(2, dtype=torch.float64),
+        future_noise=torch.zeros((12, 2), dtype=torch.float64),
+        regime_sequence=torch.zeros(4, dtype=torch.int64),
+        boundary_event_count=0,
+    )
+
+    assert schedule.scale.sum().item() == 0.0
+    assert simulation.future_noise.shape == (12, 2)

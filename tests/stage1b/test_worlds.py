@@ -8,6 +8,8 @@ import torch
 
 from tarca.stage1b.config import QualificationPartition, load_world_suite
 from tarca.stage1b.health import WorldHealthError, assess_world_health
+from tarca.stage1b.official_worlds import build_official_world, concept_pair_schedules
+from tarca.stage1b.sources import MaterializedSources, SourceVerificationError
 from tarca.stage1b.worlds import (
     SimulationRequest,
     TrajectoryValidationError,
@@ -132,3 +134,43 @@ def test_nonfinite_trajectory_fails_closed() -> None:
     values[0, 0] = float("inf")
     with pytest.raises(TrajectoryValidationError, match="non-finite"):
         world.validate_values(values)
+
+
+def test_oracle_world_rejects_local_equation_fallback() -> None:
+    suite = load_world_suite(WORLD_CONFIG)
+    diagnostic = build_world(suite.world("lorenz96_f10_v2"))
+
+    assert diagnostic.formal_origin == "LOCAL_DIAGNOSTIC_ONLY"
+
+    with pytest.raises(SourceVerificationError, match="official"):
+        build_official_world(
+            suite.world("lorenz96_f10_v2"),
+            MaterializedSources.empty(),
+        )
+
+
+@pytest.mark.parametrize("pair_id", ["trend_primary", "scale_primary"])
+def test_registered_concept_pair_changes_only_its_named_generator_factor(
+    pair_id: str,
+) -> None:
+    config = load_world_suite(WORLD_CONFIG).world("lorenz96_f10_v2")
+    request = SimulationRequest(
+        seed=104729,
+        partition=QualificationPartition.QUAL_SEEN,
+        regime_id=config.regimes[0].regime_id,
+        length=4,
+    )
+
+    factual, counterfactual, changed_concept = concept_pair_schedules(
+        config,
+        request,
+        pair_id,
+    )
+
+    assert changed_concept == pair_id.removesuffix("_primary")
+    if changed_concept == "trend":
+        assert torch.equal(factual.scale, counterfactual.scale)
+        assert not torch.equal(factual.trend, counterfactual.trend)
+    else:
+        assert torch.equal(factual.trend, counterfactual.trend)
+        assert not torch.equal(factual.scale, counterfactual.scale)

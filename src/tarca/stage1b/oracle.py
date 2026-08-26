@@ -29,8 +29,8 @@ class ConceptSchedule:
             raise ValueError("trend and scale schedules must share a nonempty shape")
         if not trend.is_floating_point() or not scale.is_floating_point():
             raise ValueError("concept schedules must have floating dtype")
-        if not bool((scale > 0).all()):
-            raise ValueError("scale schedule must be strictly positive")
+        if not bool((scale >= 0).all()):
+            raise ValueError("scale schedule must be nonnegative")
         object.__setattr__(self, "trend", trend)
         object.__setattr__(self, "scale", scale)
 
@@ -70,8 +70,10 @@ class OfficialSimulation:
         length, dimension = values.shape
         if tuple(times.shape) != (length,) or tuple(regimes.shape) != (length,):
             raise ValueError("simulation times and regimes must match value length")
-        if tuple(initial.shape) != (dimension,) or tuple(noise.shape) != (length, dimension):
-            raise ValueError("simulation initial state or noise shape is invalid")
+        if tuple(initial.shape) != (dimension,):
+            raise ValueError("simulation initial state shape is invalid")
+        if noise.shape[0] <= 0 or noise.shape[1] <= 0:
+            raise ValueError("simulation future noise must be nonempty")
         if self.boundary_event_count < 0:
             raise ValueError("boundary event count must be nonnegative")
         for name, tensor in (

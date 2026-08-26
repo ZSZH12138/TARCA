@@ -168,6 +168,8 @@ def _measurement_noise(
 
 
 class PublishedWorldAdapter:
+    formal_origin = "LOCAL_DIAGNOSTIC_ONLY"
+
     def __init__(self, config: WorldConfig) -> None:
         self.config = config
         self.truth = build_world_truth(config)
