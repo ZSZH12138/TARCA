@@ -64,6 +64,7 @@ def create_monitoring_app(database_path: Path, static_root: Path) -> FastAPI:
     if resolved_static.is_dir():
         app.mount("/", StaticFiles(directory=resolved_static, html=True), name="dashboard")
     else:
+
         @app.get("/", include_in_schema=False)
         def no_dashboard() -> JSONResponse:
             return JSONResponse({"status": "monitoring-api-only"})

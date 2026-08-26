@@ -18,9 +18,7 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, (list, tuple)):
         return all(_is_json_value(item) for item in value)
     if isinstance(value, Mapping):
-        return all(
-            isinstance(key, str) and _is_json_value(item) for key, item in value.items()
-        )
+        return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
     return False
 
 
@@ -54,9 +52,7 @@ class SyntheticConfig(StrictContractModel):
 
     @field_validator("generation_settings", "normalization_settings")
     @classmethod
-    def _settings_are_nonempty(
-        cls, value: Mapping[str, object]
-    ) -> Mapping[str, object]:
+    def _settings_are_nonempty(cls, value: Mapping[str, object]) -> Mapping[str, object]:
         if (
             not value
             or any(not key.strip() for key in value)

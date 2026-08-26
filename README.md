@@ -27,7 +27,8 @@ TARCA 的计划研究链路为：
 
 ## 仓库范围
 
-本仓库保留 Stage 0 研究合同，以及 Stage 1A 建立的统一数据、接口和制品边界：
+本仓库保留 Stage 0 研究合同、Stage 1A 的统一数据/接口/制品边界，以及已构建但尚未执行
+完整资格的 Stage1B v2 官方运行时：
 
 ```text
 artifacts/stage0/       结构化研究合同、环境、Gate 与完成凭证
@@ -37,13 +38,37 @@ src/tarca/contracts/    严格、冻结的公共契约
 src/tarca/artifacts/    Stage 1A 类型化原子制品仓库与冻结目录
 src/tarca/data/         registry 驱动的既有物理窗口读取边界
 src/tarca/stage0/       Stage 0 冻结与核验逻辑
+src/tarca/stage1b/      官方世界、生成器真值、模型适配、资格 Gate 与冻结修订
+src/tarca/execution/    不可变任务、双 GPU 调度、恢复和资源遥测
+src/tarca/monitoring/   只读监控 API
+frontend/stage1b-monitor/ Stage1B 中文运行监控前端
+deploy/stage1b/         Python 3.10/CUDA 12.1 容器与 Compose 入口
 scripts/                环境、来源、Stage 0 与 Stage 1A 检查入口
 tests/stage0/           Stage 0 自动化验证
 tests/stage1a/          Stage 1A 高风险边界和最小闭环验证
 third_party_manifest/   第三方论文、仓库、版本和许可证边界
 ```
 
-Stage 1A 不训练正式模型、不下载或生成正式数据，也不包含 Stage 1B 的 SCM 生成、内部干预、OT、DAS 或 DRO 实现。其范围和交接见 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)。
+Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage1B v2 的实现与服务器运行时
+已经存在，但当前状态严格是 `BUILT_NOT_QUALIFIED`：未运行完整 Stage1B、未运行 E01/E02、
+未冻结。Stage 1A 范围见 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)，Stage1B 交接见
+[`stage1b_v2_official_runtime_build_report.md`](docs/research/stage1b_v2_official_runtime_build_report.md)。
+
+## Stage1B v2 服务器入口
+
+全新服务器先构建镜像并用独立可写容器初始化固定官方来源；正式资格容器随后只读使用该
+来源卷：
+
+```bash
+docker compose -f deploy/stage1b/compose.stage1b-v2.yaml build
+docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b-source-init
+docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b preflight
+docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm --service-ports stage1b launch
+```
+
+监控页面只绑定 `http://127.0.0.1:8765`。中断后使用 `resume`，不能重新 `launch`。只有完整
+资格 Gate 通过并审阅后，才冻结为 `v2-r1`；用户授权覆盖会创建下一不可变 v2 修订，不会
+覆盖已有修订。完整硬件合同、恢复、状态查询和冻结命令见上述交接报告。
 
 ## 权威文档
 

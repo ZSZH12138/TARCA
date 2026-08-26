@@ -168,16 +168,14 @@ class OfficialOperablePredictor(nn.Module, ABC):
 
     def list_intervention_sites(self) -> tuple[InterventionSite, ...]:
         return tuple(
-            validate_intervention_site(registered.contract)
-            for registered in self._registered_sites
+            validate_intervention_site(registered.contract) for registered in self._registered_sites
         )
 
     def _registered_site(self, requested: InterventionSite) -> RegisteredSite:
         matches = tuple(
             site
             for site in self._registered_sites
-            if site.contract.site_name == requested.site_name
-            and site.contract == requested
+            if site.contract.site_name == requested.site_name and site.contract == requested
         )
         if len(matches) != 1:
             raise ValueError("operation requested an undeclared intervention site")
@@ -195,9 +193,7 @@ class OfficialOperablePredictor(nn.Module, ABC):
             self.forward_distribution(batch.x)
         if set(captured) != {site.contract.site_name for site in registered}:
             raise RuntimeError("registered capture site did not execute exactly once")
-        return MappingProxyType(
-            {name: value.detach().clone() for name, value in captured.items()}
-        )
+        return MappingProxyType({name: value.detach().clone() for name, value in captured.items()})
 
     def intervene(
         self,

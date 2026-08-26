@@ -86,13 +86,32 @@ def test_materializer_checks_out_exact_commit_and_verifies_assets(tmp_path: Path
     )
     assert verify_materialized_source(receipt, tmp_path) == receipt.checkout_root
     assert any(call[0] == ("rev-parse", "HEAD") for call in runner.calls)
-    assert any(
-        call[0] == ("config", "core.autocrlf", "false") for call in runner.calls
-    )
-    assert any(
-        call[0] == ("config", "http.version", "HTTP/1.1") for call in runner.calls
-    )
+    assert any(call[0] == ("config", "core.autocrlf", "false") for call in runner.calls)
+    assert any(call[0] == ("config", "http.version", "HTTP/1.1") for call in runner.calls)
     assert any(call[0] == ("config", "core.eol", "lf") for call in runner.calls)
+
+
+def test_materializer_retries_two_transient_fetch_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FlakyFetchGit(FakeGit):
+        def __init__(self) -> None:
+            super().__init__({"src/generator.py": OFFICIAL_BYTES})
+            self.fetch_failures = 0
+
+        def run(self, arguments: tuple[str, ...], cwd: Path | None = None) -> str:
+            if arguments and arguments[0] == "fetch" and self.fetch_failures < 2:
+                self.fetch_failures += 1
+                raise SourceVerificationError("git command failed: transient TLS error")
+            return super().run(arguments, cwd)
+
+    monkeypatch.setattr("tarca.stage1b.sources.time.sleep", lambda _seconds: None)
+    runner = FlakyFetchGit()
+
+    receipt = materialize_source(_source(), tmp_path, runner)
+
+    assert receipt.commit == COMMIT
+    assert runner.fetch_failures == 2
 
 
 def test_materializer_rejects_checkout_hash_drift(tmp_path: Path) -> None:

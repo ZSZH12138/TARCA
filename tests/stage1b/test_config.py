@@ -249,10 +249,7 @@ def test_user_authorized_direct_source_is_valid(tmp_path: Path) -> None:
 
     source = suite.source("published")
     assert source.code_usage is SourceCodeUsage.DIRECT_OFFICIAL_CODE_AND_DATA
-    assert (
-        source.authorization_policy
-        is SourceAuthorizationPolicy.USER_AUTHORIZED_NO_LICENSE_BLOCK
-    )
+    assert source.authorization_policy is SourceAuthorizationPolicy.USER_AUTHORIZED_NO_LICENSE_BLOCK
 
 
 def test_direct_source_requires_authorization_id(tmp_path: Path) -> None:

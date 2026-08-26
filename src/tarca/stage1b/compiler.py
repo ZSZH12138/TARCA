@@ -81,9 +81,7 @@ class Stage1BRunGraph:
         positions = {node_id: index for index, node_id in enumerate(node_ids)}
         for index, node in enumerate(self.nodes):
             unknown = tuple(
-                dependency
-                for dependency in node.dependency_ids
-                if dependency not in positions
+                dependency for dependency in node.dependency_ids if dependency not in positions
             )
             if unknown:
                 raise ValueError("Stage1B graph contains an unknown dependency")
@@ -261,9 +259,7 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
         )
 
     primary_worlds = tuple(
-        world
-        for world in inputs.world_suite.worlds
-        if world.role is WorldRole.PRIMARY_MECHANISTIC
+        world for world in inputs.world_suite.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
     )
     score_nodes: list[Stage1BJobNode] = []
     for world in primary_worlds:

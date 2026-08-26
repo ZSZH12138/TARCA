@@ -150,9 +150,7 @@ def test_reproduction_records_failed_numeric_parity(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("case_id", ["QUAL_UNSEEN-probe", "E01-probe", "e02-probe"])
-def test_reproduction_identity_rejects_formal_namespaces(
-    tmp_path: Path, case_id: str
-) -> None:
+def test_reproduction_identity_rejects_formal_namespaces(tmp_path: Path, case_id: str) -> None:
     with pytest.raises(ValidationError, match="formal or qualification"):
         _spec(tmp_path / "inputs", case_id=case_id)
 

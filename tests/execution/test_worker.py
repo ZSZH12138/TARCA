@@ -112,9 +112,7 @@ def test_worker_fails_closed_on_unverified_or_wrong_artifact(tmp_path: Path) -> 
     wrong = run_worker(
         wrong_context,
         wrong_store,
-        ExecutorRegistry(
-            {"stage1b.test": lambda task, context, progress: _artifact("wrong_type")}
-        ),
+        ExecutorRegistry({"stage1b.test": lambda task, context, progress: _artifact("wrong_type")}),
     )
     assert wrong.state is TaskState.FAILED
     assert wrong_store.attempt_error(wrong_context.attempt_id) == "IDENTITY_DRIFT"

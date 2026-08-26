@@ -64,9 +64,7 @@ def _arguments(namespace: argparse.Namespace) -> RuntimeArguments:
         command=str(namespace.command),
         artifact_root=namespace.artifact_root.resolve(),
         empty_ok=bool(getattr(namespace, "empty_ok", False)),
-        authorize_over_24_hours=bool(
-            getattr(namespace, "authorize_over_24_hours", False)
-        ),
+        authorize_over_24_hours=bool(getattr(namespace, "authorize_over_24_hours", False)),
     )
 
 

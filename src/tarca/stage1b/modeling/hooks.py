@@ -59,8 +59,7 @@ def _canonical_output(output: object, site: RegisteredSite) -> Tensor:
         canonical = tensor.permute(0, 1, 3, 2)
     expected = site.contract.shape_template
     if canonical.ndim != site.contract.tensor_rank or any(
-        size is not None and canonical.shape[index] != size
-        for index, size in enumerate(expected)
+        size is not None and canonical.shape[index] != size for index, size in enumerate(expected)
     ):
         raise ValueError("registered site output violates its declared axes")
     return canonical

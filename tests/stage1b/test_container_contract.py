@@ -48,3 +48,24 @@ def test_entrypoint_forwards_signals_and_monitor_is_read_only() -> None:
     assert "trap terminate TERM INT" in script
     assert "tarca.monitoring.server:create_app_from_environment" in script
     assert "exec python scripts/run_stage1b_runtime.py" in script
+
+
+def test_fresh_server_has_separate_writable_official_source_initializer() -> None:
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    initializer = compose["services"]["stage1b-source-init"]
+
+    assert initializer["entrypoint"] == [
+        "python",
+        "scripts/materialize_stage1b_sources.py",
+        "--cache-root",
+        "/opt/tarca/official_sources",
+    ]
+    source_mount = next(
+        item for item in initializer["volumes"] if item["target"] == "/opt/tarca/official_sources"
+    )
+    assert source_mount["read_only"] is False
+    assert "deploy" not in initializer
+    assert "ports" not in initializer
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    assert "apt-get install" in dockerfile
+    assert "git" in dockerfile and "ca-certificates" in dockerfile

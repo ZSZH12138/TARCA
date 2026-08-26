@@ -15,7 +15,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TARCA_STAGE1B_STATIC_ROOT=/opt/tarca/frontend/stage1b-monitor/dist
 WORKDIR /opt/tarca
 COPY deploy/stage1b/requirements-server.lock /tmp/requirements-server.lock
-RUN python -m pip install --require-hashes --no-cache-dir -r /tmp/requirements-server.lock \
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --require-hashes --no-cache-dir -r /tmp/requirements-server.lock \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin tarca
 COPY . /opt/tarca
 COPY --from=ui-build /ui/dist /opt/tarca/frontend/stage1b-monitor/dist

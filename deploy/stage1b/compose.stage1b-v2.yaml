@@ -21,8 +21,8 @@ services:
       - type: volume
         source: stage1b-artifacts
         target: /opt/tarca/artifacts/stage1b
-      - type: bind
-        source: ../../third_party/stage1b
+      - type: volume
+        source: stage1b-sources
         target: /opt/tarca/official_sources
         read_only: true
     deploy:
@@ -33,6 +33,29 @@ services:
               count: 2
               capabilities: [gpu]
 
+  stage1b-source-init:
+    image: tarca-stage1b-v2:local
+    build:
+      context: ../..
+      dockerfile: deploy/stage1b/Dockerfile
+    entrypoint:
+      - python
+      - scripts/materialize_stage1b_sources.py
+      - --cache-root
+      - /opt/tarca/official_sources
+    read_only: true
+    environment:
+      TARCA_STAGE1B_SOURCE_CACHE_ROOT: /opt/tarca/official_sources
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    volumes:
+      - type: volume
+        source: stage1b-sources
+        target: /opt/tarca/official_sources
+        read_only: false
+
 volumes:
   stage1b-artifacts:
     name: tarca-stage1b-v2-artifacts
+  stage1b-sources:
+    name: tarca-stage1b-v2-sources

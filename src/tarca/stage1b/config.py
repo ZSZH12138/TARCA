@@ -307,10 +307,14 @@ class ConceptPairConfig(FrozenModel):
             raise ValueError("concept pair parameter references must differ")
         if self.factual_value == self.counterfactual_value:
             raise ValueError("concept pair parameter values must differ")
-        if self.concept == "scale" and min(
-            self.factual_value,
-            self.counterfactual_value,
-        ) < 0:
+        if (
+            self.concept == "scale"
+            and min(
+                self.factual_value,
+                self.counterfactual_value,
+            )
+            < 0
+        ):
             raise ValueError("scale concept pair values must be nonnegative")
         return self
 

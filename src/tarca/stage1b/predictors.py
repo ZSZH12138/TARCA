@@ -17,7 +17,7 @@ from tarca.contracts import (
 
 
 def _tensor_bytes(tensor: Tensor) -> bytes:
-    return tensor.detach().cpu().contiguous().numpy().tobytes()
+    return bytes(tensor.detach().cpu().contiguous().numpy().tobytes())
 
 
 @dataclass(frozen=True, slots=True)

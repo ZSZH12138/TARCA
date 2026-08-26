@@ -49,8 +49,7 @@ class GeneratorTruthDataset:
             if (
                 not lags
                 or any(
-                    isinstance(lag, bool) or not isinstance(lag, int) or lag <= 0
-                    for lag in lags
+                    isinstance(lag, bool) or not isinstance(lag, int) or lag <= 0 for lag in lags
                 )
                 or len(lags) != len(set(lags))
             ):

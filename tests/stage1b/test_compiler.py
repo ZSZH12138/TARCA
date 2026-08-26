@@ -31,8 +31,7 @@ def test_primary_training_graph_contains_twelve_gpu_nodes() -> None:
     assert len(training) == 12
     assert all(node.resource_request.gpu_count == 1 for node in training)
     assert {
-        (node.identity.data_id, node.identity.model_id, node.identity.seed)
-        for node in training
+        (node.identity.data_id, node.identity.model_id, node.identity.seed) for node in training
     } == {
         (world, model, seed)
         for world in ("lorenz96_f10_v2", "lorenz96_twoscale_v2")
@@ -70,11 +69,7 @@ def test_ready_manifest_materializes_only_verified_dependency_outputs() -> None:
     assert all(task.task_id not in completed for task in next_manifest.tasks)
     assert all(
         tuple(ref.artifact_type for ref in task.inputs)
-        == next(
-            node.expected_input_types
-            for node in graph.nodes
-            if node.node_id == task.task_id
-        )
+        == next(node.expected_input_types for node in graph.nodes if node.node_id == task.task_id)
         for task in next_manifest.tasks
     )
 

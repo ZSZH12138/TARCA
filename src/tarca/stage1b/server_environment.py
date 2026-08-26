@@ -28,12 +28,15 @@ class ServerEnvironmentExpectation:
             raise ValueError("python_minor must contain two nonnegative components")
         if not self.torch_version or not self.cuda_version or not self.gpu_name_substring:
             raise ValueError("runtime version and GPU expectations must be nonblank")
-        if min(
-            self.gpu_count,
-            self.minimum_vram_bytes,
-            self.minimum_cpu_count,
-            self.minimum_ram_bytes,
-        ) <= 0:
+        if (
+            min(
+                self.gpu_count,
+                self.minimum_vram_bytes,
+                self.minimum_cpu_count,
+                self.minimum_ram_bytes,
+            )
+            <= 0
+        ):
             raise ValueError("runtime resource expectations must be positive")
 
 

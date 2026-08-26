@@ -140,9 +140,7 @@ def validate_qualification_window(batch: WindowBatch) -> WindowBatch:
 
 @dataclass(frozen=True, slots=True)
 class QualificationWindowBridge:
-    entries: tuple[
-        tuple[QualificationPartition, DatasetWindowPartition, WindowBatch], ...
-    ]
+    entries: tuple[tuple[QualificationPartition, DatasetWindowPartition, WindowBatch], ...]
     normalization_mean: torch.Tensor
     normalization_standard_deviation: torch.Tensor
     fitted_partition: DatasetWindowPartition

@@ -10,6 +10,7 @@ from tarca.stage1b.freeze import (
     OverrideAuthorization,
     freeze_suite,
     load_active_pointer,
+    revision_root,
     verify_frozen_suite,
 )
 
@@ -108,4 +109,118 @@ def test_frozen_manifest_detects_tampering(tmp_path: Path) -> None:
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(FreezeRejected, match="manifest hash"):
+        verify_frozen_suite(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("source_evidence_verified", False, "source evidence"),
+        ("source_manifest_sha256", "bad", "source_manifest_sha256"),
+        ("source_commits", {}, "source commits"),
+        ("source_commits", {"source": "bad"}, "source commits"),
+        ("world_decisions", None, "world_decisions"),
+        ("failure_ledger", None, "failure_ledger"),
+    ],
+)
+def test_freeze_rejects_incomplete_receipt_fields(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    receipt = passing_receipt()
+    receipt[field] = value
+
+    with pytest.raises(FreezeRejected, match=message):
+        freeze_suite(receipt, tmp_path)
+
+
+def test_freeze_rejects_hardware_identity_and_undeclared_row_seed(tmp_path: Path) -> None:
+    identity_drift = passing_receipt()
+    evidence = dict(identity_drift["qualification_evidence"])
+    evidence["hardware_receipt_sha256"] = "f" * 64
+    identity_drift["qualification_evidence"] = evidence
+    with pytest.raises(FreezeRejected, match="hardware receipt identity drift"):
+        freeze_suite(identity_drift, tmp_path)
+
+    undeclared_seed = passing_receipt()
+    undeclared_seed["training_receipts"] = [{"qualification_seed": 999}]
+    with pytest.raises(FreezeRejected, match="undeclared"):
+        freeze_suite(undeclared_seed, tmp_path)
+
+
+def test_freeze_rejects_formal_identifier_and_bad_seed_declarations(tmp_path: Path) -> None:
+    formal = passing_receipt("E01")
+    with pytest.raises(FreezeRejected, match="formal experiment"):
+        freeze_suite(formal, tmp_path)
+
+    duplicate = passing_receipt()
+    duplicate["qualification_seeds"] = [101, 101]
+    with pytest.raises(FreezeRejected, match="duplicates"):
+        freeze_suite(duplicate, tmp_path)
+
+    malformed = passing_receipt()
+    malformed["reserved_formal_seeds"] = [True]
+    with pytest.raises(FreezeRejected, match="invalid"):
+        freeze_suite(malformed, tmp_path)
+
+
+def test_revision_identity_and_initial_override_boundaries(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="v2-rN"):
+        revision_root(tmp_path, "v2")
+    with pytest.raises(ValueError, match="must not be blank"):
+        OverrideAuthorization(" ", "reason", "v2-r1")
+    with pytest.raises(ValueError, match="v2-rN"):
+        OverrideAuthorization("user", "reason", "v2")
+    with pytest.raises(FreezeRejected, match="fixed to v2"):
+        freeze_suite(passing_receipt(), tmp_path, series="v3", revision_id="v3-r1")
+    with pytest.raises(FreezeRejected, match="v2-rN"):
+        freeze_suite(passing_receipt(), tmp_path, revision_id="v2")
+    with pytest.raises(FreezeRejected, match="initial v2 freeze"):
+        freeze_suite(passing_receipt(), tmp_path, revision_id="v2-r2")
+    with pytest.raises(FreezeRejected, match="initial freeze"):
+        freeze_suite(
+            passing_receipt(),
+            tmp_path,
+            authorization=OverrideAuthorization("user", "reason", "v2-r1"),
+        )
+
+
+def test_override_must_match_active_and_create_exact_next_revision(tmp_path: Path) -> None:
+    freeze_suite(passing_receipt(), tmp_path)
+    with pytest.raises(FreezeRejected, match="cannot be overwritten"):
+        freeze_suite(passing_receipt(), tmp_path)
+    with pytest.raises(FreezeRejected, match="does not match"):
+        freeze_suite(
+            passing_receipt(),
+            tmp_path,
+            revision_id="v2-r2",
+            authorization=OverrideAuthorization("user", "reason", "v2-r9"),
+        )
+    with pytest.raises(FreezeRejected, match="next v2 revision"):
+        freeze_suite(
+            passing_receipt(),
+            tmp_path,
+            revision_id="v2-r3",
+            authorization=OverrideAuthorization("user", "reason", "v2-r1"),
+        )
+
+
+def test_verify_reports_unfrozen_missing_revision_and_receipt_tampering(
+    tmp_path: Path,
+) -> None:
+    assert verify_frozen_suite(tmp_path, allow_unfrozen=True) == {
+        "status": "UNFROZEN",
+        "active_revision_id": None,
+    }
+    with pytest.raises(FreezeRejected, match="not frozen"):
+        verify_frozen_suite(tmp_path)
+    freeze_suite(passing_receipt(), tmp_path)
+    with pytest.raises(FreezeRejected, match="scientific series"):
+        verify_frozen_suite(tmp_path, series="v3")
+    with pytest.raises(FreezeRejected, match="files are missing"):
+        verify_frozen_suite(tmp_path, revision_id="v2-r2")
+
+    receipt_path = tmp_path / "versions/v2/revisions/r1/qualification_receipt.json"
+    receipt_path.chmod(0o644)
+    receipt_path.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(FreezeRejected, match="qualification receipt hash"):
         verify_frozen_suite(tmp_path)

@@ -88,9 +88,7 @@ class ReproductionSuite(FrozenModel):
 
     @field_validator("cases")
     @classmethod
-    def _cases_are_unique(
-        cls, value: tuple[ReproductionSpec, ...]
-    ) -> tuple[ReproductionSpec, ...]:
+    def _cases_are_unique(cls, value: tuple[ReproductionSpec, ...]) -> tuple[ReproductionSpec, ...]:
         if not value:
             raise ValueError("reproduction suite requires cases")
         identities = tuple(case.case_id for case in value)
@@ -298,9 +296,7 @@ def _gvar_predator_prey(source_root: Path, input_bytes: bytes) -> ReproductionOu
     parameters = _json_object(input_bytes)
     constructor_keys = ("p", "d", "alpha", "beta", "gamma", "delta", "sigma")
     constructor = {key: parameters[key] for key in constructor_keys}
-    simulation = {
-        key: parameters[key] for key in ("t", "dt", "downsample_factor", "seed")
-    }
+    simulation = {key: parameters[key] for key in ("t", "dt", "downsample_factor", "seed")}
     module = _load_file_module(
         source_root / "datasets/lotkaVolterra/multiple_lotka_volterra.py",
         "gvar_predator_prey",

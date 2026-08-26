@@ -146,9 +146,7 @@ class MonitoringRepository:
         progress = _object(row["progress_json"])
         resource = _object(row["resource_json"])
         gpu_ids = tuple(
-            int(item)
-            for item in allocation.get("gpu_ids", [])
-            if type(item) is int and item >= 0
+            int(item) for item in allocation.get("gpu_ids", []) if type(item) is int and item >= 0
         )
         actual_vram = sum(
             _integer(sample.get("memory_used_bytes"))

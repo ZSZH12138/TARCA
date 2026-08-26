@@ -107,9 +107,10 @@ def test_training_receipt_binds_device_progress_and_atomic_checkpoint(tmp_path: 
     assert result.receipt.device == "cpu"
     assert result.receipt.precision == "FP32"
     assert result.checkpoint is not None and result.checkpoint.is_file()
-    assert result.receipt.checkpoint_sha256 == hashlib.sha256(
-        result.checkpoint.read_bytes()
-    ).hexdigest()
+    assert (
+        result.receipt.checkpoint_sha256
+        == hashlib.sha256(result.checkpoint.read_bytes()).hexdigest()
+    )
     assert len(result.receipt.checkpoint_sha256) == 64
     assert not tuple(tmp_path.glob("*.tmp-*"))
     assert progress.values

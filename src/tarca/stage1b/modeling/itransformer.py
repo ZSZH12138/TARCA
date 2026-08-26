@@ -28,9 +28,7 @@ from tarca.stage1b.sources import (
 _ITRANSFORMER_SOURCE_ID = "itransformer"
 _ITRANSFORMER_COMMIT = "4e938a1767106324dd753b2a44832bf870a0252e"
 _ITRANSFORMER_ASSET = Path("models/iTransformer.py")
-_ITRANSFORMER_ASSET_SHA256 = (
-    "7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e"
-)
+_ITRANSFORMER_ASSET_SHA256 = "7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e"
 
 
 def _repository_root() -> Path:
@@ -64,8 +62,7 @@ def default_itransformer_source_context() -> ModelSourceContext:
     checkout = source_cache / _ITRANSFORMER_SOURCE_ID / _ITRANSFORMER_COMMIT
     if not checkout.is_dir():
         raise RuntimeError(
-            "pinned official iTransformer source is not materialized; "
-            "run the source materializer"
+            "pinned official iTransformer source is not materialized; run the source materializer"
         )
     suite = load_world_suite(repository_root / "configs/stage1b/worlds_v2.yaml")
     receipt = materialize_source(

@@ -156,9 +156,7 @@ def _cpu_snapshot(value: Any) -> Any:
 
 def _atomic_torch_save(payload: Mapping[str, Any], destination: Path) -> str:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(
-        f".{destination.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
-    )
+    temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}")
     try:
         torch.save(dict(payload), temporary)
         os.replace(temporary, destination)
@@ -502,9 +500,7 @@ def train_candidate(
                 ):
                     distribution = model.forward_distribution(batch_x)
                     if distribution.scale is None:
-                        raise RuntimeError(
-                            "neural candidate did not emit probabilistic scale"
-                        )
+                        raise RuntimeError("neural candidate did not emit probabilistic scale")
                     loss = _gaussian_nll(distribution.mean, distribution.scale, batch_y)
                 scaler.scale(loss).backward()  # type: ignore[no-untyped-call]
                 scaler.unscale_(optimizer)

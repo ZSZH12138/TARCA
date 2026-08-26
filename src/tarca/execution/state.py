@@ -392,9 +392,7 @@ class ExecutionStateStore:
                 ).fetchone()
                 if completed is None or completed["artifact_json"] is None:
                     raise ValueError("task dependency is not completed with a verified artifact")
-                dependency_artifact = ArtifactRef.model_validate_json(
-                    completed["artifact_json"]
-                )
+                dependency_artifact = ArtifactRef.model_validate_json(completed["artifact_json"])
                 if dependency_artifact != task.inputs[ordinal]:
                     raise ValueError("task input does not match its completed dependency artifact")
                 connection.execute(

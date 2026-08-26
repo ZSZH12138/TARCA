@@ -6,6 +6,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -231,10 +232,18 @@ def materialize_source(
         runner.run(("config", "core.eol", "lf"), cwd=temporary)
         runner.run(("config", "http.version", "HTTP/1.1"), cwd=temporary)
         runner.run(("remote", "add", "origin", source.repository_url), cwd=temporary)
-        runner.run(
-            ("fetch", "--depth=1", "--no-tags", "origin", source.commit),
-            cwd=temporary,
-        )
+        for attempt in range(3):
+            try:
+                runner.run(
+                    ("fetch", "--depth=1", "--no-tags", "origin", source.commit),
+                    cwd=temporary,
+                )
+                break
+            except SourceVerificationError as error:
+                is_transient_git_failure = str(error).startswith("git command failed")
+                if not is_transient_git_failure or attempt == 2:
+                    raise
+                time.sleep(2**attempt)
         runner.run(("checkout", "--detach", "FETCH_HEAD"), cwd=temporary)
         _verify_git_commit(runner, temporary, source.commit)
         _verify_git_clean(runner, temporary)
@@ -272,9 +281,7 @@ def verify_materialized_source(
             "asset path",
         )
         if not asset_path.is_file() or _sha256_file(asset_path) != expected_hash:
-            raise SourceVerificationError(
-                f"official asset hash mismatch for {relative_path}"
-            )
+            raise SourceVerificationError(f"official asset hash mismatch for {relative_path}")
     actual_tree_hash = _tree_sha256(actual_root)
     if actual_tree_hash != receipt.tree_sha256:
         raise SourceVerificationError(

@@ -61,9 +61,7 @@ def _physical_batch(
 
 def test_partition_bridge_preserves_batches_and_fits_train_only() -> None:
     batches = {
-        QualificationPartition.QUAL_TRAIN: _physical_batch(
-            QualificationPartition.QUAL_TRAIN, 2.0
-        ),
+        QualificationPartition.QUAL_TRAIN: _physical_batch(QualificationPartition.QUAL_TRAIN, 2.0),
         QualificationPartition.QUAL_TUNE: _physical_batch(
             QualificationPartition.QUAL_TUNE, 1_000_000.0
         ),
@@ -77,9 +75,10 @@ def test_partition_bridge_preserves_batches_and_fits_train_only() -> None:
 
     bridge = bridge_qualification_windows(batches)
 
-    assert bridge.batch_for(QualificationPartition.QUAL_TRAIN) is batches[
-        QualificationPartition.QUAL_TRAIN
-    ]
+    assert (
+        bridge.batch_for(QualificationPartition.QUAL_TRAIN)
+        is batches[QualificationPartition.QUAL_TRAIN]
+    )
     assert bridge.fitted_partition is DatasetWindowPartition.TRAIN
     torch.testing.assert_close(
         bridge.normalization_mean,
@@ -94,9 +93,7 @@ def test_partition_bridge_rejects_cross_partition_window_reuse() -> None:
     batches = {
         QualificationPartition.QUAL_TRAIN: train,
         QualificationPartition.QUAL_TUNE: tune,
-        QualificationPartition.QUAL_SEEN: _physical_batch(
-            QualificationPartition.QUAL_SEEN, 3.0
-        ),
+        QualificationPartition.QUAL_SEEN: _physical_batch(QualificationPartition.QUAL_SEEN, 3.0),
         QualificationPartition.QUAL_UNSEEN: _physical_batch(
             QualificationPartition.QUAL_UNSEEN, 4.0
         ),

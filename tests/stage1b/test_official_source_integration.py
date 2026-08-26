@@ -64,11 +64,14 @@ def test_all_registered_official_reproductions_match_pinned_upstream(
 
     assert len(receipts) == 6
     assert all(receipt.passed for receipt in receipts)
-    assert max(
-        receipt.maximum_absolute_error
-        for receipt, case in zip(receipts, suite.cases, strict=True)
-        if case.kind is ReproductionKind.MODEL_FORWARD
-    ) <= 1e-6
+    assert (
+        max(
+            receipt.maximum_absolute_error
+            for receipt, case in zip(receipts, suite.cases, strict=True)
+            if case.kind is ReproductionKind.MODEL_FORWARD
+        )
+        <= 1e-6
+    )
     assert all(
         verify_materialized_source(receipt, SOURCE_CACHE) == receipt.checkout_root
         for receipt in official_sources.receipts

@@ -193,9 +193,10 @@ class NeuralGcVarDriver(_BaseOfficialDriver):
         initial_state = state.copy()
         values = np.empty((request.length, self.config.dimension), dtype=np.float64)
         for returned in range(request.length):
-            state = trend[returned] * (beta @ state) + scale[returned] * expected_errors[
-                burn + returned - 1
-            ]
+            state = (
+                trend[returned] * (beta @ state)
+                + scale[returned] * expected_errors[burn + returned - 1]
+            )
             values[returned] = state
         return _official_simulation(
             config=self.config,
@@ -216,9 +217,9 @@ class NeuralGcLorenz96Driver(_BaseOfficialDriver):
             size=self.config.dimension,
         ).astype(np.float64)
         burn = int(generator["burn_in_observations"]) + request.warmup_steps
-        all_noise = rng.normal(
-            size=(burn + request.length, self.config.dimension)
-        ).astype(np.float64)
+        all_noise = rng.normal(size=(burn + request.length, self.config.dimension)).astype(
+            np.float64
+        )
         return initial, all_noise[-request.length :]
 
     def sample_future_noise(self, request: SimulationRequest) -> Tensor:
@@ -334,12 +335,8 @@ def _two_scale_step(
     )
     fourth_slow = np.asarray(fourth_slow, dtype=np.float64)
     fourth_fast = np.asarray(fourth_fast, dtype=np.float64)
-    next_slow = slow + step * (
-        first_slow + 2 * second_slow + 2 * third_slow + fourth_slow
-    ) / 6
-    next_fast = fast + step * (
-        first_fast + 2 * second_fast + 2 * third_fast + fourth_fast
-    ) / 6
+    next_slow = slow + step * (first_slow + 2 * second_slow + 2 * third_slow + fourth_slow) / 6
+    next_fast = fast + step * (first_fast + 2 * second_fast + 2 * third_fast + fourth_fast) / 6
     return next_slow, next_fast
 
 
@@ -396,8 +393,7 @@ class JmlrTwoScaleLorenz96Driver(_BaseOfficialDriver):
             config=self.config,
             request=request,
             values=values,
-            times=np.arange(request.length, dtype=np.float64)
-            * generator["observation_interval"],
+            times=np.arange(request.length, dtype=np.float64) * generator["observation_interval"],
             initial_state=shared_initial,
             future_noise=noise,
         )
@@ -525,8 +521,7 @@ class GvarPredatorPreyDriver(_BaseOfficialDriver):
             config=self.config,
             request=request,
             values=values,
-            times=np.arange(request.length, dtype=np.float64)
-            * generator["observation_interval"],
+            times=np.arange(request.length, dtype=np.float64) * generator["observation_interval"],
             initial_state=shared_initial,
             future_noise=noise,
             boundary_event_count=clipped,

@@ -148,9 +148,7 @@ class PlannedTask(StrictContractModel):
 
     @field_validator("input_refs")
     @classmethod
-    def _input_refs_are_unique(
-        cls, value: tuple[ArtifactRef, ...]
-    ) -> tuple[ArtifactRef, ...]:
+    def _input_refs_are_unique(cls, value: tuple[ArtifactRef, ...]) -> tuple[ArtifactRef, ...]:
         identities = tuple(item.identity_key() for item in value)
         if len(identities) != len(set(identities)):
             raise ValueError("planned task input artifacts must be unique")
@@ -173,9 +171,7 @@ class ExecutionPlan(StrictContractModel):
 
     @field_validator("planned_tasks")
     @classmethod
-    def _planned_tasks_are_unique(
-        cls, value: tuple[PlannedTask, ...]
-    ) -> tuple[PlannedTask, ...]:
+    def _planned_tasks_are_unique(cls, value: tuple[PlannedTask, ...]) -> tuple[PlannedTask, ...]:
         task_ids = tuple(task.task_id for task in value)
         attempt_ids = tuple(task.attempt_id for task in value)
         if len(task_ids) != len(set(task_ids)):
