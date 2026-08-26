@@ -5,7 +5,10 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
+from tarca.stage1b.modeling import OfficialOperablePredictor
 from tarca.stage1b.neural import OperableNeuralPredictor
+
+Stage1BNeuralPredictor = OperableNeuralPredictor | OfficialOperablePredictor
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,7 +25,7 @@ class TrainingReceipt:
 
 @dataclass(frozen=True, slots=True)
 class TrainingResult:
-    model: OperableNeuralPredictor
+    model: Stage1BNeuralPredictor
     receipt: TrainingReceipt
 
 
@@ -31,7 +34,7 @@ def _gaussian_nll(mean: Tensor, scale: Tensor, target: Tensor) -> Tensor:
 
 
 def train_candidate(
-    model: OperableNeuralPredictor,
+    model: Stage1BNeuralPredictor,
     train_x: Tensor,
     train_y: Tensor,
     tune_x: Tensor,

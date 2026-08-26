@@ -21,6 +21,7 @@ from tarca.contracts import (
     validate_intervention_spec,
     validate_window_batch,
 )
+from tarca.stage1b.modeling.patchtst import OfficialPatchTSTPredictor
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +123,7 @@ class OperableNeuralPredictor(nn.Module, ABC):
             if module is self:
                 continue
             if isinstance(module, nn.MultiheadAttention):
-                module._reset_parameters()
+                module._reset_parameters()  # type: ignore[no-untyped-call]
                 continue
             reset = getattr(module, "reset_parameters", None)
             if callable(reset):
@@ -290,77 +291,6 @@ class OperableNeuralPredictor(nn.Module, ABC):
         return replacement
 
 
-class PatchTSTReference(OperableNeuralPredictor):
-    def __init__(
-        self,
-        history_length: int,
-        horizon: int,
-        input_dimension: int,
-        d_model: int,
-        n_layers: int,
-        n_heads: int,
-        d_ff: int,
-        dropout: float,
-        patch_length: int,
-        patch_stride: int,
-    ) -> None:
-        super().__init__(
-            history_length, horizon, input_dimension, d_model, n_layers, n_heads, d_ff, dropout
-        )
-        if patch_length > history_length or (history_length - patch_length) % patch_stride:
-            raise ValueError("PatchTST patches must exactly cover the history")
-        self.patch_length = patch_length
-        self.patch_stride = patch_stride
-        self.patch_count = 1 + (history_length - patch_length) // patch_stride
-        self.input_projection = nn.Linear(patch_length, d_model)
-        self.position = nn.Parameter(torch.zeros(1, 1, self.patch_count, d_model))
-        flattened = self.patch_count * d_model
-        self.mean_head = nn.Linear(flattened, horizon)
-        self.scale_head = nn.Linear(flattened, horizon)
-        nn.init.constant_(self.scale_head.bias, -1.0)
-
-    @property
-    def adapter_name(self) -> str:
-        return "PatchTSTReference"
-
-    def _reset_adapter_parameters(self) -> None:
-        nn.init.zeros_(self.position)
-        nn.init.constant_(self.scale_head.bias, -1.0)
-
-    def _tokenize(self, normalized_histories: Tensor) -> Tensor:
-        channels = normalized_histories.transpose(1, 2)
-        patches = channels.unfold(dimension=2, size=self.patch_length, step=self.patch_stride)
-        return cast(Tensor, self.input_projection(patches) + self.position)
-
-    def _apply_encoder_layer(self, tokens: Tensor, layer: nn.Module) -> Tensor:
-        batch, variables, patches, features = tokens.shape
-        encoded = layer(tokens.reshape(batch * variables, patches, features))
-        return cast(Tensor, encoded.reshape(batch, variables, patches, features))
-
-    def _decode(
-        self, representation: Tensor, context: NormalizationContext
-    ) -> tuple[Tensor, Tensor]:
-        flattened = representation.flatten(start_dim=2)
-        normalized_mean = self.mean_head(flattened).transpose(1, 2)
-        normalized_scale = functional.softplus(self.scale_head(flattened)).transpose(1, 2)
-        return (
-            normalized_mean * context.scale + context.center,
-            normalized_scale * context.scale,
-        )
-
-    def _site(self, site_name: str, layer: int | None) -> InterventionSite:
-        return InterventionSite(
-            site_name=site_name,
-            layer=layer,
-            tensor_rank=4,
-            batch_axis=0,
-            variable_axis=1,
-            patch_axis=2,
-            feature_axis=3,
-            shape_template=(None, self.input_dimension, self.patch_count, self.d_model),
-        )
-
-
 class ITransformerReference(OperableNeuralPredictor):
     def __init__(
         self,
@@ -420,3 +350,6 @@ class ITransformerReference(OperableNeuralPredictor):
             feature_axis=2,
             shape_template=(None, self.input_dimension, self.d_model),
         )
+
+
+PatchTSTReference = OfficialPatchTSTPredictor

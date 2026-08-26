@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-import psutil  # type: ignore[import-untyped]
+import psutil
 import torch
 
 from tarca.contracts import (
@@ -54,12 +54,15 @@ from tarca.stage1b.hardware import estimate_full_run, inventory_hardware
 from tarca.stage1b.metrics import summarize_gaussian
 from tarca.stage1b.neural import (
     ITransformerReference,
-    OperableNeuralPredictor,
     PatchTSTReference,
 )
 from tarca.stage1b.predictors import TunedVAR
 from tarca.stage1b.splits import QualificationSplit
-from tarca.stage1b.training import TrainingResult, train_candidate
+from tarca.stage1b.training import (
+    Stage1BNeuralPredictor,
+    TrainingResult,
+    train_candidate,
+)
 from tarca.stage1b.worlds import (
     NodeShock,
     PairedSimulationRequest,
@@ -136,7 +139,7 @@ def _new_model(
     model_config: NeuralModelConfig,
     world: WorldConfig,
     qualification: QualificationConfig,
-) -> OperableNeuralPredictor:
+) -> Stage1BNeuralPredictor:
     if model_config.adapter is NeuralAdapter.PATCHTST_REFERENCE:
         if model_config.patch_length is None or model_config.patch_stride is None:
             raise ValueError("PatchTST configuration is missing patch geometry")
@@ -165,7 +168,7 @@ def _new_model(
 
 
 def _train_model(
-    model: OperableNeuralPredictor,
+    model: Stage1BNeuralPredictor,
     dataset: QualificationDataset,
     model_config: NeuralModelConfig,
     seed: int,
@@ -222,7 +225,7 @@ def _build_window_batch(x: torch.Tensor, y: torch.Tensor, prefix: str) -> Window
 
 
 def _operability_smoke(
-    model: OperableNeuralPredictor,
+    model: Stage1BNeuralPredictor,
     dataset: QualificationDataset,
 ) -> bool:
     tune_x, tune_y = stack_partition(dataset, QualificationPartition.QUAL_TUNE)
