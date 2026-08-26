@@ -5,8 +5,9 @@ import math
 import re
 from collections.abc import Mapping
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Self
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -14,6 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+def _validated_https_url(value: str, label: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ValueError(f"{label} must use HTTPS")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(f"{label} must not contain embedded credentials")
+    return value
 
 
 class WorldRole(StrEnum):
@@ -57,9 +67,7 @@ class EvidenceFileConfig(FrozenModel):
     @field_validator("url")
     @classmethod
     def _url_is_https(cls, value: str) -> str:
-        if not value.startswith("https://"):
-            raise ValueError("evidence URL must use HTTPS")
-        return value
+        return _validated_https_url(value, "evidence URL")
 
     @field_validator("sha256")
     @classmethod
@@ -69,35 +77,121 @@ class EvidenceFileConfig(FrozenModel):
         return value
 
 
+class SourceCodeUsage(StrEnum):
+    DIRECT_OFFICIAL_CODE = "DIRECT_OFFICIAL_CODE"
+    DIRECT_OFFICIAL_DATA = "DIRECT_OFFICIAL_DATA"
+    DIRECT_OFFICIAL_CODE_AND_DATA = "DIRECT_OFFICIAL_CODE_AND_DATA"
+    REIMPLEMENTED_EQUATIONS = "REIMPLEMENTED_EQUATIONS"
+
+
+class SourceAuthorizationPolicy(StrEnum):
+    LICENSED = "LICENSED"
+    USER_AUTHORIZED_NO_LICENSE_BLOCK = "USER_AUTHORIZED_NO_LICENSE_BLOCK"
+
+
+class SourceAssetConfig(FrozenModel):
+    asset_id: str
+    relative_path: str
+    sha256: str
+    required_for: tuple[Literal["REPRODUCTION", "ORACLE", "MODEL"], ...]
+
+    @field_validator("asset_id")
+    @classmethod
+    def _asset_id_is_safe(cls, value: str) -> str:
+        if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", value) is None:
+            raise ValueError("asset_id must be a lowercase safe identifier")
+        return value
+
+    @field_validator("relative_path")
+    @classmethod
+    def _asset_path_is_safe(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if (
+            not value.strip()
+            or "\\" in value
+            or path.is_absolute()
+            or ".." in path.parts
+            or path.as_posix() in {"", "."}
+        ):
+            raise ValueError("asset relative path must stay below the official source root")
+        return path.as_posix()
+
+    @field_validator("sha256")
+    @classmethod
+    def _asset_sha_is_valid(cls, value: str) -> str:
+        if re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("asset hash must be a lowercase SHA-256")
+        return value
+
+    @field_validator("required_for")
+    @classmethod
+    def _asset_uses_are_unique(
+        cls,
+        value: tuple[Literal["REPRODUCTION", "ORACLE", "MODEL"], ...],
+    ) -> tuple[Literal["REPRODUCTION", "ORACLE", "MODEL"], ...]:
+        if not value or len(value) != len(set(value)):
+            raise ValueError("asset required_for roles must be nonempty and unique")
+        return value
+
+
 class SourceConfig(FrozenModel):
     source_id: str
     title: str
     repository_url: str
     paper_url: str
     commit: str
-    license_id: Literal["MIT", "APACHE-2.0", "REFERENCE_ONLY"]
-    code_usage: Literal["REIMPLEMENTED_EQUATIONS"]
+    license_id: str
+    code_usage: SourceCodeUsage
+    authorization_policy: SourceAuthorizationPolicy
+    authorization_id: str
+    assets: tuple[SourceAssetConfig, ...]
     evidence_files: tuple[EvidenceFileConfig, ...]
 
-    @field_validator("source_id", "title", "repository_url", "paper_url")
+    @field_validator(
+        "title",
+        "repository_url",
+        "paper_url",
+        "license_id",
+        "authorization_id",
+    )
     @classmethod
     def _nonblank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("source fields must not be blank")
         return value
 
+    @field_validator("source_id")
+    @classmethod
+    def _source_id_is_safe(cls, value: str) -> str:
+        if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", value) is None:
+            raise ValueError("source_id must be a lowercase safe identifier")
+        return value
+
     @field_validator("repository_url", "paper_url")
     @classmethod
     def _source_urls_are_https(cls, value: str) -> str:
-        if not value.startswith("https://"):
-            raise ValueError("source URLs must use HTTPS")
-        return value
+        return _validated_https_url(value, "source URL")
 
     @field_validator("commit")
     @classmethod
     def _commit_is_sha1(cls, value: str) -> str:
         if re.fullmatch(r"[0-9a-f]{40}", value) is None:
             raise ValueError("source commit must be a lowercase Git SHA-1")
+        return value
+
+    @field_validator("assets")
+    @classmethod
+    def _assets_are_unique(
+        cls, value: tuple[SourceAssetConfig, ...]
+    ) -> tuple[SourceAssetConfig, ...]:
+        if not value:
+            raise ValueError("each direct source requires pinned assets")
+        asset_ids = tuple(asset.asset_id for asset in value)
+        paths = tuple(asset.relative_path for asset in value)
+        if len(asset_ids) != len(set(asset_ids)):
+            raise ValueError("asset IDs must be unique within a source")
+        if len(paths) != len(set(paths)):
+            raise ValueError("asset relative paths must be unique within a source")
         return value
 
     @field_validator("evidence_files")
@@ -111,6 +205,15 @@ class SourceConfig(FrozenModel):
         if len(urls) != len(set(urls)):
             raise ValueError("evidence URLs must be unique within a source")
         return value
+
+    @model_validator(mode="after")
+    def _authorization_is_coherent(self) -> Self:
+        if (
+            self.authorization_policy is SourceAuthorizationPolicy.LICENSED
+            and self.license_id.upper() in {"UNDECLARED", "REFERENCE_ONLY"}
+        ):
+            raise ValueError("licensed source authorization requires a declared license")
+        return self
 
 
 class TruthCapabilities(FrozenModel):

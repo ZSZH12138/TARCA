@@ -6,7 +6,12 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from tarca.stage1b.config import load_qualification_config, load_world_suite
+from tarca.stage1b.config import (
+    SourceAuthorizationPolicy,
+    SourceCodeUsage,
+    load_qualification_config,
+    load_world_suite,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,8 +28,18 @@ def _source(source_id: str = "published") -> dict[str, object]:
         "repository_url": "https://github.com/example/published.git",
         "paper_url": "https://doi.org/10.0000/example",
         "commit": "a" * 40,
-        "license_id": "REFERENCE_ONLY",
-        "code_usage": "REIMPLEMENTED_EQUATIONS",
+        "license_id": "UNDECLARED",
+        "code_usage": "DIRECT_OFFICIAL_CODE_AND_DATA",
+        "authorization_policy": "USER_AUTHORIZED_NO_LICENSE_BLOCK",
+        "authorization_id": "stage1b-v2-user-direct-official-use-2026-08-26",
+        "assets": [
+            {
+                "asset_id": "world_source",
+                "relative_path": "world.py",
+                "sha256": "c" * 64,
+                "required_for": ["REPRODUCTION", "ORACLE"],
+            }
+        ],
         "evidence_files": [
             {
                 "url": "https://raw.githubusercontent.com/example/published/commit/world.py",
@@ -166,10 +181,49 @@ def test_world_suite_requires_two_registered_primary_families(tmp_path: Path) ->
         load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
 
 
-def test_reference_only_source_cannot_claim_copied_code(tmp_path: Path) -> None:
+def test_user_authorized_direct_source_is_valid(tmp_path: Path) -> None:
     payload = _suite()
-    payload["sources"][0]["code_usage"] = "COPIED_UPSTREAM"  # type: ignore[index]
-    with pytest.raises(ValidationError, match="code_usage"):
+    suite = load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+    source = suite.source("published")
+    assert source.code_usage is SourceCodeUsage.DIRECT_OFFICIAL_CODE_AND_DATA
+    assert (
+        source.authorization_policy
+        is SourceAuthorizationPolicy.USER_AUTHORIZED_NO_LICENSE_BLOCK
+    )
+
+
+def test_direct_source_requires_authorization_id(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["sources"][0]["authorization_id"] = ""  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="authorization"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_source_asset_rejects_path_traversal(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["sources"][0]["assets"][0]["relative_path"] = "../world.py"  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="relative path"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_source_id_rejects_path_components(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["sources"][0]["source_id"] = "../published"  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="source_id"):
+        load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
+
+
+def test_source_repository_url_rejects_embedded_credentials(tmp_path: Path) -> None:
+    payload = _suite()
+    payload["sources"][0]["repository_url"] = (  # type: ignore[index]
+        "https://token@example.com/published.git"
+    )
+
+    with pytest.raises(ValidationError, match="credentials"):
         load_world_suite(_write_yaml(tmp_path / "worlds.yaml", payload))
 
 

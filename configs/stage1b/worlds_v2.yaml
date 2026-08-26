@@ -7,7 +7,14 @@ sources:
     paper_url: https://arxiv.org/abs/1802.05842
     commit: c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf
     license_id: MIT
-    code_usage: REIMPLEMENTED_EQUATIONS
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-neural-gc-mit
+    assets:
+      - asset_id: synthetic_generator
+        relative_path: synthetic.py
+        sha256: 9153d1131e3232fcc8fe278731404f63c8feb9b41cb2f72ad0ca2db228d2d328
+        required_for: [REPRODUCTION, ORACLE]
     evidence_files:
       - url: https://raw.githubusercontent.com/iancovert/Neural-GC/c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf/synthetic.py
         sha256: 9153d1131e3232fcc8fe278731404f63c8feb9b41cb2f72ad0ca2db228d2d328
@@ -16,8 +23,19 @@ sources:
     repository_url: https://github.com/i6092467/GVAR.git
     paper_url: https://openreview.net/forum?id=DEa4JdMWRHp
     commit: e06268f87fbe923580af14b2cab26399191747a6
-    license_id: REFERENCE_ONLY
-    code_usage: REIMPLEMENTED_EQUATIONS
+    license_id: UNDECLARED
+    code_usage: DIRECT_OFFICIAL_CODE_AND_DATA
+    authorization_policy: USER_AUTHORIZED_NO_LICENSE_BLOCK
+    authorization_id: stage1b-v2-user-direct-official-use-2026-08-26
+    assets:
+      - asset_id: lorenz_generator
+        relative_path: datasets/lorenz.py
+        sha256: 87970ec4e33994b6fe48de9f50e2ee0e7df08b896486be133d39dc1d5a7f3305
+        required_for: [REPRODUCTION, ORACLE]
+      - asset_id: predator_prey_generator
+        relative_path: datasets/lotkaVolterra/multiple_lotka_volterra.py
+        sha256: ecc58ba39112ef8aa9ccbbe884e4a6bb21352d275f916d8bea665819fee8a97b
+        required_for: [REPRODUCTION, ORACLE]
     evidence_files:
       - url: https://raw.githubusercontent.com/i6092467/GVAR/e06268f87fbe923580af14b2cab26399191747a6/datasets/lorenz.py
         sha256: 87970ec4e33994b6fe48de9f50e2ee0e7df08b896486be133d39dc1d5a7f3305
@@ -28,8 +46,15 @@ sources:
     repository_url: https://github.com/LoryPack/GenerativeNetworksScoringRulesProbabilisticForecasting.git
     paper_url: https://jmlr.org/papers/v25/23-0038.html
     commit: 6f28942f6a703c2b52501d01258ca2708539f209
-    license_id: REFERENCE_ONLY
-    code_usage: REIMPLEMENTED_EQUATIONS
+    license_id: UNDECLARED
+    code_usage: DIRECT_OFFICIAL_CODE_AND_DATA
+    authorization_policy: USER_AUTHORIZED_NO_LICENSE_BLOCK
+    authorization_id: stage1b-v2-user-direct-official-use-2026-08-26
+    assets:
+      - asset_id: two_scale_model_source
+        relative_path: src/models.py
+        sha256: 75aea46171f2ac33ddab3728dbfb0ee8fa32ebcdf635a9955e145b7ad36cc3ca
+        required_for: [REPRODUCTION, ORACLE]
     evidence_files:
       - url: https://raw.githubusercontent.com/LoryPack/GenerativeNetworksScoringRulesProbabilisticForecasting/6f28942f6a703c2b52501d01258ca2708539f209/src/models.py
         sha256: 75aea46171f2ac33ddab3728dbfb0ee8fa32ebcdf635a9955e145b7ad36cc3ca
@@ -39,7 +64,14 @@ sources:
     paper_url: https://djpasseyjr.github.io/interfere/
     commit: adfa3f730019f17c3554dd7e0c181248f785bb8b
     license_id: MIT
-    code_usage: REIMPLEMENTED_EQUATIONS
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-interfere-mit
+    assets:
+      - asset_id: coupled_map_lattice
+        relative_path: interfere/dynamics/coupled_map_lattice.py
+        sha256: 4cf841788d0c452222ec1c56162fae82dfd4552ea1f8ef8acb2693d13086cd69
+        required_for: [REPRODUCTION, ORACLE]
     evidence_files:
       - url: https://raw.githubusercontent.com/djpasseyjr/interfere/adfa3f730019f17c3554dd7e0c181248f785bb8b/interfere/dynamics/coupled_map_lattice.py
         sha256: 4cf841788d0c452222ec1c56162fae82dfd4552ea1f8ef8acb2693d13086cd69
@@ -49,7 +81,14 @@ sources:
     paper_url: https://openreview.net/forum?id=Jbdc0vTOcol
     commit: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
     license_id: APACHE-2.0
-    code_usage: REIMPLEMENTED_EQUATIONS
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-patchtst-apache-2.0
+    assets:
+      - asset_id: patchtst_backbone
+        relative_path: PatchTST_supervised/layers/PatchTST_backbone.py
+        sha256: df67173153787c2356bdfb6491159cd754332ef7382986efe879e1fbea8ebf26
+        required_for: [REPRODUCTION, MODEL]
     evidence_files:
       - url: https://raw.githubusercontent.com/yuqinie98/PatchTST/204c21efe0b39603ad6e2ca640ef5896646ab1a9/PatchTST_supervised/layers/PatchTST_backbone.py
         sha256: df67173153787c2356bdfb6491159cd754332ef7382986efe879e1fbea8ebf26
@@ -59,7 +98,14 @@ sources:
     paper_url: https://openreview.net/forum?id=JePfAI8fah
     commit: 4e938a1767106324dd753b2a44832bf870a0252e
     license_id: MIT
-    code_usage: REIMPLEMENTED_EQUATIONS
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-itransformer-mit
+    assets:
+      - asset_id: itransformer_model
+        relative_path: models/iTransformer.py
+        sha256: 7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e
+        required_for: [REPRODUCTION, MODEL]
     evidence_files:
       - url: https://raw.githubusercontent.com/thuml/Time-Series-Library/4e938a1767106324dd753b2a44832bf870a0252e/models/iTransformer.py
         sha256: 7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e

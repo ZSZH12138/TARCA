@@ -1,9 +1,12 @@
 schema_version: 2.0.0
 verified_at: 2026-08-25
-runtime_code_owner: TARCA
-upstream_code_copied: false
+runtime_code_owner: PINNED_UPSTREAM_WITH_TARCA_ADAPTERS
+upstream_checkout_materialized: false
 active_config: configs/stage1b/worlds_v2.yaml
-policy: Published equations and parameters are reimplemented locally; upstream files are hash-pinned evidence only.
+materialization_root: third_party/stage1b
+policy: Official code and data are checked out at exact commits and verified before use; TARCA adds only contracts, oracle adapters, and model heads.
+license_policy: License status is recorded; the user authorized direct official use when a license is absent or unclear.
+authorization_id: stage1b-v2-user-direct-official-use-2026-08-26
 source_commits:
   neural_gc: c3263d40433aaf3acc94c27a0c1abf9b8e9fcedf
   gvar: e06268f87fbe923580af14b2cab26399191747a6

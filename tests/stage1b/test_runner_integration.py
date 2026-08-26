@@ -90,8 +90,18 @@ def _worlds_payload() -> dict[str, object]:
                 "repository_url": "https://github.com/example/published.git",
                 "paper_url": "https://doi.org/10.0000/example",
                 "commit": "a" * 40,
-                "license_id": "REFERENCE_ONLY",
-                "code_usage": "REIMPLEMENTED_EQUATIONS",
+                "license_id": "UNDECLARED",
+                "code_usage": "DIRECT_OFFICIAL_CODE",
+                "authorization_policy": "USER_AUTHORIZED_NO_LICENSE_BLOCK",
+                "authorization_id": "stage1b-v2-test-authorization",
+                "assets": [
+                    {
+                        "asset_id": "test_equation",
+                        "relative_path": "evidence.py",
+                        "sha256": "b" * 64,
+                        "required_for": ["REPRODUCTION"],
+                    }
+                ],
                 "evidence_files": [{"url": "https://example.org/evidence.py", "sha256": "b" * 64}],
             }
         ],
