@@ -4,11 +4,10 @@ import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Self, cast
+from typing import Self
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional
 
 from tarca.contracts import (
     ForecastDistribution,
@@ -21,6 +20,7 @@ from tarca.contracts import (
     validate_intervention_spec,
     validate_window_batch,
 )
+from tarca.stage1b.modeling.itransformer import OfficialITransformerPredictor
 from tarca.stage1b.modeling.patchtst import OfficialPatchTSTPredictor
 
 
@@ -291,65 +291,5 @@ class OperableNeuralPredictor(nn.Module, ABC):
         return replacement
 
 
-class ITransformerReference(OperableNeuralPredictor):
-    def __init__(
-        self,
-        history_length: int,
-        horizon: int,
-        input_dimension: int,
-        d_model: int,
-        n_layers: int,
-        n_heads: int,
-        d_ff: int,
-        dropout: float,
-    ) -> None:
-        super().__init__(
-            history_length, horizon, input_dimension, d_model, n_layers, n_heads, d_ff, dropout
-        )
-        self.input_projection = nn.Linear(history_length, d_model)
-        self.variable_embedding = nn.Parameter(torch.zeros(1, input_dimension, d_model))
-        self.mean_head = nn.Linear(d_model, horizon)
-        self.scale_head = nn.Linear(d_model, horizon)
-        nn.init.constant_(self.scale_head.bias, -1.0)
-
-    @property
-    def adapter_name(self) -> str:
-        return "ITransformerReference"
-
-    def _reset_adapter_parameters(self) -> None:
-        nn.init.zeros_(self.variable_embedding)
-        nn.init.constant_(self.scale_head.bias, -1.0)
-
-    def _tokenize(self, normalized_histories: Tensor) -> Tensor:
-        return cast(
-            Tensor,
-            self.input_projection(normalized_histories.transpose(1, 2)) + self.variable_embedding,
-        )
-
-    def _apply_encoder_layer(self, tokens: Tensor, layer: nn.Module) -> Tensor:
-        return cast(Tensor, layer(tokens))
-
-    def _decode(
-        self, representation: Tensor, context: NormalizationContext
-    ) -> tuple[Tensor, Tensor]:
-        normalized_mean = self.mean_head(representation).transpose(1, 2)
-        normalized_scale = functional.softplus(self.scale_head(representation)).transpose(1, 2)
-        return (
-            normalized_mean * context.scale + context.center,
-            normalized_scale * context.scale,
-        )
-
-    def _site(self, site_name: str, layer: int | None) -> InterventionSite:
-        return InterventionSite(
-            site_name=site_name,
-            layer=layer,
-            tensor_rank=3,
-            batch_axis=0,
-            variable_axis=1,
-            patch_axis=None,
-            feature_axis=2,
-            shape_template=(None, self.input_dimension, self.d_model),
-        )
-
-
 PatchTSTReference = OfficialPatchTSTPredictor
+ITransformerReference = OfficialITransformerPredictor

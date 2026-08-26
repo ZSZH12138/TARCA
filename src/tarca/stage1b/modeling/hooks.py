@@ -15,7 +15,7 @@ from tarca.contracts import InterventionSite
 class RegisteredSite:
     contract: InterventionSite
     module_path: str
-    layout: Literal["FLAT_PATCH_FEATURE", "FEATURE_PATCH"]
+    layout: Literal["IDENTITY", "FLAT_PATCH_FEATURE", "FEATURE_PATCH"]
     tuple_output: bool = False
 
 
@@ -37,6 +37,15 @@ def _primary_output(output: object, site: RegisteredSite) -> Tensor:
 
 def _canonical_output(output: object, site: RegisteredSite) -> Tensor:
     tensor = _primary_output(output, site)
+    if site.layout == "IDENTITY":
+        canonical = tensor
+        expected = site.contract.shape_template
+        if canonical.ndim != site.contract.tensor_rank or any(
+            size is not None and canonical.shape[index] != size
+            for index, size in enumerate(expected)
+        ):
+            raise ValueError("registered site output violates its declared axes")
+        return canonical
     variables = site.contract.shape_template[1]
     if not isinstance(variables, int) or variables <= 0:
         raise ValueError("registered PatchTST site requires a fixed variable axis")
@@ -58,7 +67,9 @@ def _canonical_output(output: object, site: RegisteredSite) -> Tensor:
 
 
 def _restore_output(original: object, canonical: Tensor, site: RegisteredSite) -> object:
-    if site.layout == "FLAT_PATCH_FEATURE":
+    if site.layout == "IDENTITY":
+        restored = canonical
+    elif site.layout == "FLAT_PATCH_FEATURE":
         restored = canonical.reshape(
             canonical.shape[0] * canonical.shape[1],
             canonical.shape[2],
