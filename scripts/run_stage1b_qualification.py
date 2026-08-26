@@ -56,9 +56,10 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=REPOSITORY_ROOT / "artifacts/stage1b",
     )
-    freeze.add_argument("--version", required=True)
+    freeze.add_argument("--series", default="v2", choices=("v2",))
+    freeze.add_argument("--revision-id", default="v2-r1")
     freeze.add_argument("--authorize-override", action="store_true")
-    freeze.add_argument("--prior-version")
+    freeze.add_argument("--prior-revision-id")
     freeze.add_argument("--authorization-reason")
     return parser
 
@@ -73,14 +74,13 @@ def main() -> int:
                 args.artifact_root / "runtime",
             )
         elif args.command == "qualify":
-            official_worlds = (
-                REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml"
-            ).resolve()
+            official_worlds = (REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml").resolve()
             if args.worlds.resolve() != official_worlds:
                 raise ValueError("scheduled qualification uses the official v2 world configuration")
-            if args.qualification.resolve() != (
-                REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml"
-            ).resolve():
+            if (
+                args.qualification.resolve()
+                != (REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml").resolve()
+            ):
                 raise ValueError(
                     "scheduled qualification uses the official v2 qualification configuration"
                 )
@@ -92,19 +92,20 @@ def main() -> int:
             receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
             authorization = None
             if args.authorize_override:
-                if not args.prior_version or not args.authorization_reason:
+                if not args.prior_revision_id or not args.authorization_reason:
                     raise ValueError(
-                        "authorized override requires prior version and authorization reason"
+                        "authorized override requires prior revision and authorization reason"
                     )
                 authorization = OverrideAuthorization(
                     authorized_by="user",
                     reason=args.authorization_reason,
-                    prior_version=args.prior_version,
+                    prior_revision_id=args.prior_revision_id,
                 )
             result = freeze_suite(
                 receipt,
                 args.artifact_root,
-                version=args.version,
+                series=args.series,
+                revision_id=args.revision_id,
                 authorization=authorization,
             )
     except Exception as exc:

@@ -13,7 +13,8 @@ from tarca.stage1b.freeze import verify_frozen_suite  # noqa: E402
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify the TARCA Stage1B frozen suite.")
-    parser.add_argument("--version")
+    parser.add_argument("--series", default="v2", choices=("v2",))
+    parser.add_argument("--revision-id")
     parser.add_argument("--allow-unfrozen", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
@@ -25,7 +26,8 @@ def main() -> int:
     try:
         result = verify_frozen_suite(
             args.artifact_root,
-            version=args.version,
+            series=args.series,
+            revision_id=args.revision_id,
             allow_unfrozen=args.allow_unfrozen,
         )
     except Exception as exc:

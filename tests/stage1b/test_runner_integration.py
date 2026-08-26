@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 
+from tarca.contracts import ArtifactRef
+from tarca.execution import ResourceCapacity
+from tarca.stage1b.compiler import compile_stage1b_graph, repository_v2_inputs
 from tarca.stage1b.runner import (
     QualificationBoundaryError,
+    _qualification_execution_evidence,
     run_hardware_probe,
     run_qualification,
     validate_qualification_receipt_boundaries,
 )
 
 from .receipt_helpers import passing_receipt
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_runner_receipt_never_exposes_formal_partition_or_experiment() -> None:
@@ -34,6 +41,86 @@ def test_runner_rejects_e02_identifier_in_receipt() -> None:
     receipt["experiment_ids"] = ["E02"]
     with pytest.raises(QualificationBoundaryError, match="formal experiment"):
         validate_qualification_receipt_boundaries(receipt)
+
+
+def test_runner_rejects_reserved_seed_in_qualification_rows() -> None:
+    receipt = passing_receipt()
+    receipt["comparisons"] = [{"seed": 201}]
+
+    with pytest.raises(QualificationBoundaryError, match="reserved formal seed"):
+        validate_qualification_receipt_boundaries(receipt)
+
+
+def test_runner_rejects_overlapping_qualification_and_formal_seeds() -> None:
+    receipt = passing_receipt()
+    receipt["qualification_seeds"] = [101, 201]
+
+    with pytest.raises(QualificationBoundaryError, match="reserved formal seeds"):
+        validate_qualification_receipt_boundaries(receipt)
+
+
+def test_scheduled_evidence_hashes_complete_graph_and_preflight_receipts(
+    tmp_path: Path,
+) -> None:
+    inputs = repository_v2_inputs(REPOSITORY_ROOT)
+    graph = compile_stage1b_graph(inputs)
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    receipts = {
+        "environment_receipt_v2.json": {"cuda_probe_passed": True},
+        "precision_receipt_v2.json": {"selected": "FP32"},
+        "official_sources_receipt_v2.json": {
+            "sources": [
+                {"source_id": source.source_id, "commit": source.commit}
+                for source in inputs.world_suite.sources
+            ]
+        },
+        "hardware_probe_v2.json": {
+            "created_at_utc": "2026-08-26T00:00:00+00:00",
+            "decision": {"feasible": True},
+        },
+    }
+    for filename, payload in receipts.items():
+        (runtime_root / filename).write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    completed = {
+        node.node_id: ArtifactRef(
+            artifact_id=f"artifact-{index}",
+            artifact_type=node.output_artifact_type,
+            content_hash=f"{index + 1:064x}",
+            schema_version="2.0.0",
+            relative_path=f"stage1b/{index}.json",
+        )
+        for index, node in enumerate(graph.nodes[:-1])
+    }
+    capacity = ResourceCapacity(
+        logical_cpu_count=56,
+        physical_cpu_count=28,
+        available_memory_bytes=224 * 1024**3,
+        gpu_memory_bytes=(24 * 1024**3, 24 * 1024**3),
+        local_storage_available=True,
+        local_storage_free_bytes=1024**4,
+    )
+
+    evidence = _qualification_execution_evidence(
+        REPOSITORY_ROOT, runtime_root, graph, completed, capacity
+    )
+
+    assert evidence["completed_task_count"] == len(graph.nodes)
+    assert evidence["expected_task_count"] == len(graph.nodes)
+    assert all(
+        len(str(evidence[name])) == 64
+        for name in (
+            "official_source_receipt_sha256",
+            "reproduction_receipt_sha256",
+            "environment_receipt_sha256",
+            "precision_receipt_sha256",
+            "run_graph_sha256",
+            "task_manifest_sha256",
+            "execution_plan_sha256",
+            "hardware_receipt_sha256",
+        )
+    )
+    assert (runtime_root / "qualification_execution_evidence_v2.json").is_file()
 
 
 def _truth() -> dict[str, bool]:

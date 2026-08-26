@@ -5,6 +5,15 @@
 > 协议身份：`TARCA-E2E-STAGE-PROTOCOL-2.0`
 > 边界：v2 已构建，但未执行完整资格、E01 或 E02，也未冻结。
 
+```text
+Implementation status: BUILT_NOT_QUALIFIED
+Active scientific series: v2
+Freeze default: immutable after qualification
+Authorized override: next immutable v2 revision + active pointer
+Executed: unit/integration/E2E/bounded probes only
+Not executed: full Stage1B qualification, E01, E02
+```
+
 ## 1. 功能目标
 
 Stage1B v2 提供一组来自公开研究的“已知答案世界”，用于判断 TARCA 后续研究是否具备：
@@ -64,8 +73,10 @@ Stage1B v2 提供一组来自公开研究的“已知答案世界”，用于判
 `configs/stage1b/worlds_v2.yaml`。每个来源记录论文、官方仓库、精确 commit、证据文件
 URL、SHA-256、许可证状态和代码使用方式。
 
-运行代码全部由 TARCA 按公开方程重新实现；没有复制 GVAR 或双尺度 Lorenz-96 的未知
-许可证代码。主来源与辅助参数来源分别登记。
+服务器会把六个官方仓库按固定 commit 物化为只读来源，并先运行官方复现通道。世界数据
+由各世界适配器调用相应的官方生成入口或经过逐步等价验证的官方方程入口生成；真值由生成
+器在生成同一条轨迹时一并输出，不能由预测模型或神经网络反推。用户已明确授权本项目在
+资格阶段直接使用这些固定来源；许可证状态仍完整记录在收据中，但不再作为本地执行阻断。
 
 ## 5. WQ 功能门槛
 
@@ -172,8 +183,15 @@ BUILT_NOT_QUALIFIED
 
 当前只完成第一步。不得把通过单元测试或短健康探针写成“神经模型已胜过 VAR”。
 
-正常情况下，冻结收据不可修改。用户可以授权修改或覆盖，但必须创建 v3 或更高版本、
-记录原因、保留已冻结版本并重新执行受影响的资格。历史失败版本不再作为活动配置。
+完整资格通过后，首次冻结写入 `versions/v2/revisions/r1/`。正常情况下，修订目录和其中
+的完整资格收据不可修改。用户可以授权修改或覆盖，但必须在同一个 v2 科学系列中创建下一
+个不可变修订（例如 `v2-r2`），记录授权人、原因和前一修订，并更新 `active.json` 指针；
+旧修订始终保留。失败或不完整运行不会被冻结，也不会登记成历史活动版本。
+
+冻结前会验证：官方来源、官方复现、服务器环境、精度策略、硬件探针、运行图、完整
+`TaskManifest`、`ExecutionPlan` 和全部任务计数。全部比较行与失败行保存在修订内的完整
+`qualification_receipt.json`，不得只保留通过摘要。资格 seed 与 E01/E02 保留 seed 严格
+分离，任何来源漂移、科学身份漂移、部分完成或正式实验标识都会拒绝冻结。
 
 ## 9. 活动入口
 
@@ -182,4 +200,6 @@ BUILT_NOT_QUALIFIED
 - 来源清单：`third_party_manifest/stage1b_sources_v2.yaml`
 - 构建设计：`docs/superpowers/specs/2026-08-25-stage1b-v2-design.md`
 - 实施计划：`docs/superpowers/plans/2026-08-25-stage1b-v2-implementation.md`
+- 服务器运行入口：`scripts/run_stage1b_runtime.py`
+- 只读监控前端：`frontend/stage1b-monitor/`
 - 历史失败快照：`docs/research/stage1b_world_qualification_report_v1.md`

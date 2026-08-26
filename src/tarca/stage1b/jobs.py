@@ -426,9 +426,7 @@ def _model_and_config(repo_root: Path, task: TaskSpec) -> tuple[Any, Any, Any]:
     inputs = repository_v2_inputs(repo_root)
     world = inputs.world_suite.world(task.identity.data_id)
     model_config = next(
-        model
-        for model in inputs.qualification.models
-        if model.model_id == task.identity.model_id
+        model for model in inputs.qualification.models if model.model_id == task.identity.model_id
     )
     return inputs, world, model_config
 
@@ -596,9 +594,11 @@ def aggregate_qualification_job(
         for ref in task.inputs
         if ref.artifact_type == "QUALIFICATION_COMPARISON"
     )
-    expected_scores = sum(
-        world.role is WorldRole.PRIMARY_MECHANISTIC for world in inputs.world_suite.worlds
-    ) * len(inputs.qualification.qualification_seeds) * len(inputs.qualification.models)
+    expected_scores = (
+        sum(world.role is WorldRole.PRIMARY_MECHANISTIC for world in inputs.world_suite.worlds)
+        * len(inputs.qualification.qualification_seeds)
+        * len(inputs.qualification.models)
+    )
     if len(score_payloads) != expected_scores:
         raise RuntimeError("qualification aggregate is missing required comparison artifacts")
     decisions = []
@@ -613,9 +613,7 @@ def aggregate_qualification_job(
         checks = tuple(StructuralCheck(**item) for item in health_payload["checks"])
         world_scores = tuple(item for item in score_payloads if item["world_id"] == world.world_id)
         comparisons = tuple(
-            TrajectoryComparison(**row)
-            for score in world_scores
-            for row in score["comparisons"]
+            TrajectoryComparison(**row) for score in world_scores for row in score["comparisons"]
         )
         all_comparisons.extend(comparisons)
         training_receipts.extend(
@@ -629,11 +627,7 @@ def aggregate_qualification_job(
         )
         adapters = tuple(
             sorted(
-                {
-                    str(score["adapter_name"])
-                    for score in world_scores
-                    if score["operable"] is True
-                }
+                {str(score["adapter_name"]) for score in world_scores if score["operable"] is True}
             )
         )
         evidence = WorldGateEvidence(
@@ -701,6 +695,19 @@ def publish_qualification_receipt_job(
         repo_root / "configs/stage1b/qualification_v2.yaml",
         inputs.world_suite.source_manifest_sha256(),
     )
+    execution_evidence_path = runtime_root / "qualification_execution_evidence_v2.json"
+    if not execution_evidence_path.is_file():
+        raise RuntimeError("qualification execution evidence is missing")
+    execution_evidence_document = json.loads(execution_evidence_path.read_text(encoding="utf-8"))
+    if not isinstance(execution_evidence_document, dict) or not isinstance(
+        execution_evidence_document.get("qualification_evidence"), dict
+    ):
+        raise RuntimeError("qualification execution evidence is invalid")
+    qualification_evidence = cast(
+        dict[str, Any], execution_evidence_document["qualification_evidence"]
+    )
+    if qualification_evidence.get("hardware_receipt_sha256") != hardware_hash:
+        raise RuntimeError("qualification execution evidence hardware identity drifted")
     receipt = {
         "schema_version": _SCHEMA_VERSION,
         "qualification_id": inputs.qualification.qualification_id,
@@ -716,6 +723,9 @@ def publish_qualification_receipt_job(
             repo_root / "configs/stage1b/qualification_v2.yaml"
         ),
         "hardware_receipt_sha256": hardware_hash,
+        "qualification_evidence": qualification_evidence,
+        "qualification_seeds": list(inputs.qualification.qualification_seeds),
+        "reserved_formal_seeds": list(inputs.qualification.reserved_formal_seeds),
         "partition_names": [partition.value for partition in inputs.qualification.partitions],
         "experiment_ids": [],
         **aggregate,
