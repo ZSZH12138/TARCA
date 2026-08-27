@@ -818,6 +818,20 @@ def _runtime_receipt(runtime_root: Path, filename: str) -> tuple[dict[str, Any],
     return cast(dict[str, Any], decoded), _sha256(payload)
 
 
+def _runtime_plan_nodes(graph: Any) -> tuple[Any, ...]:
+    from tarca.execution import RunPlanNode
+
+    return tuple(
+        RunPlanNode(
+            identity=node.identity,
+            phase=node.phase,
+            resource_request=node.resource_request,
+            dependency_task_ids=node.dependency_ids,
+        )
+        for node in graph.nodes
+    )
+
+
 def _qualification_execution_evidence(
     repository_root: Path,
     runtime_root: Path,
@@ -1007,6 +1021,10 @@ def run_scheduled_qualification(
     verifier = stage1b_artifact_store(root).verify_artifact
     state = ExecutionStateStore(database_path, artifact_verifier=verifier)
     state.create_run(run_id, graph.graph_id)
+    plan_nodes = _runtime_plan_nodes(graph)
+    state.register_run_plan(run_id, plan_nodes)
+    if state.planned_task_count(run_id) != len(graph.nodes):
+        raise RuntimeError("persisted Stage1B run plan is incomplete")
     backend = LocalMultiProcessBackend(root)
     scheduler = Scheduler(state, backend, capacity)
     node_by_id = {node.node_id: node for node in graph.nodes}

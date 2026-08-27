@@ -7,7 +7,13 @@ from pathlib import Path
 import pytest
 
 from tarca.contracts import ArtifactRef
-from tarca.execution import ResourceAllocation, ResourceRequest, ScientificIdentity, TaskSpec
+from tarca.execution import (
+    ResourceAllocation,
+    ResourceRequest,
+    RunPlanNode,
+    ScientificIdentity,
+    TaskSpec,
+)
 from tarca.execution.state import (
     AttemptState,
     ExecutionStateStore,
@@ -60,6 +66,16 @@ def _store(tmp_path: Path) -> ExecutionStateStore:
     return store
 
 
+def _plan_node(task_id: str, dependencies: tuple[str, ...] = ()) -> RunPlanNode:
+    task = _task(task_id)
+    return RunPlanNode(
+        identity=task.identity,
+        phase=task.phase,
+        resource_request=task.resource_request,
+        dependency_task_ids=dependencies,
+    )
+
+
 def test_store_uses_wal_foreign_keys_and_busy_timeout(tmp_path: Path) -> None:
     store = _store(tmp_path)
     assert store.pragma("journal_mode").lower() == "wal"
@@ -74,7 +90,46 @@ def test_store_uses_wal_foreign_keys_and_busy_timeout(tmp_path: Path) -> None:
         "progress_events",
         "resource_samples",
         "alerts",
+        "run_plan_nodes",
     }
+
+
+def test_run_plan_is_immutable_and_round_trips(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    nodes = (_plan_node("parent"), _plan_node("child", ("parent",)))
+
+    store.register_run_plan("run-a", nodes)
+    store.register_run_plan("run-a", nodes)
+
+    assert store.planned_task_count("run-a") == 2
+    assert store.run_plan_nodes("run-a") == nodes
+    with pytest.raises(ValueError, match="different immutable plan"):
+        store.register_run_plan(
+            "run-a",
+            (nodes[0], nodes[1].model_copy(update={"phase": "DATA_VALIDATE"})),
+        )
+
+
+@pytest.mark.parametrize(
+    "nodes, message",
+    [
+        ((_plan_node("same"), _plan_node("same")), "duplicate"),
+        ((_plan_node("child", ("missing",)),), "unknown"),
+        (
+            (_plan_node("left", ("right",)), _plan_node("right", ("left",))),
+            "cycle",
+        ),
+    ],
+)
+def test_run_plan_rejects_duplicate_unknown_or_cyclic_nodes(
+    tmp_path: Path,
+    nodes: tuple[RunPlanNode, ...],
+    message: str,
+) -> None:
+    store = _store(tmp_path)
+
+    with pytest.raises(ValueError, match=message):
+        store.register_run_plan("run-a", nodes)
 
 
 def test_completed_job_is_never_claimed_again(tmp_path: Path) -> None:

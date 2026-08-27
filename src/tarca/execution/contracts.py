@@ -79,6 +79,39 @@ class TaskSpec(StrictContractModel):
         return self.identity.task_id
 
 
+class RunPlanNode(StrictContractModel):
+    identity: ScientificIdentity
+    phase: str
+    resource_request: ResourceRequest
+    dependency_task_ids: tuple[str, ...]
+
+    @field_validator("phase")
+    @classmethod
+    def _phase_is_safe(cls, value: str) -> str:
+        return _safe_logical_value(value)
+
+    @field_validator("dependency_task_ids")
+    @classmethod
+    def _dependencies_are_safe_and_unique(
+        cls,
+        value: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        validated = tuple(_safe_logical_value(item) for item in value)
+        if len(validated) != len(set(validated)):
+            raise ValueError("run plan dependency task IDs must be unique")
+        return validated
+
+    @model_validator(mode="after")
+    def _does_not_depend_on_itself(self) -> Self:
+        if self.task_id in self.dependency_task_ids:
+            raise ValueError("run plan task cannot depend on itself")
+        return self
+
+    @property
+    def task_id(self) -> str:
+        return self.identity.task_id
+
+
 class TaskManifest(StrictContractModel):
     manifest_id: str
     tasks: tuple[TaskSpec, ...]

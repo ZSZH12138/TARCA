@@ -13,6 +13,7 @@ from tarca.execution import (
     PlannedTask,
     ResourceAllocation,
     ResourceRequest,
+    RunPlanNode,
     ScientificIdentity,
     TaskManifest,
     TaskResult,
@@ -177,4 +178,21 @@ def test_execution_plan_rejects_duplicate_gpu_ids_and_task_ids() -> None:
             max_concurrency=2,
             resource_snapshot_hash="b" * 64,
             created_at=datetime(2026, 8, 26, tzinfo=UTC),
+        )
+
+
+def test_run_plan_node_rejects_self_or_duplicate_dependencies() -> None:
+    with pytest.raises(ValidationError, match="depend on itself"):
+        RunPlanNode(
+            identity=_identity(),
+            phase="DATA_GENERATE",
+            resource_request=_task().resource_request,
+            dependency_task_ids=("task-a",),
+        )
+    with pytest.raises(ValidationError, match="unique"):
+        RunPlanNode(
+            identity=_identity(),
+            phase="DATA_GENERATE",
+            resource_request=_task().resource_request,
+            dependency_task_ids=("parent", "parent"),
         )

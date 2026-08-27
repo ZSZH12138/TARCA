@@ -16,7 +16,7 @@ from typing import Any, Protocol, cast
 from pydantic import BaseModel
 
 from tarca.contracts import ArtifactRef, canonical_json_bytes
-from tarca.execution.contracts import ResourceAllocation, TaskSpec
+from tarca.execution.contracts import ResourceAllocation, RunPlanNode, TaskSpec
 
 ArtifactVerifier = Callable[[ArtifactRef], bool]
 
@@ -185,6 +185,14 @@ CREATE TABLE IF NOT EXISTS runs (
     status TEXT NOT NULL,
     created_at_utc TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS run_plan_nodes (
+    run_id TEXT NOT NULL REFERENCES runs(run_id),
+    task_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    node_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, task_id),
+    UNIQUE (run_id, ordinal)
+);
 CREATE TABLE IF NOT EXISTS job_nodes (
     task_id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES runs(run_id),
@@ -316,6 +324,89 @@ class ExecutionStateStore:
                 "INSERT INTO runs(run_id, graph_id, status, created_at_utc) VALUES (?, ?, ?, ?)",
                 (run_id, graph_id, "ACTIVE", now),
             )
+
+    def register_run_plan(self, run_id: str, nodes: tuple[RunPlanNode, ...]) -> None:
+        _safe_identifier(run_id, "run_id")
+        if not nodes:
+            raise ValueError("run plan must contain at least one node")
+        task_ids = tuple(node.task_id for node in nodes)
+        if len(task_ids) != len(set(task_ids)):
+            raise ValueError("run plan contains duplicate task IDs")
+        known_ids = set(task_ids)
+        if any(
+            dependency not in known_ids
+            for node in nodes
+            for dependency in node.dependency_task_ids
+        ):
+            raise ValueError("run plan contains an unknown dependency")
+        dependencies = {
+            node.task_id: node.dependency_task_ids
+            for node in nodes
+        }
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(task_id: str) -> None:
+            if task_id in visiting:
+                raise ValueError("run plan contains a dependency cycle")
+            if task_id in visited:
+                return
+            visiting.add(task_id)
+            for dependency in dependencies[task_id]:
+                visit(dependency)
+            visiting.remove(task_id)
+            visited.add(task_id)
+
+        for task_id in task_ids:
+            visit(task_id)
+
+        serialized = tuple(node.model_dump_json() for node in nodes)
+        with self._transaction() as connection:
+            run = connection.execute(
+                "SELECT run_id FROM runs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if run is None:
+                raise ValueError("run plan run is not registered")
+            existing_rows = connection.execute(
+                "SELECT node_json FROM run_plan_nodes WHERE run_id = ? ORDER BY ordinal",
+                (run_id,),
+            ).fetchall()
+            if existing_rows:
+                existing = tuple(str(row["node_json"]) for row in existing_rows)
+                if existing != serialized:
+                    raise ValueError("run ID is already bound to a different immutable plan")
+                return
+            connection.executemany(
+                """
+                INSERT INTO run_plan_nodes(run_id, task_id, ordinal, node_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                tuple(
+                    (run_id, node.task_id, ordinal, serialized[ordinal])
+                    for ordinal, node in enumerate(nodes)
+                ),
+            )
+
+    def run_plan_nodes(self, run_id: str) -> tuple[RunPlanNode, ...]:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT node_json FROM run_plan_nodes WHERE run_id = ? ORDER BY ordinal",
+                (run_id,),
+            ).fetchall()
+        return tuple(RunPlanNode.model_validate_json(row["node_json"]) for row in rows)
+
+    def planned_task_count(self, run_id: str) -> int:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM run_plan_nodes WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("run plan count query returned no row")
+        return int(row[0])
 
     def enqueue_task(
         self,

@@ -12,6 +12,7 @@ from tarca.stage1b.compiler import compile_stage1b_graph, repository_v2_inputs
 from tarca.stage1b.runner import (
     QualificationBoundaryError,
     _qualification_execution_evidence,
+    _runtime_plan_nodes,
     run_hardware_probe,
     run_qualification,
     validate_qualification_receipt_boundaries,
@@ -121,6 +122,15 @@ def test_scheduled_evidence_hashes_complete_graph_and_preflight_receipts(
         )
     )
     assert (runtime_root / "qualification_execution_evidence_v2.json").is_file()
+
+
+def test_runtime_plan_contains_all_74_frozen_graph_nodes() -> None:
+    graph = compile_stage1b_graph(repository_v2_inputs(REPOSITORY_ROOT))
+
+    nodes = _runtime_plan_nodes(graph)
+
+    assert len(nodes) == len(graph.nodes) == 74
+    assert tuple(node.task_id for node in nodes) == tuple(node.node_id for node in graph.nodes)
 
 
 def _truth() -> dict[str, bool]:
