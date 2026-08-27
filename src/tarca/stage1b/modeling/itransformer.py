@@ -23,6 +23,8 @@ from tarca.stage1b.sources import (
     SourceMaterializationReceipt,
     SubprocessGitRunner,
     materialize_source,
+    source_acquisition_mode_from_environment,
+    source_cache_root_from_environment,
 )
 
 _ITRANSFORMER_SOURCE_ID = "itransformer"
@@ -58,17 +60,19 @@ def _sha256_file(path: Path) -> str:
 
 def default_itransformer_source_context() -> ModelSourceContext:
     repository_root = _repository_root()
-    source_cache = repository_root / "third_party/stage1b"
+    source_cache = source_cache_root_from_environment(repository_root)
     checkout = source_cache / _ITRANSFORMER_SOURCE_ID / _ITRANSFORMER_COMMIT
     if not checkout.is_dir():
         raise RuntimeError(
-            "pinned official iTransformer source is not materialized; run the source materializer"
+            "pinned official iTransformer source is not materialized at "
+            f"{checkout}; import the audited source capsule first"
         )
     suite = load_world_suite(repository_root / "configs/stage1b/worlds_v2.yaml")
     receipt = materialize_source(
         suite.source(_ITRANSFORMER_SOURCE_ID),
         source_cache,
         SubprocessGitRunner.discover(),
+        mode=source_acquisition_mode_from_environment(),
     )
     return ModelSourceContext(
         source_id=receipt.source_id,
@@ -80,7 +84,7 @@ def default_itransformer_source_context() -> ModelSourceContext:
 
 def _verify_source_context(source: ModelSourceContext) -> None:
     repository_root = _repository_root()
-    source_cache = repository_root / "third_party/stage1b"
+    source_cache = source_cache_root_from_environment(repository_root)
     expected_root = (source_cache / _ITRANSFORMER_SOURCE_ID / _ITRANSFORMER_COMMIT).resolve()
     if source.source_root != expected_root:
         raise ValueError("iTransformer source root is outside the registered source cache")
@@ -89,6 +93,7 @@ def _verify_source_context(source: ModelSourceContext) -> None:
         suite.source(_ITRANSFORMER_SOURCE_ID),
         source_cache,
         SubprocessGitRunner.discover(),
+        mode=source_acquisition_mode_from_environment(),
     )
     if (
         receipt.checkout_root.resolve() != source.source_root

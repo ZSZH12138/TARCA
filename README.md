@@ -56,12 +56,51 @@ Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage
 
 ## Stage1B v2 服务器入口
 
-全新服务器先构建镜像并用独立可写容器初始化固定官方来源；正式资格容器随后只读使用该
-来源卷：
+服务器不再自行从 GitHub 下载官方来源。先在本地审核并打包六个精确 commit，然后通过
+既有安全通道上传源码包与其 receipt；服务器只从这个包重建并验证只读来源缓存。这样远端
+GitHub 的可用性、TLS 差异或仓库状态不会影响正式运行。
+
+本地生成可上传包：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/package_stage1b_source_capsule.py
+```
+
+生成的两个忽略版本控制的文件位于
+`artifacts/stage1b/source-capsules/`：`stage1b-v2-official-sources.tar.gz` 与同名
+`.receipt.json`。必须一起上传，不能解包、修改或用普通工作目录替代。
+
+在已按服务器 runbook 恢复的运行容器/仓库根目录中，先导入，再预检和启动：
+
+```bash
+export PYTHONPATH="$PWD/deploy/stage1b/py310:$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export TARCA_STAGE1B_SOURCE_MODE=offline-capsule
+export TARCA_STAGE1B_SOURCE_CACHE_ROOT="${TARCA_STAGE1B_SOURCE_CACHE_ROOT:-$PWD/third_party/stage1b}"
+export TARCA_STAGE1B_DATABASE="${TARCA_STAGE1B_DATABASE:-$PWD/artifacts/stage1b/runtime/execution.sqlite3}"
+export TARCA_STAGE1B_STATIC_ROOT="${TARCA_STAGE1B_STATIC_ROOT:-$PWD/frontend/stage1b-monitor/dist}"
+
+python scripts/import_stage1b_source_capsule.py \
+  --capsule /secure-transfer/stage1b-v2-official-sources.tar.gz \
+  --receipt /secure-transfer/stage1b-v2-official-sources.tar.gz.receipt.json \
+  --cache-root "$TARCA_STAGE1B_SOURCE_CACHE_ROOT"
+
+bash deploy/stage1b/entrypoint.sh preflight
+bash deploy/stage1b/entrypoint.sh launch
+```
+
+`import` 会在临时目录中逐个核对外层 SHA-256、manifest、bundle、仓库 URL、commit、
+授权 ID、关键资产和完整树哈希；全部通过后才发布缓存。`offline-capsule` 模式下缓存缺失
+会直接失败，绝不会退回 GitHub 下载。断电或人为中断后仍使用原有的 `resume`，而不是重跑
+`launch`。
+
+若使用 Compose，同样先上传两个文件到服务器的本地目录，再把该目录显式挂载为只读传输目录：
 
 ```bash
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml build
-docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b-source-init
+export TARCA_STAGE1B_SOURCE_TRANSFER_DIR=/secure-transfer
+docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b-source-import \
+  --capsule /opt/tarca/source-transfer/stage1b-v2-official-sources.tar.gz \
+  --receipt /opt/tarca/source-transfer/stage1b-v2-official-sources.tar.gz.receipt.json
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b preflight
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm --service-ports stage1b launch
 ```

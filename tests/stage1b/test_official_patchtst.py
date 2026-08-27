@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import torch
@@ -68,6 +70,18 @@ def test_patchtst_rejects_unverified_source_receipt_identity() -> None:
             patch_stride=2,
             source=replace(source, receipt_sha256="0" * 64),
         )
+
+
+def test_patchtst_source_context_uses_the_configured_offline_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configured_cache = tmp_path / "offline-source-cache"
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_CACHE_ROOT", str(configured_cache))
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_MODE", "offline-capsule")
+
+    with pytest.raises(RuntimeError, match=re.escape(str(configured_cache / "patchtst"))):
+        default_patchtst_source_context()
 
 
 def test_patchtst_reset_covers_official_nonmodule_parameters() -> None:

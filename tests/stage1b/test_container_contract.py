@@ -50,22 +50,31 @@ def test_entrypoint_forwards_signals_and_monitor_is_read_only() -> None:
     assert "exec python scripts/run_stage1b_runtime.py" in script
 
 
-def test_fresh_server_has_separate_writable_official_source_initializer() -> None:
+def test_fresh_server_imports_a_local_capsule_into_a_separate_writable_source_volume() -> None:
     compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
-    initializer = compose["services"]["stage1b-source-init"]
+    assert "stage1b-source-init" not in compose["services"]
+    importer = compose["services"]["stage1b-source-import"]
 
-    assert initializer["entrypoint"] == [
+    assert importer["entrypoint"] == [
         "python",
-        "scripts/materialize_stage1b_sources.py",
+        "scripts/import_stage1b_source_capsule.py",
         "--cache-root",
         "/opt/tarca/official_sources",
     ]
     source_mount = next(
-        item for item in initializer["volumes"] if item["target"] == "/opt/tarca/official_sources"
+        item for item in importer["volumes"] if item["target"] == "/opt/tarca/official_sources"
     )
     assert source_mount["read_only"] is False
-    assert "deploy" not in initializer
-    assert "ports" not in initializer
+    transfer_mount = next(
+        item for item in importer["volumes"] if item["target"] == "/opt/tarca/source-transfer"
+    )
+    assert transfer_mount["read_only"] is True
+    assert compose["services"]["stage1b"]["environment"]["TARCA_STAGE1B_SOURCE_MODE"] == (
+        "offline-capsule"
+    )
+    assert "deploy" not in importer
+    assert "ports" not in importer
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     assert "apt-get install" in dockerfile
     assert "git" in dockerfile and "ca-certificates" in dockerfile
+    assert "TARCA_STAGE1B_SOURCE_MODE=offline-capsule" in dockerfile

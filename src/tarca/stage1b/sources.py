@@ -9,6 +9,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
@@ -17,6 +18,35 @@ from tarca.stage1b.config import SourceConfig
 
 class SourceVerificationError(RuntimeError):
     """Raised when official source identity or bytes cannot be verified."""
+
+
+class SourceAcquisitionMode(str, Enum):  # noqa: UP042 - server runtime supports Python 3.10.
+    """Controls whether a missing source checkout may be acquired from its remote."""
+
+    ONLINE = "online"
+    OFFLINE_CAPSULE = "offline-capsule"
+
+
+def source_acquisition_mode_from_environment() -> SourceAcquisitionMode:
+    """Resolve the only allowed source-acquisition modes from the environment."""
+
+    raw_mode = os.environ.get("TARCA_STAGE1B_SOURCE_MODE", SourceAcquisitionMode.ONLINE.value)
+    try:
+        return SourceAcquisitionMode(raw_mode.strip().lower())
+    except ValueError as error:
+        allowed = ", ".join(mode.value for mode in SourceAcquisitionMode)
+        raise ValueError(
+            f"TARCA_STAGE1B_SOURCE_MODE must be one of {allowed}; got {raw_mode!r}"
+        ) from error
+
+
+def source_cache_root_from_environment(repository_root: Path) -> Path:
+    """Resolve the single source cache location shared by Stage1B runtime consumers."""
+
+    configured = os.environ.get("TARCA_STAGE1B_SOURCE_CACHE_ROOT")
+    if configured:
+        return Path(configured).resolve()
+    return (repository_root / "third_party/stage1b").resolve()
 
 
 class GitRunner(Protocol):
@@ -202,15 +232,15 @@ def materialize_source(
     source: SourceConfig,
     cache_root: Path,
     runner: GitRunner,
+    *,
+    mode: SourceAcquisitionMode = SourceAcquisitionMode.ONLINE,
 ) -> SourceMaterializationReceipt:
     resolved_cache = cache_root.resolve()
-    resolved_cache.mkdir(parents=True, exist_ok=True)
     source_root = _safe_resolve_below(
         resolved_cache,
         resolved_cache / source.source_id,
         "source root",
     )
-    source_root.mkdir(parents=True, exist_ok=True)
     checkout_root = _safe_resolve_below(
         resolved_cache,
         source_root / source.commit,
@@ -224,6 +254,14 @@ def materialize_source(
         verify_materialized_source(receipt, resolved_cache)
         return receipt
 
+    if mode is SourceAcquisitionMode.OFFLINE_CAPSULE:
+        raise SourceVerificationError(
+            "offline source cache is missing the verified checkout for "
+            f"{source.source_id}@{source.commit}"
+        )
+
+    resolved_cache.mkdir(parents=True, exist_ok=True)
+    source_root.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=f".{source.source_id}-", dir=source_root))
     published = False
     try:

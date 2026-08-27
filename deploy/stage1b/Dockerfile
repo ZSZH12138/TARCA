@@ -11,6 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/opt/tarca/deploy/stage1b/py310:/opt/tarca/src \
     TARCA_STAGE1B_SOURCE_CACHE_ROOT=/opt/tarca/official_sources \
+    TARCA_STAGE1B_SOURCE_MODE=offline-capsule \
     TARCA_STAGE1B_DATABASE=/opt/tarca/artifacts/stage1b/runtime/execution.sqlite3 \
     TARCA_STAGE1B_STATIC_ROOT=/opt/tarca/frontend/stage1b-monitor/dist
 WORKDIR /opt/tarca

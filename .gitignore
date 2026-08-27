@@ -24,6 +24,7 @@ Thumbs.db
 /data/
 checkpoints/
 /third_party/stage1b/
+artifacts/stage1b/source-capsules/
 artifacts/**/runtime/
 /artifacts/test-tmp-*/
 

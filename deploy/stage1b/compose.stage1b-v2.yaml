@@ -11,6 +11,7 @@ services:
       - "127.0.0.1:8765:8765"
     environment:
       TARCA_STAGE1B_SOURCE_CACHE_ROOT: /opt/tarca/official_sources
+      TARCA_STAGE1B_SOURCE_MODE: offline-capsule
       TARCA_STAGE1B_DATABASE: /opt/tarca/artifacts/stage1b/runtime/execution.sqlite3
       TARCA_STAGE1B_STATIC_ROOT: /opt/tarca/frontend/stage1b-monitor/dist
       TARCA_STAGE1B_DEVICE: cuda
@@ -33,14 +34,14 @@ services:
               count: 2
               capabilities: [gpu]
 
-  stage1b-source-init:
+  stage1b-source-import:
     image: tarca-stage1b-v2:local
     build:
       context: ../..
       dockerfile: deploy/stage1b/Dockerfile
     entrypoint:
       - python
-      - scripts/materialize_stage1b_sources.py
+      - scripts/import_stage1b_source_capsule.py
       - --cache-root
       - /opt/tarca/official_sources
     read_only: true
@@ -53,6 +54,10 @@ services:
         source: stage1b-sources
         target: /opt/tarca/official_sources
         read_only: false
+      - type: bind
+        source: ${TARCA_STAGE1B_SOURCE_TRANSFER_DIR:-./artifacts/stage1b/source-capsules}
+        target: /opt/tarca/source-transfer
+        read_only: true
 
 volumes:
   stage1b-artifacts:

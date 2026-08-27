@@ -12,8 +12,11 @@ import pytest
 from tarca.stage1b.config import SourceConfig
 from tarca.stage1b.sources import (
     MaterializedSources,
+    SourceAcquisitionMode,
     SourceVerificationError,
     materialize_source,
+    source_acquisition_mode_from_environment,
+    source_cache_root_from_environment,
     verify_materialized_source,
 )
 
@@ -112,6 +115,66 @@ def test_materializer_retries_two_transient_fetch_failures(
 
     assert receipt.commit == COMMIT
     assert runner.fetch_failures == 2
+
+
+def test_offline_capsule_mode_requires_an_existing_verified_checkout_without_git_calls(
+    tmp_path: Path,
+) -> None:
+    runner = FakeGit({"src/generator.py": OFFICIAL_BYTES})
+
+    with pytest.raises(SourceVerificationError, match="offline source cache is missing"):
+        materialize_source(
+            _source(),
+            tmp_path,
+            runner,
+            mode=SourceAcquisitionMode.OFFLINE_CAPSULE,
+        )
+
+    assert runner.calls == []
+
+
+def test_offline_capsule_mode_revalidates_existing_checkout_without_fetching(
+    tmp_path: Path,
+) -> None:
+    runner = FakeGit({"src/generator.py": OFFICIAL_BYTES})
+    expected = materialize_source(_source(), tmp_path, runner)
+    runner.calls.clear()
+
+    receipt = materialize_source(
+        _source(),
+        tmp_path,
+        runner,
+        mode=SourceAcquisitionMode.OFFLINE_CAPSULE,
+    )
+
+    assert receipt.checkout_root == expected.checkout_root
+    assert all(call[0][0] not in {"fetch", "remote", "init"} for call in runner.calls)
+
+
+def test_source_acquisition_mode_defaults_to_online_and_rejects_unknown_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TARCA_STAGE1B_SOURCE_MODE", raising=False)
+    assert source_acquisition_mode_from_environment() is SourceAcquisitionMode.ONLINE
+
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_MODE", "offline-capsule")
+    assert source_acquisition_mode_from_environment() is SourceAcquisitionMode.OFFLINE_CAPSULE
+
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_MODE", "allow-any-source")
+    with pytest.raises(ValueError, match="TARCA_STAGE1B_SOURCE_MODE"):
+        source_acquisition_mode_from_environment()
+
+
+def test_source_cache_root_uses_an_explicit_environment_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TARCA_STAGE1B_SOURCE_CACHE_ROOT", raising=False)
+    assert source_cache_root_from_environment(tmp_path) == (tmp_path / "third_party/stage1b")
+
+    override = tmp_path / "offline-source-cache"
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_CACHE_ROOT", str(override))
+    assert source_cache_root_from_environment(tmp_path) == override.resolve()
 
 
 def test_materializer_rejects_checkout_hash_drift(tmp_path: Path) -> None:
@@ -222,3 +285,12 @@ def test_materialize_cli_exposes_only_explicit_source_options() -> None:
     assert "--cache-root" in completed.stdout
     assert "--source-id" in completed.stdout
     assert "--command" not in completed.stdout
+
+
+def test_materialize_cli_honors_the_configured_source_acquisition_mode() -> None:
+    script = (REPOSITORY_ROOT / "scripts/materialize_stage1b_sources.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "source_acquisition_mode_from_environment" in script
+    assert "mode=source_acquisition_mode_from_environment()" in script

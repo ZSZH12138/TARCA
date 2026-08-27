@@ -59,6 +59,8 @@ from tarca.stage1b.sources import (
     SourceMaterializationReceipt,
     SubprocessGitRunner,
     materialize_source,
+    source_acquisition_mode_from_environment,
+    source_cache_root_from_environment,
     verify_materialized_source,
 )
 from tarca.stage1b.training import TrainingPolicy, train_candidate
@@ -69,8 +71,7 @@ _SCHEMA_VERSION = "2.0.0"
 
 
 def _source_cache_root(repo_root: Path) -> Path:
-    configured = os.environ.get("TARCA_STAGE1B_SOURCE_CACHE_ROOT")
-    return Path(configured).resolve() if configured else repo_root / "third_party/stage1b"
+    return source_cache_root_from_environment(repo_root)
 
 
 def stage1b_artifact_store(
@@ -181,6 +182,7 @@ def materialize_source_job(
         source,
         _source_cache_root(repo_root),
         SubprocessGitRunner.discover(),
+        mode=source_acquisition_mode_from_environment(),
     )
     return _publish_json(repo_root, task, _source_receipt_payload(repo_root, receipt))
 

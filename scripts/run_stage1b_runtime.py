@@ -32,7 +32,13 @@ from tarca.stage1b.server_environment import (  # noqa: E402
     ServerEnvironmentExpectation,
     validate_server_environment,
 )
-from tarca.stage1b.sources import SubprocessGitRunner, materialize_source  # noqa: E402
+from tarca.stage1b.source_capsules import verify_source_capsule_import  # noqa: E402
+from tarca.stage1b.sources import (  # noqa: E402
+    SubprocessGitRunner,
+    materialize_source,
+    source_acquisition_mode_from_environment,
+    source_cache_root_from_environment,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,25 +127,33 @@ def _precision_probes() -> tuple[PrecisionProbeResult, PrecisionProbeResult]:
     )
 
 
-def _materialize_sources() -> tuple[dict[str, Any], ...]:
+def _materialize_sources() -> dict[str, Any]:
     inputs = repository_v2_inputs(REPOSITORY_ROOT)
-    cache = Path(
-        os.environ.get(
-            "TARCA_STAGE1B_SOURCE_CACHE_ROOT",
-            str(REPOSITORY_ROOT / "third_party/stage1b"),
-        )
-    ).resolve()
-    runner = SubprocessGitRunner.discover()
-    return tuple(
-        {
-            "source_id": receipt.source_id,
-            "commit": receipt.commit,
-            "tree_sha256": receipt.tree_sha256,
-            "asset_sha256": [list(item) for item in receipt.asset_sha256],
-        }
-        for source in inputs.world_suite.sources
-        for receipt in (materialize_source(source, cache, runner),)
+    cache = source_cache_root_from_environment(REPOSITORY_ROOT)
+    source_mode = source_acquisition_mode_from_environment()
+    capsule = (
+        verify_source_capsule_import(inputs.world_suite.sources, cache)
+        if source_mode.value == "offline-capsule"
+        else None
     )
+    runner = SubprocessGitRunner.discover()
+    payload: dict[str, Any] = {
+        "source_mode": source_mode.value,
+        "sources": [
+            {
+                "source_id": receipt.source_id,
+                "commit": receipt.commit,
+                "tree_sha256": receipt.tree_sha256,
+                "asset_sha256": [list(item) for item in receipt.asset_sha256],
+            }
+            for source in inputs.world_suite.sources
+            for receipt in (materialize_source(source, cache, runner, mode=source_mode),)
+        ],
+    }
+    if capsule is not None:
+        payload["capsule_sha256"] = capsule.capsule_sha256
+        payload["manifest_sha256"] = capsule.manifest_sha256
+    return payload
 
 
 def run_preflight(arguments: RuntimeArguments) -> dict[str, Any]:
@@ -164,7 +178,7 @@ def run_preflight(arguments: RuntimeArguments) -> dict[str, Any]:
     )
     source_hash = _atomic_json(
         runtime_root / "official_sources_receipt_v2.json",
-        {"sources": sources},
+        sources,
     )
     return {
         "status": "PASS",
@@ -189,6 +203,24 @@ def _required_receipts(artifact_root: Path) -> None:
     hardware = json.loads((runtime / "hardware_probe_v2.json").read_text(encoding="utf-8"))
     if hardware.get("decision", {}).get("feasible") is not True:
         raise RuntimeError("hardware probe receipt is not passing")
+    source_receipt = json.loads(
+        (runtime / "official_sources_receipt_v2.json").read_text(encoding="utf-8")
+    )
+    expected_mode = source_acquisition_mode_from_environment().value
+    if source_receipt.get("source_mode") != expected_mode:
+        raise RuntimeError("source acquisition mode does not match the passing preflight receipt")
+    if expected_mode == "offline-capsule":
+        capsule = verify_source_capsule_import(
+            repository_v2_inputs(REPOSITORY_ROOT).world_suite.sources,
+            source_cache_root_from_environment(REPOSITORY_ROOT),
+        )
+        if (
+            source_receipt.get("capsule_sha256") != capsule.capsule_sha256
+            or source_receipt.get("manifest_sha256") != capsule.manifest_sha256
+        ):
+            raise RuntimeError(
+                "offline source capsule does not match the passing preflight receipt"
+            )
 
 
 def _apply_precision_policy(artifact_root: Path) -> None:

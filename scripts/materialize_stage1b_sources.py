@@ -12,6 +12,7 @@ from tarca.stage1b.sources import (
     SourceMaterializationReceipt,
     SubprocessGitRunner,
     materialize_source,
+    source_acquisition_mode_from_environment,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -70,7 +71,13 @@ def main(argv: list[str] | None = None) -> int:
     selected = suite.sources if not requested else tuple(registered[item] for item in requested)
     runner = SubprocessGitRunner.discover()
     receipts = tuple(
-        materialize_source(source, arguments.cache_root.resolve(), runner) for source in selected
+        materialize_source(
+            source,
+            arguments.cache_root.resolve(),
+            runner,
+            mode=source_acquisition_mode_from_environment(),
+        )
+        for source in selected
     )
     print(
         json.dumps(

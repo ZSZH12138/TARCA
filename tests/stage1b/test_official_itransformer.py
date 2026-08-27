@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import torch
@@ -76,6 +78,18 @@ def test_itransformer_rejects_an_altered_source_receipt() -> None:
             dropout=0.0,
             source=altered,
         )
+
+
+def test_itransformer_source_context_uses_the_configured_offline_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configured_cache = tmp_path / "offline-source-cache"
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_CACHE_ROOT", str(configured_cache))
+    monkeypatch.setenv("TARCA_STAGE1B_SOURCE_MODE", "offline-capsule")
+
+    with pytest.raises(RuntimeError, match=re.escape(str(configured_cache / "itransformer"))):
+        _model()
 
 
 def test_itransformer_capture_and_swaps_are_operable_without_weight_mutation() -> None:
