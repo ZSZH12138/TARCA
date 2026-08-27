@@ -8,6 +8,7 @@ import pytest
 from tarca.execution.contracts import (
     ResourceAllocation,
     ResourceRequest,
+    RunPlanNode,
     ScientificIdentity,
     TaskSpec,
 )
@@ -40,6 +41,24 @@ def monitoring_database(tmp_path: Path) -> Path:
         ),
     )
     attempt = store.enqueue_task("run-a", task, "stage1b.train_neural")
+    pending_identity = task.identity.model_copy(update={"task_id": "task-2", "seed": 104759})
+    store.register_run_plan(
+        "run-a",
+        (
+            RunPlanNode(
+                identity=task.identity,
+                phase=task.phase,
+                resource_request=task.resource_request,
+                dependency_task_ids=(),
+            ),
+            RunPlanNode(
+                identity=pending_identity,
+                phase="NEURAL_SCORE",
+                resource_request=task.resource_request,
+                dependency_task_ids=("task-1",),
+            ),
+        ),
+    )
     allocation = ResourceAllocation(
         cpu_threads=4,
         gpu_ids=(0,),
@@ -47,6 +66,13 @@ def monitoring_database(tmp_path: Path) -> Path:
         worker_id="worker-task-1",
     )
     assert store.claim_attempt(attempt, allocation.worker_id, allocation) is not None
+    store.bind_running_process(
+        attempt,
+        allocation.worker_id,
+        321,
+        datetime(2026, 8, 26, 11, 59, 40, tzinfo=UTC),
+        now=datetime(2026, 8, 26, 11, 59, 40, tzinfo=UTC),
+    )
     store.record_progress(
         attempt,
         {
@@ -58,10 +84,9 @@ def monitoring_database(tmp_path: Path) -> Path:
             "crps": 0.01,
             "truth": "must-not-leak",
         },
+        now=datetime(2026, 8, 26, 12, 0, tzinfo=UTC),
     )
-    store.record_resource_sample(
-        "run-a",
-        ResourceSample(
+    sample = ResourceSample(
             sampled_at_utc=datetime(2026, 8, 26, 12, 0, tzinfo=UTC),
             host_cpu_percent=75.0,
             effective_busy_cores=18.5,
@@ -91,7 +116,11 @@ def monitoring_database(tmp_path: Path) -> Path:
             ),
             disk_read_bytes_per_second=1000.0,
             disk_write_bytes_per_second=2000.0,
-        ),
+        )
+    store.record_resource_sample("run-a", sample)
+    store.record_resource_sample(
+        "run-a",
+        sample,
         attempt_id=attempt,
     )
     store.add_alert("run-a", "GPU_PRESSURE", "GPU memory pressure", attempt_id=attempt)

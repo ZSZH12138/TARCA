@@ -1118,9 +1118,15 @@ class ExecutionStateStore:
             stalled.append(task_id)
         return ReconciliationResult(tuple(live), tuple(stalled))
 
-    def record_progress(self, attempt_id: str, progress: object) -> None:
+    def record_progress(
+        self,
+        attempt_id: str,
+        progress: object,
+        *,
+        now: datetime | None = None,
+    ) -> None:
         payload = _json_payload(progress)
-        now = _timestamp(_utc_now())
+        recorded_at = _timestamp(now or _utc_now())
         with self._transaction() as connection:
             state = connection.execute(
                 "SELECT state FROM attempts WHERE attempt_id = ?",
@@ -1133,7 +1139,7 @@ class ExecutionStateStore:
                 INSERT INTO progress_events(attempt_id, recorded_at_utc, payload_json)
                 VALUES (?, ?, ?)
                 """,
-                (attempt_id, now, payload),
+                (attempt_id, recorded_at, payload),
             )
 
     def progress_events(self, attempt_id: str) -> tuple[dict[str, Any], ...]:

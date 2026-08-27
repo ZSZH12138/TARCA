@@ -21,11 +21,11 @@ class JobStatusView(RuntimeView):
     alive: bool
     gpu_ids: tuple[int, ...]
     expected_cpu_cores: int
-    actual_effective_busy_cores: float
+    actual_effective_busy_cores: float | None
     expected_ram_bytes: int
-    actual_rss_bytes: int
+    actual_rss_bytes: int | None
     expected_vram_bytes: int
-    actual_vram_bytes: int
+    actual_vram_bytes: int | None
     epoch: int | None
     batch: int | None
     heartbeat_at_utc: datetime | None
@@ -48,6 +48,7 @@ class RunSummaryView(RuntimeView):
     eta_seconds: float | None
     eta_status: Literal["CALIBRATING", "AVAILABLE", "COMPLETE", "FAILED"]
     created_at_utc: datetime
+    last_sampled_at_utc: datetime | None
 
 
 class ResourceView(RuntimeView):
@@ -55,14 +56,15 @@ class ResourceView(RuntimeView):
     label: str
     kind: Literal["HOST", "GPU"]
     expected_cpu_cores: int
-    actual_effective_busy_cores: float
+    actual_effective_busy_cores: float | None
     expected_memory_bytes: int
-    actual_memory_bytes: int
-    utilization_percent: float
+    actual_memory_bytes: int | None
+    utilization_percent: float | None
     temperature_celsius: float | None
     power_watts: float | None
     active_processes: int
     sampled_at_utc: datetime | None
+    telemetry_status: Literal["LIVE", "STALE", "UNAVAILABLE"]
 
 
 class AlertView(RuntimeView):

@@ -12,6 +12,8 @@ def test_api_rejects_mutation(monitoring_database: Path, tmp_path: Path) -> None
     client = TestClient(create_monitoring_app(monitoring_database, tmp_path / "static"))
 
     assert client.post("/api/v1/jobs/task-1/restart").status_code == 405
+    assert client.put("/api/v1/jobs/task-1").status_code == 405
+    assert client.patch("/api/v1/jobs/task-1").status_code == 405
     assert client.delete("/api/v1/jobs/task-1").status_code == 405
 
 
@@ -36,7 +38,10 @@ def test_websocket_streams_the_same_safe_snapshot(
         payload = websocket.receive_json()
 
     assert payload["run"]["run_id"] == "run-a"
+    assert payload["run"]["total_tasks"] == 2
+    assert "last_sampled_at_utc" in payload["run"]
     assert payload["jobs"][0]["task_id"] == "task-1"
+    assert "telemetry_status" in payload["resources"][0]
     assert "truth" not in json.dumps(payload).lower()
 
 

@@ -1,25 +1,137 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from tarca.execution import ResourceAllocation, ResourceRequest, RunPlanNode, ScientificIdentity
+from tarca.execution.contracts import TaskSpec
+from tarca.execution.state import ExecutionStateStore
 from tarca.monitoring.repository import MonitoringRepository, open_readonly
+
+SAMPLED_AT = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
 
 def test_repository_builds_only_explicit_runtime_views(monitoring_database: Path) -> None:
-    snapshot = MonitoringRepository(monitoring_database).snapshot()
+    snapshot = MonitoringRepository(
+        monitoring_database,
+        now=lambda: SAMPLED_AT,
+    ).snapshot()
 
     assert snapshot.run.run_id == "run-a"
-    assert snapshot.run.total_tasks == 1
+    assert snapshot.run.total_tasks == 2
+    assert snapshot.run.pending_tasks == 1
+    assert snapshot.run.last_sampled_at_utc == SAMPLED_AT
     assert snapshot.jobs[0].world_id == "lorenz96_f10_v2"
     assert snapshot.jobs[0].expected_cpu_cores == 4
     assert snapshot.jobs[0].actual_effective_busy_cores == 18.5
     assert snapshot.jobs[0].actual_vram_bytes == 18 * 1024**3
+    assert snapshot.jobs[0].eta_seconds == 80.0
     assert snapshot.jobs[0].epoch == 3
+    assert snapshot.jobs[1].state == "PENDING"
     assert {resource.label for resource in snapshot.resources} == {"主机", "GPU 0", "GPU 1"}
+    assert {resource.telemetry_status for resource in snapshot.resources} == {"LIVE"}
     assert snapshot.alerts[0].category == "GPU_PRESSURE"
+
+
+def _running_database(tmp_path: Path, *, completed_steps: int = 0) -> Path:
+    path = tmp_path / "execution.sqlite3"
+    store = ExecutionStateStore(path, artifact_verifier=lambda _: True)
+    store.create_run("run-a", "graph-a")
+    task = TaskSpec(
+        identity=ScientificIdentity(
+            protocol_id="tarca-v1",
+            experiment_id="stage1b-v2",
+            task_id="task-a",
+            model_id="itransformer",
+            data_id="world-a",
+            seed=104729,
+        ),
+        phase="NEURAL_TRAIN",
+        inputs=(),
+        output_artifact_type="TEST_ARTIFACT",
+        resource_request=ResourceRequest(
+            cpu_threads=4,
+            gpu_count=1,
+            gpu_memory_gib=20.0,
+            host_memory_gib=16.0,
+        ),
+    )
+    store.register_run_plan(
+        "run-a",
+        (
+            RunPlanNode(
+                identity=task.identity,
+                phase=task.phase,
+                resource_request=task.resource_request,
+                dependency_task_ids=(),
+            ),
+        ),
+    )
+    attempt_id = store.enqueue_task("run-a", task, "test.execute")
+    allocation = ResourceAllocation(
+        cpu_threads=4,
+        gpu_ids=(0,),
+        host_memory_gib_limit=16.0,
+        worker_id="worker-a",
+    )
+    assert store.claim_attempt(attempt_id, "worker-a", allocation) is not None
+    store.bind_running_process(
+        attempt_id,
+        "worker-a",
+        987654,
+        datetime(2026, 8, 26, 11, 59, 40, tzinfo=UTC),
+        now=datetime(2026, 8, 26, 11, 59, 40, tzinfo=UTC),
+    )
+    store.record_progress(
+        attempt_id,
+        {"completed_steps": completed_steps, "total_steps": 100},
+        now=SAMPLED_AT,
+    )
+    return path
+
+
+def test_missing_telemetry_is_nullable_and_unavailable(tmp_path: Path) -> None:
+    snapshot = MonitoringRepository(
+        _running_database(tmp_path),
+        now=lambda: SAMPLED_AT,
+    ).snapshot()
+
+    assert snapshot.run.last_sampled_at_utc is None
+    assert snapshot.jobs[0].actual_effective_busy_cores is None
+    assert snapshot.jobs[0].actual_rss_bytes is None
+    assert snapshot.jobs[0].actual_vram_bytes is None
+    assert {resource.telemetry_status for resource in snapshot.resources} == {"UNAVAILABLE"}
+    assert all(resource.utilization_percent is None for resource in snapshot.resources)
+
+
+def test_telemetry_freshness_preserves_real_values(monitoring_database: Path) -> None:
+    live = MonitoringRepository(
+        monitoring_database,
+        now=lambda: datetime(2026, 8, 26, 12, 0, 9, tzinfo=UTC),
+    ).snapshot()
+    stale = MonitoringRepository(
+        monitoring_database,
+        now=lambda: datetime(2026, 8, 26, 12, 0, 11, tzinfo=UTC),
+    ).snapshot()
+
+    assert live.resources[0].actual_effective_busy_cores == 18.5
+    assert {resource.telemetry_status for resource in live.resources} == {"LIVE"}
+    assert stale.resources[0].actual_effective_busy_cores == 18.5
+    assert {resource.telemetry_status for resource in stale.resources} == {"STALE"}
+
+
+def test_zero_progress_keeps_eta_calibrating(tmp_path: Path) -> None:
+    snapshot = MonitoringRepository(
+        _running_database(tmp_path, completed_steps=0),
+        now=lambda: SAMPLED_AT,
+    ).snapshot()
+
+    assert snapshot.jobs[0].eta_seconds is None
+    assert snapshot.run.eta_seconds is None
+    assert snapshot.run.eta_status == "CALIBRATING"
 
 
 def test_monitoring_connection_is_sqlite_read_only(monitoring_database: Path) -> None:
