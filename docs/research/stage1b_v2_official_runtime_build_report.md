@@ -2,9 +2,9 @@
 
 > 构建状态：`BUILT_NOT_QUALIFIED`
 > 活动科学系列：`v2`
-> 报告日期：2026-08-26
-> 当前分支：`codex/stage1b-v2-official-runtime`
-> 回退分支：`codex/stage1b-v2-pre-official-runtime`（`2bc422b`）
+> 报告日期：2026-08-27
+> 当前分支：`codex/stage1b-runtime-supervision-fix`
+> 原始运行时回退点：`codex/stage1b-v2-official-runtime`（`f2104f7`）
 
 ## 1. 功能层结论
 
@@ -12,9 +12,10 @@ Stage1B v2 的 17 个实施任务已经构建完成。当前仓库可以在指�
 
 1. 下载并锁定六个官方仓库到精确 commit；
 2. 先复现官方生成器和模型关键行为，再生成资格数据与生成器自带真值；
-3. 把完整资格编译成 74 个不可变任务，并在两张 GPU 上并行调度；
+3. 把完整资格编译成 74 个不可变任务，把完整计划写入状态库，并在两张 GPU 上安全并行；
 4. 失败后从已验证制品和 checkpoint 恢复，不重跑已经完成的科学任务；
-5. 通过只读中文前端显示进程、期望/实际 CPU、内存、双卡利用率/显存和 ETA；
+5. 每 2 秒采集真实主机、进程和 NVML 数据，通过只读中文前端显示进程、期望/实际 CPU、
+   内存、双卡利用率/显存、采样新鲜度和有证据的 ETA；
 6. 把最终结果绑定到来源、环境、精度、硬件、运行图、任务清单和执行计划哈希；
 7. 首次冻结为 `v2-r1`，用户授权覆盖时新增下一不可变 v2 修订并移动活动指针。
 
@@ -64,20 +65,20 @@ Stage1B v2 的 17 个实施任务已经构建完成。当前仓库可以在指�
 
 | 矩阵 | 结果 |
 |---|---|
-| Python 3.10 服务器兼容矩阵（除 Stage0 doctor CLI） | 361/361 通过，155.53 秒 |
-| Python 3.10 coverage 复核 | 361/361 通过；branch coverage 80.13%，达到 80% 门槛 |
-| Python 3.11 Stage0 doctor/CLI | 5/5 通过；冷启动曾一次超过 60 秒，立即复跑 25.80 秒通过 |
+| Python 3.10 服务器兼容矩阵（除 Stage0 doctor CLI） | 380/380 通过，221.31 秒 |
+| Python 3.10 coverage 复核 | 380/380 通过；branch coverage 80.39%，达到 80% 门槛 |
+| Python 3.11 Stage0 doctor/CLI | 5/5 通过；并行重负载时冷启动曾超过 60 秒，单独复跑 20.16 秒通过 |
 | Ruff lint | 全仓通过 |
 | Ruff format | 全仓 145 个文件通过 |
 | mypy strict | 73 个源文件通过 |
 
-覆盖率复核之后新增的两个冷启动用例只增加覆盖：独立来源初始化服务，以及 Git fetch 的
-两次有界瞬态重试。最终 361 用例服务器兼容矩阵已包含并通过这两个用例。
+380 用例包含活动资源账本、完整运行计划、真实监督器、监控投影和正式运行器接入的新回归
+测试；没有执行完整 Stage1B、E01 或 E02。
 
 ### 监控前端
 
-- Vitest：14/14；
-- statements 97.39%，branches 84.93%，functions 97.56%，lines 100%；
+- Vitest：17/17；
+- statements 97.61%，branches 86.36%，functions 97.72%，lines 100%；
 - Vite 生产构建：通过；
 - Playwright/Edge：1/1；
 - `npm audit --omit=dev`：0 个已知漏洞。
@@ -99,6 +100,10 @@ ECharts 已拆成独立动态分块。它仍产生一个大于 500KB 的性能�
 - Stage1B 检查：`UNFROZEN`，与真实状态一致；
 - `docs/auth`：无修改。
 
+本地 WSL 没有可见 NVIDIA adapter，因此带双 GPU reservation 的 Compose 容器会在 NVIDIA
+prestart hook 按预期拒绝启动；同一镜像在非 root、只读根文件系统、无 GPU 的直接空状态烟测
+返回 `{"status":"EMPTY"}`。双卡 Compose 启动和真实 NVML 数值仍属于服务器验收项。
+
 Windows 上让 `pip-audit` 创建临时安装环境会因 Linux 专用 `uvloop` 失败；改用完全固定锁
 文件的 `--no-deps --disable-pip --strict` 模式后审计通过，Docker 的 Linux 构建也证明该
 锁文件可按哈希完整安装。
@@ -114,16 +119,29 @@ Windows 上让 `pip-audit` 创建临时安装环境会因 Linux 专用 `uvloop` 
 - 建议至少 100GB 可用本地高速存储；
 - 能访问六个固定官方 Git 仓库。
 
-调度器为监控保留 1 核、为系统和 I/O 保留 3 核，其余最多 24 核分配给数据与任务；两个
-独立神经任务默认分别占用一张 GPU，并依据显存、利用率、数据等待和 OOM 证据调整装箱，
-不通过改 seed、样本、epoch 或门槛来换速度。
+调度器为监控保留 1 核、为系统和 I/O 保留 3 核，其余最多 24 核分配给数据与任务；主机
+任务内存合同上限为 200 GiB，并要求至少 100 GiB 可用本地存储。每轮调度都会从总容量中
+扣除所有 `RUNNING` 尝试已经绑定的 CPU、内存和 GPU；资源不足时任务继续排队，释放后下一
+轮补位。声明 20 GiB 显存的神经训练/冻结任务默认每张 24 GiB GPU 只运行一个，不做无证据
+的激进超额装箱，也不通过改 seed、样本、epoch 或门槛来换速度。
+
+## 5.1 真实监控与 ETA 语义
+
+- 运行创建时登记完整 74 节点不可变计划，因此前端总数包含尚未入队的未来节点；
+- 正式调度器使用同一个 `PsutilNvmlTelemetryProbe`，监督器按 2 秒节流写入 run 级主机/GPU
+  样本及带 `attempt_id` 的进程样本；
+- 监控失败不会生成伪 0 样本；无样本显示“遥测不可用”，样本年龄不超过 10 秒显示“数据
+  正常”，更旧样本保留最后数值并显示“数据过期”；
+- 训练任务 ETA 只使用真实进程开始时间、最新进度时间和 `completed_steps / total_steps`；
+  同 phase、同 model 的已完成真实耗时可用于未启动任务，没有足够证据时保持“校准中”；
+- API、WebSocket 和前端全部只读，不提供停止、重启、修改参数或改写资格结果的入口。
 
 ## 6. 服务器执行命令
 
 在服务器仓库根目录执行：
 
 ```bash
-git switch codex/stage1b-v2-official-runtime
+git switch codex/stage1b-runtime-supervision-fix
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml build
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b-source-init
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b preflight
@@ -139,13 +157,20 @@ docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b prefli
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm --service-ports stage1b launch
 ```
 
-浏览器打开 `http://127.0.0.1:8765`。另一个终端可以只读查询：
+服务器本机浏览器可以打开 `http://127.0.0.1:8765`。远程电脑先建立 SSH 隧道：
+
+```bash
+ssh -L 8765:127.0.0.1:8765 <user>@<server>
+```
+
+然后在远程电脑浏览器打开同一地址。另一个服务器终端可以只读查询：
 
 ```bash
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b status
 ```
 
-主进程被中断后，不得重新 `launch`，应恢复：
+主进程被中断或服务器重启后，SQLite 状态、已验证制品和 checkpoint 仍保存在
+`tarca-stage1b-v2-artifacts` 命名卷中。不得重新 `launch`，应恢复：
 
 ```bash
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm --service-ports stage1b resume

@@ -66,9 +66,22 @@ docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b prefli
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm --service-ports stage1b launch
 ```
 
-监控页面只绑定 `http://127.0.0.1:8765`。中断后使用 `resume`，不能重新 `launch`。只有完整
-资格 Gate 通过并审阅后，才冻结为 `v2-r1`；用户授权覆盖会创建下一不可变 v2 修订，不会
-覆盖已有修订。完整硬件合同、恢复、状态查询和冻结命令见上述交接报告。
+正式运行会先把完整 74 节点计划登记到状态库。调度器每轮都扣除正在运行任务已经占用的
+CPU、内存和 GPU；20 GiB 神经任务默认每张 RTX 4090 只运行一个，数据任务最多使用 24 核，
+资源释放后再补位。SQLite 状态、已验证制品和 checkpoint 保存在命名卷中，断电或人为中断后
+使用 `resume`，不能重新 `launch`。
+
+监控页面只绑定 `http://127.0.0.1:8765`。远程服务器建议通过 SSH 隧道访问：
+
+```bash
+ssh -L 8765:127.0.0.1:8765 <user>@<server>
+```
+
+正式运行每 2 秒采集一次主机、进程和 NVML 数据。页面把 10 秒内样本显示为“数据正常”，
+旧样本显示为“数据过期”，没有真实样本显示为“遥测不可用”；缺失值不会伪装成 0。训练
+任务 ETA 使用真实开始时间和 `completed_steps / total_steps`，证据不足时显示“校准中”。只有
+完整资格 Gate 通过并审阅后，才冻结为 `v2-r1`；用户授权覆盖会创建下一不可变 v2 修订，
+不会覆盖已有修订。完整硬件合同、恢复、状态查询和冻结命令见上述交接报告。
 
 ## 权威文档
 
