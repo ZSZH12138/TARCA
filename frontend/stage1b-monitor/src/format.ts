@@ -1,6 +1,17 @@
-export function formatBytes(value: number): string {
+export function formatBytes(value: number | null): string {
+  if (value === null) return "—";
   if (value <= 0) return "0 GiB";
   return `${(value / 1024 ** 3).toFixed(1)} GiB`;
+}
+
+export function formatDecimal(value: number | null, digits = 1): string {
+  return value === null ? "—" : value.toFixed(digits);
+}
+
+export function formatTimestamp(value: string | null): string {
+  if (value === null) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleString("zh-CN", { hour12: false });
 }
 
 export function formatEta(seconds: number | null, status: string): string {

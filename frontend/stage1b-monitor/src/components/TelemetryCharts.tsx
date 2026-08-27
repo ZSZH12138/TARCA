@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react";
 
 import type { ResourceStatus } from "../types";
 
+export function telemetrySeriesData(resources: ResourceStatus[]): Array<number | null> {
+  return resources.map((item) => item.utilization_percent);
+}
+
 export function TelemetryCharts({ resources }: { resources: ResourceStatus[] }) {
   const chartRoot = useRef<HTMLDivElement>(null);
 
@@ -30,7 +34,7 @@ export function TelemetryCharts({ resources }: { resources: ResourceStatus[] }) 
         },
         series: [{
           type: "bar",
-          data: resources.map((item) => item.utilization_percent),
+          data: telemetrySeriesData(resources),
           itemStyle: { color: "#40e0b6", borderRadius: [5, 5, 0, 0] },
           barMaxWidth: 42,
         }],

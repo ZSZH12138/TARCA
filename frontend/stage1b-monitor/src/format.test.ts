@@ -6,6 +6,7 @@ describe("runtime display formatting", () => {
   it("formats byte and identifier boundaries", () => {
     expect(formatBytes(0)).toBe("0 GiB");
     expect(formatBytes(1.5 * 1024 ** 3)).toBe("1.5 GiB");
+    expect(formatBytes(null)).toBe("—");
     expect(shortId("short-id")).toBe("short-id");
     expect(shortId("stage1b-very-long-scientific-task-id")).toContain("…");
   });

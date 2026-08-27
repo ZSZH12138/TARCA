@@ -29,6 +29,57 @@ describe("Stage1B runtime dashboard", () => {
     expect(await screen.findByText("校准中")).toBeVisible();
   });
 
+  it("distinguishes real zero utilization from unavailable telemetry", async () => {
+    const liveZero = {
+      ...twoGpuSnapshot,
+      resources: [{ ...twoGpuSnapshot.resources[0], utilization_percent: 0 }],
+    };
+    const { unmount } = render(<App api={fakeApi(liveZero)} />);
+
+    expect(await screen.findByText("0%")).toBeVisible();
+    expect(screen.getByText("数据正常")).toBeVisible();
+    unmount();
+
+    const unavailable = {
+      ...twoGpuSnapshot,
+      run: { ...twoGpuSnapshot.run, last_sampled_at_utc: null },
+      jobs: twoGpuSnapshot.jobs.map((job) => ({
+        ...job,
+        actual_effective_busy_cores: null,
+        actual_rss_bytes: null,
+        actual_vram_bytes: null,
+      })),
+      resources: [{
+        ...twoGpuSnapshot.resources[0],
+        actual_effective_busy_cores: null,
+        actual_memory_bytes: null,
+        utilization_percent: null,
+        telemetry_status: "UNAVAILABLE" as const,
+        sampled_at_utc: null,
+      }],
+    };
+    render(<App api={fakeApi(unavailable)} />);
+
+    expect(await screen.findByText("遥测不可用")).toBeVisible();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("preserves stale measurements while labeling them as expired", async () => {
+    const stale = {
+      ...twoGpuSnapshot,
+      resources: [{
+        ...twoGpuSnapshot.resources[1],
+        utilization_percent: 93,
+        telemetry_status: "STALE" as const,
+      }],
+    };
+    render(<App api={fakeApi(stale)} />);
+
+    expect(await screen.findByText("93%")).toBeVisible();
+    expect(screen.getByText("数据过期")).toBeVisible();
+    expect(screen.getByText("最后采样")).toBeVisible();
+  });
+
   it("renders connection errors without discarding the last safe snapshot", async () => {
     const api = fakeApi(twoGpuSnapshot);
     render(<App api={api} />);

@@ -1,4 +1,4 @@
-import { formatBytes, shortId } from "../format";
+import { formatBytes, formatDecimal, shortId } from "../format";
 import type { JobStatus } from "../types";
 
 export function JobTable({ jobs }: { jobs: JobStatus[] }) {
@@ -18,7 +18,7 @@ export function JobTable({ jobs }: { jobs: JobStatus[] }) {
                 <td><strong>{job.world_id ?? "—"}</strong><small>{job.model_id ?? job.phase}</small></td>
                 <td><span className={`status status-${job.state.toLowerCase()}`}>{job.state}</span><small>{job.alive ? `PID ${job.pid}` : "未检测到进程"}</small></td>
                 <td>{job.gpu_ids.length ? job.gpu_ids.join(", ") : "CPU"}</td>
-                <td>{job.actual_effective_busy_cores.toFixed(1)} / {job.expected_cpu_cores}</td>
+                <td>{formatDecimal(job.actual_effective_busy_cores)} / {job.expected_cpu_cores}</td>
                 <td><span>{formatBytes(job.actual_rss_bytes)}</span><small>{job.gpu_ids.length ? `${formatBytes(job.actual_vram_bytes)} VRAM` : "—"}</small></td>
                 <td>{job.epoch === null ? "等待" : `Epoch ${job.epoch}`}<small>{job.batch === null ? "" : `Batch ${job.batch}`}</small></td>
               </tr>

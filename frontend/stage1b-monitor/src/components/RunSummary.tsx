@@ -1,4 +1,4 @@
-import { formatEta, shortId } from "../format";
+import { formatEta, formatTimestamp, shortId } from "../format";
 import type { RunSummary as RunSummaryType } from "../types";
 
 export function RunSummary({ summary }: { summary: RunSummaryType }) {
@@ -24,6 +24,7 @@ export function RunSummary({ summary }: { summary: RunSummaryType }) {
         <span>预计剩余时间</span>
         <strong>{formatEta(summary.eta_seconds, summary.eta_status)}</strong>
         <small className={`status status-${summary.status.toLowerCase()}`}>{summary.status}</small>
+        <small className="sample-time"><span>最后采样</span><time>{formatTimestamp(summary.last_sampled_at_utc)}</time></small>
       </div>
     </section>
   );

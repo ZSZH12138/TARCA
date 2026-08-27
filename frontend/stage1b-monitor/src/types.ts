@@ -12,6 +12,7 @@ export interface RunSummary {
   eta_seconds: number | null;
   eta_status: "CALIBRATING" | "AVAILABLE" | "COMPLETE" | "FAILED";
   created_at_utc: string;
+  last_sampled_at_utc: string | null;
 }
 
 export interface JobStatus {
@@ -25,11 +26,11 @@ export interface JobStatus {
   alive: boolean;
   gpu_ids: number[];
   expected_cpu_cores: number;
-  actual_effective_busy_cores: number;
+  actual_effective_busy_cores: number | null;
   expected_ram_bytes: number;
-  actual_rss_bytes: number;
+  actual_rss_bytes: number | null;
   expected_vram_bytes: number;
-  actual_vram_bytes: number;
+  actual_vram_bytes: number | null;
   epoch: number | null;
   batch: number | null;
   heartbeat_at_utc: string | null;
@@ -43,14 +44,15 @@ export interface ResourceStatus {
   label: string;
   kind: "HOST" | "GPU";
   expected_cpu_cores: number;
-  actual_effective_busy_cores: number;
+  actual_effective_busy_cores: number | null;
   expected_memory_bytes: number;
-  actual_memory_bytes: number;
-  utilization_percent: number;
+  actual_memory_bytes: number | null;
+  utilization_percent: number | null;
   temperature_celsius: number | null;
   power_watts: number | null;
   active_processes: number;
   sampled_at_utc: string | null;
+  telemetry_status: "LIVE" | "STALE" | "UNAVAILABLE";
 }
 
 export interface RuntimeAlert {
