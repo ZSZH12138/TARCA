@@ -85,6 +85,15 @@ class _RecordingBackend:
         return ()
 
 
+class _RecordingSupervisor:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
+    def sample_if_due(self, run_id: str, supervisor_pid: int) -> bool:
+        self.calls.append((run_id, supervisor_pid))
+        return True
+
+
 def test_scheduler_never_exposes_scientific_result_columns() -> None:
     lowered = {column.lower() for column in Scheduler.visible_columns}
     assert lowered.isdisjoint({"crps", "nll", "mae", "ranking", "truth", "best_seed"})
@@ -128,6 +137,21 @@ def test_repeated_ticks_never_reuse_resources_held_by_running_attempts(
 
     assert launches_per_tick == (2, 0, 0, 0, 0)
     assert store.run_attempt_counts("run-a") == {"READY": 6, "RUNNING": 2}
+
+
+def test_scheduler_samples_after_launch_and_when_no_work_is_ready(tmp_path: Path) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    store.enqueue_task("run-a", _task(0), "test.execute")
+    supervisor = _RecordingSupervisor()
+    scheduler = Scheduler(store, _RecordingBackend(), _capacity(), supervisor=supervisor)
+
+    scheduler.tick("run-a")
+    scheduler.tick("run-a")
+
+    assert len(supervisor.calls) == 2
+    assert {run_id for run_id, _ in supervisor.calls} == {"run-a"}
+    assert all(pid > 0 for _, pid in supervisor.calls)
 
 
 def test_completed_gpu_attempt_releases_exactly_one_card(tmp_path: Path) -> None:

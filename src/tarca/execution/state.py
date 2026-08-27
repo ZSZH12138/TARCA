@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from tarca.contracts import ArtifactRef, canonical_json_bytes
 from tarca.execution.contracts import ResourceAllocation, RunPlanNode, TaskSpec
+from tarca.execution.telemetry import GpuSample, ResourceSample
 
 ArtifactVerifier = Callable[[ArtifactRef], bool]
 
@@ -176,6 +177,37 @@ def _json_safe(value: object) -> object:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     raise TypeError(f"state event payload contains unsupported type: {type(value).__name__}")
+
+
+def _resource_sample(payload_json: str) -> ResourceSample:
+    payload = cast(dict[str, Any], json.loads(payload_json))
+    gpu_samples = tuple(
+        GpuSample(
+            gpu_id=int(item["gpu_id"]),
+            utilization_percent=float(item["utilization_percent"]),
+            memory_used_bytes=int(item["memory_used_bytes"]),
+            memory_total_bytes=int(item["memory_total_bytes"]),
+            power_watts=float(item["power_watts"]),
+            temperature_celsius=float(item["temperature_celsius"]),
+            compute_pids=tuple(int(pid) for pid in item["compute_pids"]),
+        )
+        for item in payload["gpu_samples"]
+    )
+    process_pss = payload["process_pss_bytes"]
+    return ResourceSample(
+        sampled_at_utc=_parse_timestamp(str(payload["sampled_at_utc"])),
+        host_cpu_percent=float(payload["host_cpu_percent"]),
+        effective_busy_cores=float(payload["effective_busy_cores"]),
+        process_rss_bytes=int(payload["process_rss_bytes"]),
+        process_pss_bytes=None if process_pss is None else int(process_pss),
+        process_affinity_cpu_ids=tuple(
+            int(cpu_id) for cpu_id in payload["process_affinity_cpu_ids"]
+        ),
+        host_memory_used_bytes=int(payload["host_memory_used_bytes"]),
+        gpu_samples=gpu_samples,
+        disk_read_bytes_per_second=float(payload["disk_read_bytes_per_second"]),
+        disk_write_bytes_per_second=float(payload["disk_write_bytes_per_second"]),
+    )
 
 
 _SCHEMA = """
@@ -1118,7 +1150,7 @@ class ExecutionStateStore:
     def record_resource_sample(
         self,
         run_id: str,
-        sample: object,
+        sample: ResourceSample,
         *,
         attempt_id: str | None = None,
     ) -> None:
@@ -1129,8 +1161,35 @@ class ExecutionStateStore:
                 INSERT INTO resource_samples(run_id, attempt_id, sampled_at_utc, payload_json)
                 VALUES (?, ?, ?, ?)
                 """,
-                (run_id, attempt_id, _timestamp(_utc_now()), payload),
+                (run_id, attempt_id, _timestamp(sample.sampled_at_utc), payload),
             )
+
+    def resource_samples(
+        self,
+        run_id: str,
+        *,
+        attempt_id: str | None,
+    ) -> tuple[ResourceSample, ...]:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            if attempt_id is None:
+                rows = connection.execute(
+                    """
+                    SELECT payload_json FROM resource_samples
+                    WHERE run_id = ? AND attempt_id IS NULL ORDER BY sample_id
+                    """,
+                    (run_id,),
+                ).fetchall()
+            else:
+                _safe_identifier(attempt_id, "attempt_id")
+                rows = connection.execute(
+                    """
+                    SELECT payload_json FROM resource_samples
+                    WHERE run_id = ? AND attempt_id = ? ORDER BY sample_id
+                    """,
+                    (run_id, attempt_id),
+                ).fetchall()
+        return tuple(_resource_sample(str(row["payload_json"])) for row in rows)
 
     def add_alert(
         self,
@@ -1150,3 +1209,56 @@ class ExecutionStateStore:
                 """,
                 (run_id, attempt_id, _timestamp(_utc_now()), category, message),
             )
+
+    def add_alert_once(
+        self,
+        run_id: str,
+        category: str,
+        message: str,
+        *,
+        attempt_id: str | None = None,
+    ) -> bool:
+        if not category.strip() or not message.strip():
+            raise ValueError("alert category and message must not be blank")
+        with self._transaction() as connection:
+            existing = connection.execute(
+                """
+                SELECT alert_id FROM alerts
+                WHERE run_id = ? AND attempt_id IS ? AND category = ? AND message = ?
+                LIMIT 1
+                """,
+                (run_id, attempt_id, category, message),
+            ).fetchone()
+            if existing is not None:
+                return False
+            connection.execute(
+                """
+                INSERT INTO alerts(run_id, attempt_id, created_at_utc, category, message)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (run_id, attempt_id, _timestamp(_utc_now()), category, message),
+            )
+        return True
+
+    def alerts(self, run_id: str) -> tuple[dict[str, Any], ...]:
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT alert_id, attempt_id, category, message, created_at_utc
+                FROM alerts WHERE run_id = ? ORDER BY alert_id
+                """,
+                (run_id,),
+            ).fetchall()
+        return tuple(
+            {
+                "alert_id": int(row["alert_id"]),
+                "attempt_id": (
+                    str(row["attempt_id"]) if row["attempt_id"] is not None else None
+                ),
+                "category": str(row["category"]),
+                "message": str(row["message"]),
+                "created_at_utc": _parse_timestamp(str(row["created_at_utc"])),
+            }
+            for row in rows
+        )

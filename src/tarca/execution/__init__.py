@@ -59,6 +59,7 @@ from .state import (
     RunningAttempt,
     StateTransitionConflict,
 )
+from .supervision import RuntimeSupervisor
 from .telemetry import (
     GpuSample,
     HostTelemetry,
@@ -111,6 +112,7 @@ __all__ = [
     "RunTerminalStatus",
     "RunningAttempt",
     "RuntimeAuthorizationRequired",
+    "RuntimeSupervisor",
     "Scheduler",
     "SchedulerLaunch",
     "ScientificIdentity",

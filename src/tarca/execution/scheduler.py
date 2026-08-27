@@ -17,6 +17,7 @@ from tarca.execution.contracts import ExecutionContext, PlannedTask
 from tarca.execution.registry import ExecutorRegistry
 from tarca.execution.resources import HostAdmissionPolicy, ResourceCapacity, plan_resources
 from tarca.execution.state import AttemptState, ExecutionStateStore, QueuedTask
+from tarca.execution.supervision import RuntimeSupervisor
 from tarca.execution.worker import run_worker
 
 
@@ -198,6 +199,7 @@ class Scheduler:
         *,
         policy: HostAdmissionPolicy | None = None,
         poll_interval_seconds: float = 0.2,
+        supervisor: RuntimeSupervisor | None = None,
     ) -> None:
         if poll_interval_seconds <= 0:
             raise ValueError("scheduler poll interval must be positive")
@@ -206,18 +208,21 @@ class Scheduler:
         self.capacity = capacity
         self.policy = policy
         self.poll_interval_seconds = poll_interval_seconds
+        self.supervisor = supervisor
 
     def tick(self, run_id: str) -> tuple[SchedulerLaunch, ...]:
         self.backend.poll()
         queued = self.store.ready_tasks(run_id)
-        if not queued:
-            return ()
         active = self.store.running_attempts(run_id)
-        allocations = plan_resources(
-            tuple(item.task for item in queued),
-            self.capacity,
-            self.policy,
-            active=tuple((item.task, item.allocation) for item in active),
+        allocations = (
+            plan_resources(
+                tuple(item.task for item in queued),
+                self.capacity,
+                self.policy,
+                active=tuple((item.task, item.allocation) for item in active),
+            )
+            if queued
+            else ()
         )
         launches: list[SchedulerLaunch] = []
         for allocation in allocations:
@@ -244,6 +249,8 @@ class Scheduler:
                     handle=handle,
                 )
             )
+        if self.supervisor is not None:
+            self.supervisor.sample_if_due(run_id, os.getpid())
         return tuple(launches)
 
     def run_until_terminal(
