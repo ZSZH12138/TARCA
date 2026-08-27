@@ -55,6 +55,7 @@ from .state import (
     QueuedTask,
     ReconciliationResult,
     RetryDisposition,
+    RunningAttempt,
     StateTransitionConflict,
 )
 from .telemetry import (
@@ -106,6 +107,7 @@ __all__ = [
     "ResourceSample",
     "RetryDisposition",
     "RunTerminalStatus",
+    "RunningAttempt",
     "RuntimeAuthorizationRequired",
     "Scheduler",
     "SchedulerLaunch",

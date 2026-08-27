@@ -212,10 +212,12 @@ class Scheduler:
         queued = self.store.ready_tasks(run_id)
         if not queued:
             return ()
+        active = self.store.running_attempts(run_id)
         allocations = plan_resources(
             tuple(item.task for item in queued),
             self.capacity,
             self.policy,
+            active=tuple((item.task, item.allocation) for item in active),
         )
         launches: list[SchedulerLaunch] = []
         for allocation in allocations:

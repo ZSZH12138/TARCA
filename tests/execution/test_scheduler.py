@@ -25,7 +25,12 @@ from tarca.stage1b.jobs import stage1b_executor_registry
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _task(index: int, *, gpu: bool = True) -> TaskSpec:
+def _task(
+    index: int,
+    *,
+    gpu: bool = True,
+    gpu_memory_gib: float = 4.0,
+) -> TaskSpec:
     return TaskSpec(
         identity=ScientificIdentity(
             protocol_id="tarca-v1",
@@ -41,7 +46,7 @@ def _task(index: int, *, gpu: bool = True) -> TaskSpec:
         resource_request=ResourceRequest(
             cpu_threads=2,
             gpu_count=1 if gpu else 0,
-            gpu_memory_gib=4.0 if gpu else 0.0,
+            gpu_memory_gib=gpu_memory_gib if gpu else 0.0,
             host_memory_gib=2.0,
         ),
     )
@@ -104,6 +109,55 @@ def test_two_gpus_launch_two_of_three_ready_gpu_jobs(tmp_path: Path) -> None:
     assert len(launches) == 2
     assert {launch.task.allocation.gpu_ids for launch in launches} == {(0,), (1,)}
     assert store.attempt_state("task-2-attempt-1") is AttemptState.READY
+
+
+def test_repeated_ticks_never_reuse_resources_held_by_running_attempts(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    for index in range(8):
+        store.enqueue_task(
+            "run-a",
+            _task(index, gpu_memory_gib=20.0),
+            "test.execute",
+        )
+    scheduler = Scheduler(store, _RecordingBackend(), _capacity())
+
+    launches_per_tick = tuple(len(scheduler.tick("run-a")) for _ in range(5))
+
+    assert launches_per_tick == (2, 0, 0, 0, 0)
+    assert store.run_attempt_counts("run-a") == {"READY": 6, "RUNNING": 2}
+
+
+def test_completed_gpu_attempt_releases_exactly_one_card(tmp_path: Path) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    for index in range(3):
+        store.enqueue_task(
+            "run-a",
+            _task(index, gpu_memory_gib=20.0),
+            "test.execute",
+        )
+    scheduler = Scheduler(store, _RecordingBackend(), _capacity())
+    first = scheduler.tick("run-a")
+    released = first[0]
+    store.complete_attempt(
+        released.task.attempt_id,
+        ArtifactRef(
+            artifact_id="released-artifact",
+            artifact_type="TEST_ARTIFACT",
+            content_hash="a" * 64,
+            schema_version="1.0.0",
+            relative_path="artifacts/released.bin",
+        ),
+    )
+
+    second = scheduler.tick("run-a")
+
+    assert len(second) == 1
+    assert second[0].task.allocation.gpu_ids == released.task.allocation.gpu_ids
+    assert store.run_attempt_counts("run-a") == {"COMPLETED": 1, "RUNNING": 2}
 
 
 def test_backend_choice_does_not_change_scientific_identity(tmp_path: Path) -> None:

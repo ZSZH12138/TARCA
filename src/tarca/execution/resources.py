@@ -105,6 +105,8 @@ def plan_resources(
     tasks: tuple[TaskSpec, ...],
     capacity: ResourceCapacity,
     policy: HostAdmissionPolicy | None = None,
+    *,
+    active: tuple[tuple[TaskSpec, ResourceAllocation], ...] = (),
 ) -> tuple[ResourceAllocation, ...]:
     resolved = policy or HostAdmissionPolicy()
     if (
@@ -123,9 +125,36 @@ def plan_resources(
         capacity.available_memory_bytes,
         resolved.maximum_host_memory_bytes,
     )
-    remaining_cores = usable_cores
-    remaining_memory = memory_budget
-    free_gpu_ids = list(range(len(capacity.gpu_memory_bytes)))
+    active_cpu = 0
+    active_memory = 0
+    active_gpu_ids: set[int] = set()
+    for task, allocation in active:
+        request = task.resource_request
+        if allocation.cpu_threads != request.cpu_threads:
+            raise ResourcePlanningError("active CPU allocation drifted from its task request")
+        if not math.isclose(
+            allocation.host_memory_gib_limit,
+            request.host_memory_gib,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise ResourcePlanningError("active memory allocation drifted from its task request")
+        if len(allocation.gpu_ids) != request.gpu_count:
+            raise ResourcePlanningError("active GPU allocation drifted from its task request")
+        if any(gpu_id >= len(capacity.gpu_memory_bytes) for gpu_id in allocation.gpu_ids):
+            raise ResourcePlanningError("active GPU allocation is outside host capacity")
+        if active_gpu_ids.intersection(allocation.gpu_ids):
+            raise ResourcePlanningError("multiple active tasks claim the same GPU")
+        active_cpu += allocation.cpu_threads
+        active_memory += math.ceil(allocation.host_memory_gib_limit * _GIB)
+        active_gpu_ids.update(allocation.gpu_ids)
+    if active_cpu > usable_cores or active_memory > memory_budget:
+        raise ResourcePlanningError("active allocations exceed the host admission budget")
+    remaining_cores = usable_cores - active_cpu
+    remaining_memory = memory_budget - active_memory
+    free_gpu_ids = [
+        gpu_id for gpu_id in range(len(capacity.gpu_memory_bytes)) if gpu_id not in active_gpu_ids
+    ]
     allocations: list[ResourceAllocation] = []
     for index, task in enumerate(tasks):
         request = task.resource_request

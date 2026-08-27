@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tarca.contracts import ArtifactRef
-from tarca.execution import ResourceRequest, ScientificIdentity, TaskSpec
+from tarca.execution import ResourceAllocation, ResourceRequest, ScientificIdentity, TaskSpec
 from tarca.execution.state import (
     AttemptState,
     ExecutionStateStore,
@@ -157,6 +157,35 @@ def test_run_status_and_completed_artifacts_are_read_only_views(tmp_path: Path) 
 
     assert store.run_attempt_counts("run-a") == {"COMPLETED": 1}
     assert store.completed_artifacts("run-a") == {"task-a": artifact}
+
+
+def test_running_attempts_expose_frozen_task_and_allocation(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    task = _task()
+    attempt_id = store.enqueue_task("run-a", task, "test.execute")
+    allocation = ResourceAllocation(
+        cpu_threads=2,
+        gpu_ids=(),
+        host_memory_gib_limit=4.0,
+        worker_id="worker-a",
+    )
+    assert store.claim_attempt(attempt_id, "worker-a", allocation) is not None
+
+    running = store.running_attempts("run-a")
+
+    assert len(running) == 1
+    assert running[0].attempt_id == attempt_id
+    assert running[0].task == task
+    assert running[0].allocation == allocation
+
+
+def test_running_attempt_without_allocation_fails_closed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    attempt_id = store.enqueue_task("run-a", _task(), "test.execute")
+    assert store.claim_attempt(attempt_id, "worker-a") is not None
+
+    with pytest.raises(RuntimeError, match="no committed resource allocation"):
+        store.running_attempts("run-a")
 
 
 class _Probe:

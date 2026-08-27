@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tarca.execution import ResourceRequest, ScientificIdentity, TaskSpec
+from tarca.execution import ResourceAllocation, ResourceRequest, ScientificIdentity, TaskSpec
 from tarca.execution.resources import (
     DdpMode,
     HostAdmissionPolicy,
@@ -91,6 +91,74 @@ def test_resource_plan_starts_one_independent_task_per_gpu() -> None:
     allocations = plan_resources(tasks, capacity, HostAdmissionPolicy())
     assert tuple(allocation.gpu_ids for allocation in allocations) == ((0,), (1,))
     assert all(allocation.cpu_threads == 4 for allocation in allocations)
+
+
+def test_resource_plan_subtracts_active_cpu_memory_and_gpu_allocations() -> None:
+    capacity = ResourceCapacity(
+        logical_cpu_count=28,
+        physical_cpu_count=28,
+        available_memory_bytes=_gib(224.0),
+        gpu_memory_bytes=(_gib(24.0), _gib(24.0)),
+        local_storage_available=True,
+        local_storage_free_bytes=_gib(1000.0),
+    )
+    active_task = _gpu_task("active-task")
+    active_allocation = ResourceAllocation(
+        cpu_threads=4,
+        gpu_ids=(0,),
+        host_memory_gib_limit=32.0,
+        worker_id="active-worker",
+    )
+
+    allocations = plan_resources(
+        (_gpu_task("queued-a"), _gpu_task("queued-b")),
+        capacity,
+        active=((active_task, active_allocation),),
+    )
+
+    assert tuple(allocation.gpu_ids for allocation in allocations) == ((1,),)
+
+
+def test_resource_plan_keeps_second_24_core_task_queued() -> None:
+    capacity = ResourceCapacity(
+        logical_cpu_count=56,
+        physical_cpu_count=28,
+        available_memory_bytes=_gib(224.0),
+        gpu_memory_bytes=(_gib(24.0), _gib(24.0)),
+        local_storage_available=True,
+        local_storage_free_bytes=_gib(1000.0),
+    )
+    cpu_task = _gpu_task("cpu-task").model_copy(
+        update={
+            "resource_request": ResourceRequest(
+                cpu_threads=24,
+                gpu_count=0,
+                gpu_memory_gib=0.0,
+                host_memory_gib=96.0,
+            )
+        }
+    )
+    active_allocation = ResourceAllocation(
+        cpu_threads=24,
+        gpu_ids=(),
+        host_memory_gib_limit=96.0,
+        worker_id="active-worker",
+    )
+
+    assert (
+        plan_resources(
+            (
+                cpu_task.model_copy(
+                    update={
+                        "identity": cpu_task.identity.model_copy(update={"task_id": "queued-task"})
+                    }
+                ),
+            ),
+            capacity,
+            active=((cpu_task, active_allocation),),
+        )
+        == ()
+    )
 
 
 def test_resource_plan_fails_without_local_storage() -> None:

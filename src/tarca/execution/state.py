@@ -73,6 +73,17 @@ class QueuedTask:
 
 
 @dataclass(frozen=True, slots=True)
+class RunningAttempt:
+    run_id: str
+    attempt_id: str
+    task: TaskSpec
+    allocation: ResourceAllocation
+    pid: int | None
+    process_started_at_utc: datetime | None
+    heartbeat_at_utc: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class FailedAttempt:
     attempt_id: str
     error_category: str
@@ -535,6 +546,52 @@ class ExecutionStateStore:
             )
             for row in rows
         )
+
+    def running_attempts(self, run_id: str) -> tuple[RunningAttempt, ...]:
+        """Return latest running attempts with their committed allocations."""
+        _safe_identifier(run_id, "run_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT attempts.attempt_id, attempts.allocation_json, attempts.pid,
+                       attempts.process_started_at_utc, attempts.heartbeat_at_utc,
+                       job_nodes.run_id, task_specs.spec_json
+                FROM attempts
+                JOIN task_specs USING(task_id)
+                JOIN job_nodes USING(task_id)
+                WHERE job_nodes.run_id = ? AND attempts.state = ?
+                  AND attempts.attempt_number = (
+                      SELECT MAX(latest.attempt_number) FROM attempts AS latest
+                      WHERE latest.task_id = attempts.task_id
+                  )
+                ORDER BY attempts.created_at_utc, attempts.attempt_id
+                """,
+                (run_id, AttemptState.RUNNING.value),
+            ).fetchall()
+        running: list[RunningAttempt] = []
+        for row in rows:
+            allocation_json = row["allocation_json"]
+            if not isinstance(allocation_json, str):
+                raise RuntimeError("running attempt has no committed resource allocation")
+            started = row["process_started_at_utc"]
+            heartbeat = row["heartbeat_at_utc"]
+            pid = row["pid"]
+            running.append(
+                RunningAttempt(
+                    run_id=str(row["run_id"]),
+                    attempt_id=str(row["attempt_id"]),
+                    task=TaskSpec.model_validate_json(row["spec_json"]),
+                    allocation=ResourceAllocation.model_validate_json(allocation_json),
+                    pid=int(pid) if isinstance(pid, int) and pid > 0 else None,
+                    process_started_at_utc=(
+                        _parse_timestamp(started) if isinstance(started, str) else None
+                    ),
+                    heartbeat_at_utc=(
+                        _parse_timestamp(heartbeat) if isinstance(heartbeat, str) else None
+                    ),
+                )
+            )
+        return tuple(running)
 
     def claim_attempt(
         self,
