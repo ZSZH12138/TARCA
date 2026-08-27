@@ -87,36 +87,36 @@ def monitoring_database(tmp_path: Path) -> Path:
         now=datetime(2026, 8, 26, 12, 0, tzinfo=UTC),
     )
     sample = ResourceSample(
-            sampled_at_utc=datetime(2026, 8, 26, 12, 0, tzinfo=UTC),
-            host_cpu_percent=75.0,
-            effective_busy_cores=18.5,
-            process_rss_bytes=12 * 1024**3,
-            process_pss_bytes=10 * 1024**3,
-            process_affinity_cpu_ids=tuple(range(4, 8)),
-            host_memory_used_bytes=80 * 1024**3,
-            gpu_samples=(
-                GpuSample(
-                    gpu_id=0,
-                    utilization_percent=92.0,
-                    memory_used_bytes=18 * 1024**3,
-                    memory_total_bytes=24 * 1024**3,
-                    power_watts=410.0,
-                    temperature_celsius=71.0,
-                    compute_pids=(321,),
-                ),
-                GpuSample(
-                    gpu_id=1,
-                    utilization_percent=5.0,
-                    memory_used_bytes=1 * 1024**3,
-                    memory_total_bytes=24 * 1024**3,
-                    power_watts=75.0,
-                    temperature_celsius=42.0,
-                    compute_pids=(),
-                ),
+        sampled_at_utc=datetime(2026, 8, 26, 12, 0, tzinfo=UTC),
+        host_cpu_percent=75.0,
+        effective_busy_cores=18.5,
+        process_rss_bytes=12 * 1024**3,
+        process_pss_bytes=10 * 1024**3,
+        process_affinity_cpu_ids=tuple(range(4, 8)),
+        host_memory_used_bytes=80 * 1024**3,
+        gpu_samples=(
+            GpuSample(
+                gpu_id=0,
+                utilization_percent=92.0,
+                memory_used_bytes=18 * 1024**3,
+                memory_total_bytes=24 * 1024**3,
+                power_watts=410.0,
+                temperature_celsius=71.0,
+                compute_pids=(321,),
             ),
-            disk_read_bytes_per_second=1000.0,
-            disk_write_bytes_per_second=2000.0,
-        )
+            GpuSample(
+                gpu_id=1,
+                utilization_percent=5.0,
+                memory_used_bytes=1 * 1024**3,
+                memory_total_bytes=24 * 1024**3,
+                power_watts=75.0,
+                temperature_celsius=42.0,
+                compute_pids=(),
+            ),
+        ),
+        disk_read_bytes_per_second=1000.0,
+        disk_write_bytes_per_second=2000.0,
+    )
     store.record_resource_sample("run-a", sample)
     store.record_resource_sample(
         "run-a",

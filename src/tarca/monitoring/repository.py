@@ -301,14 +301,10 @@ class MonitoringRepository:
             expected_vram_bytes=round(request.gpu_memory_gib * _GIB),
             actual_vram_bytes=_actual_vram(record, gpu_ids),
             epoch=(
-                _integer(record.progress.get("epoch"), -1)
-                if "epoch" in record.progress
-                else None
+                _integer(record.progress.get("epoch"), -1) if "epoch" in record.progress else None
             ),
             batch=(
-                _integer(record.progress.get("batch"), -1)
-                if "batch" in record.progress
-                else None
+                _integer(record.progress.get("batch"), -1) if "batch" in record.progress else None
             ),
             heartbeat_at_utc=record.heartbeat_at_utc,
             retry_count=max(0, record.attempt_number - 1),
@@ -361,8 +357,7 @@ class MonitoringRepository:
             unknown = tuple(
                 job
                 for job in jobs
-                if job.state in {"RUNNING", "PENDING", "READY"}
-                and job.eta_seconds is None
+                if job.state in {"RUNNING", "PENDING", "READY"} and job.eta_seconds is None
             )
             running_etas = tuple(
                 job.eta_seconds
@@ -410,9 +405,7 @@ class MonitoringRepository:
                 label="主机",
                 kind="HOST",
                 expected_cpu_cores=sum(job.expected_cpu_cores for job in active),
-                actual_effective_busy_cores=_optional_number(
-                    sample.get("effective_busy_cores")
-                ),
+                actual_effective_busy_cores=_optional_number(sample.get("effective_busy_cores")),
                 expected_memory_bytes=sum(job.expected_ram_bytes for job in active),
                 actual_memory_bytes=_optional_integer(sample.get("host_memory_used_bytes")),
                 utilization_percent=_optional_number(sample.get("host_cpu_percent")),
@@ -423,9 +416,7 @@ class MonitoringRepository:
                 telemetry_status=status,
             )
         ]
-        gpu_samples = {
-            _integer(item.get("gpu_id"), -1): item for item in _gpu_samples(sample)
-        }
+        gpu_samples = {_integer(item.get("gpu_id"), -1): item for item in _gpu_samples(sample)}
         gpu_ids = sorted({*gpu_samples, *(gpu_id for job in active for gpu_id in job.gpu_ids)})
         for gpu_id in gpu_ids:
             gpu = gpu_samples.get(gpu_id, {})

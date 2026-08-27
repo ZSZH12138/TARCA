@@ -366,15 +366,10 @@ class ExecutionStateStore:
             raise ValueError("run plan contains duplicate task IDs")
         known_ids = set(task_ids)
         if any(
-            dependency not in known_ids
-            for node in nodes
-            for dependency in node.dependency_task_ids
+            dependency not in known_ids for node in nodes for dependency in node.dependency_task_ids
         ):
             raise ValueError("run plan contains an unknown dependency")
-        dependencies = {
-            node.task_id: node.dependency_task_ids
-            for node in nodes
-        }
+        dependencies = {node.task_id: node.dependency_task_ids for node in nodes}
         visiting: set[str] = set()
         visited: set[str] = set()
 
@@ -1259,9 +1254,7 @@ class ExecutionStateStore:
         return tuple(
             {
                 "alert_id": int(row["alert_id"]),
-                "attempt_id": (
-                    str(row["attempt_id"]) if row["attempt_id"] is not None else None
-                ),
+                "attempt_id": (str(row["attempt_id"]) if row["attempt_id"] is not None else None),
                 "category": str(row["category"]),
                 "message": str(row["message"]),
                 "created_at_utc": _parse_timestamp(str(row["created_at_utc"])),

@@ -35,9 +35,7 @@ class RuntimeSupervisor:
         previous = self._last_sampled_by_run.get(run_id)
         if previous is not None and now - previous < self._policy.sample_interval_seconds:
             return False
-        self._last_sampled_by_run = MappingProxyType(
-            {**self._last_sampled_by_run, run_id: now}
-        )
+        self._last_sampled_by_run = MappingProxyType({**self._last_sampled_by_run, run_id: now})
 
         try:
             run_sample = collect_resource_sample(supervisor_pid, self._probe)

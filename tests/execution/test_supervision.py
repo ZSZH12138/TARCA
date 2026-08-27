@@ -123,4 +123,3 @@ def test_supervisor_deduplicates_probe_failure_alerts(tmp_path: Path) -> None:
     alerts = store.alerts("run-a")
     assert len(alerts) == 1
     assert alerts[0]["category"] == "TELEMETRY_UNAVAILABLE"
-
