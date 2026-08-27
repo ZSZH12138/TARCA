@@ -24,6 +24,15 @@ from tarca.contracts import (
     canonical_json_bytes,
     canonical_json_hash,
 )
+from tarca.execution.resources import ResourceCapacity
+from tarca.execution.scheduler import Scheduler, WorkerBackend
+from tarca.execution.state import ExecutionStateStore
+from tarca.execution.supervision import RuntimeSupervisor
+from tarca.execution.telemetry import (
+    PsutilNvmlTelemetryProbe,
+    TelemetryPolicy,
+    TelemetryProbe,
+)
 from tarca.stage1b.config import (
     NeuralAdapter,
     NeuralModelConfig,
@@ -977,14 +986,28 @@ def _qualification_execution_evidence(
     return evidence
 
 
+def _runtime_scheduler(
+    state: ExecutionStateStore,
+    backend: WorkerBackend,
+    capacity: ResourceCapacity,
+    *,
+    telemetry_probe: TelemetryProbe | None = None,
+) -> Scheduler:
+    probe = telemetry_probe or PsutilNvmlTelemetryProbe()
+    supervisor = RuntimeSupervisor(
+        state,
+        probe,
+        TelemetryPolicy(sample_interval_seconds=2.0),
+    )
+    return Scheduler(state, backend, capacity, supervisor=supervisor)
+
+
 def run_scheduled_qualification(
     repository_root: Path,
     artifact_root: Path,
 ) -> dict[str, Any]:
     """Execute the frozen official Stage1B graph through isolated local workers."""
-    from tarca.execution.resources import ResourceCapacity
-    from tarca.execution.scheduler import LocalMultiProcessBackend, RunTerminalStatus, Scheduler
-    from tarca.execution.state import ExecutionStateStore
+    from tarca.execution.scheduler import LocalMultiProcessBackend, RunTerminalStatus
     from tarca.stage1b.compiler import (
         compile_ready_manifest,
         compile_stage1b_graph,
@@ -1026,7 +1049,7 @@ def run_scheduled_qualification(
     if state.planned_task_count(run_id) != len(graph.nodes):
         raise RuntimeError("persisted Stage1B run plan is incomplete")
     backend = LocalMultiProcessBackend(root)
-    scheduler = Scheduler(state, backend, capacity)
+    scheduler = _runtime_scheduler(state, backend, capacity)
     node_by_id = {node.node_id: node for node in graph.nodes}
     while True:
         completed = state.completed_artifacts(run_id)

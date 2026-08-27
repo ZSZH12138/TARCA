@@ -7,12 +7,20 @@ import pytest
 import yaml
 
 from tarca.contracts import ArtifactRef
-from tarca.execution import ResourceCapacity
+from tarca.execution import (
+    HostTelemetry,
+    ResourceCapacity,
+    ResourceRequest,
+    ScientificIdentity,
+    TaskSpec,
+)
+from tarca.execution.state import ExecutionStateStore
 from tarca.stage1b.compiler import compile_stage1b_graph, repository_v2_inputs
 from tarca.stage1b.runner import (
     QualificationBoundaryError,
     _qualification_execution_evidence,
     _runtime_plan_nodes,
+    _runtime_scheduler,
     run_hardware_probe,
     run_qualification,
     validate_qualification_receipt_boundaries,
@@ -21,6 +29,57 @@ from tarca.stage1b.runner import (
 from .receipt_helpers import passing_receipt
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+class _FormalProbe:
+    def host_snapshot(self, process_id: int) -> HostTelemetry:
+        assert process_id > 0
+        return HostTelemetry(
+            host_cpu_percent=80.0,
+            effective_busy_cores=20.0,
+            process_rss_bytes=512 * 1024**2,
+            process_pss_bytes=384 * 1024**2,
+            process_affinity_cpu_ids=tuple(range(24)),
+            host_memory_used_bytes=96 * 1024**3,
+            disk_read_bytes_per_second=1024.0,
+            disk_write_bytes_per_second=2048.0,
+        )
+
+    def gpu_samples(self) -> tuple[object, ...]:
+        return ()
+
+
+class _FormalBackend:
+    backend_id = "formal-test"
+
+    def launch(self, task: object, database_path: Path) -> object:
+        del task, database_path
+        return object()
+
+    def poll(self) -> tuple[object, ...]:
+        return ()
+
+
+def _formal_task(index: int) -> TaskSpec:
+    return TaskSpec(
+        identity=ScientificIdentity(
+            protocol_id="tarca-v1",
+            experiment_id="stage1b-v2",
+            task_id=f"formal-task-{index}",
+            model_id="itransformer",
+            data_id="world-a",
+            seed=104729 + index,
+        ),
+        phase="NEURAL_TRAIN",
+        inputs=(),
+        output_artifact_type="TEST_ARTIFACT",
+        resource_request=ResourceRequest(
+            cpu_threads=4,
+            gpu_count=1,
+            gpu_memory_gib=20.0,
+            host_memory_gib=16.0,
+        ),
+    )
 
 
 def test_runner_receipt_never_exposes_formal_partition_or_experiment() -> None:
@@ -131,6 +190,34 @@ def test_runtime_plan_contains_all_74_frozen_graph_nodes() -> None:
 
     assert len(nodes) == len(graph.nodes) == 74
     assert tuple(node.task_id for node in nodes) == tuple(node.node_id for node in graph.nodes)
+
+
+def test_formal_runtime_scheduler_samples_and_respects_two_gpu_capacity(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionStateStore(tmp_path / "execution.sqlite3", artifact_verifier=lambda _: True)
+    store.create_run("run-a", "graph-a")
+    for index in range(3):
+        store.enqueue_task("run-a", _formal_task(index), "test.execute")
+    capacity = ResourceCapacity(
+        logical_cpu_count=28,
+        physical_cpu_count=28,
+        available_memory_bytes=224 * 1024**3,
+        gpu_memory_bytes=(24 * 1024**3, 24 * 1024**3),
+        local_storage_available=True,
+        local_storage_free_bytes=500 * 1024**3,
+    )
+    scheduler = _runtime_scheduler(
+        store,
+        _FormalBackend(),
+        capacity,
+        telemetry_probe=_FormalProbe(),
+    )
+
+    launches_per_tick = tuple(len(scheduler.tick("run-a")) for _ in range(3))
+
+    assert launches_per_tick == (2, 0, 0)
+    assert len(store.resource_samples("run-a", attempt_id=None)) == 1
 
 
 def _truth() -> dict[str, bool]:
