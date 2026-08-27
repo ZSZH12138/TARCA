@@ -33,8 +33,26 @@ class HardwareGateDecision:
     infeasible_over_120_hours: bool
 
 
+def effective_cpu_counts() -> tuple[int, int]:
+    """Return CPU counts capped by the current process affinity boundary."""
+    host_logical = psutil.cpu_count(logical=True) or 1
+    host_physical = psutil.cpu_count(logical=False) or host_logical
+    affinity_reader = getattr(os, "sched_getaffinity", None)
+    if affinity_reader is not None:
+        affinity_count = len(affinity_reader(0))
+    else:
+        try:
+            affinity_count = len(psutil.Process().cpu_affinity())
+        except (AttributeError, psutil.AccessDenied, psutil.NoSuchProcess):
+            affinity_count = host_logical
+    effective_logical = max(1, min(host_logical, affinity_count))
+    effective_physical = max(1, min(host_physical, effective_logical))
+    return effective_logical, effective_physical
+
+
 def inventory_hardware() -> HardwareInventory:
     virtual_memory = psutil.virtual_memory()
+    logical_cpu_count, physical_cpu_count = effective_cpu_counts()
     gpu_names: list[str] = []
     gpu_vram: list[int] = []
     if torch.cuda.is_available():
@@ -45,8 +63,8 @@ def inventory_hardware() -> HardwareInventory:
     cpu_model = os.environ.get("PROCESSOR_IDENTIFIER") or platform.processor() or "unknown"
     return HardwareInventory(
         cpu_model=cpu_model,
-        logical_cpu_count=psutil.cpu_count(logical=True) or 1,
-        physical_cpu_count=psutil.cpu_count(logical=False) or 1,
+        logical_cpu_count=logical_cpu_count,
+        physical_cpu_count=physical_cpu_count,
         total_memory_bytes=virtual_memory.total,
         available_memory_bytes=virtual_memory.available,
         gpu_names=tuple(gpu_names),

@@ -1,6 +1,38 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
+import tarca.stage1b.hardware as hardware
 from tarca.stage1b.hardware import estimate_full_run
+
+
+def test_hardware_inventory_honors_container_cpu_affinity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        hardware.os,
+        "sched_getaffinity",
+        lambda _pid: set(range(28)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        hardware.psutil,
+        "cpu_count",
+        lambda *, logical: 128 if logical else 64,
+    )
+    monkeypatch.setattr(
+        hardware.psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=1024 * 1024**3, available=900 * 1024**3),
+    )
+    monkeypatch.setattr(hardware.torch.cuda, "is_available", lambda: False)
+
+    inventory = hardware.inventory_hardware()
+
+    assert inventory.logical_cpu_count == 28
+    assert inventory.physical_cpu_count == 28
 
 
 def test_hardware_gate_blocks_estimate_over_120_hours() -> None:

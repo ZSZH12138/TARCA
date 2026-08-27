@@ -28,6 +28,7 @@ from tarca.stage1b.runner import (  # noqa: E402
     run_scheduled_qualification,
 )
 from tarca.stage1b.server_environment import (  # noqa: E402
+    NOMINAL_24_GB_BYTES,
     ServerEnvironmentExpectation,
     validate_server_environment,
 )
@@ -87,7 +88,7 @@ def _expectation() -> ServerEnvironmentExpectation:
         cuda_version="12.1",
         gpu_count=2,
         gpu_name_substring="RTX 4090",
-        minimum_vram_bytes=24 * 1024**3,
+        minimum_vram_bytes=NOMINAL_24_GB_BYTES,
         minimum_cpu_count=28,
         minimum_ram_bytes=224 * 1024**3,
     )

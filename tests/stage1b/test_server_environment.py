@@ -104,3 +104,35 @@ def test_server_environment_rejects_wrong_gpu_model(
 
     with pytest.raises(RuntimeError, match="GPU model"):
         validate_server_environment(_expectation())
+
+
+def test_runtime_expectation_accepts_driver_reported_rtx4090_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expectation = ServerEnvironmentExpectation(
+        python_minor=(3, 10),
+        torch_version="2.2.2",
+        cuda_version="12.1",
+        gpu_count=2,
+        gpu_name_substring="RTX 4090",
+        minimum_vram_bytes=server_environment.NOMINAL_24_GB_BYTES,
+        minimum_cpu_count=28,
+        minimum_ram_bytes=224 * 1024**3,
+    )
+    facts = ServerEnvironmentFacts(
+        python_version="3.10.20",
+        python_minor=(3, 10),
+        torch_version="2.2.2+cu121",
+        cuda_version="12.1",
+        gpu_names=("NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 4090"),
+        gpu_vram_bytes=(24080 * 1024**2, 24080 * 1024**2),
+        cpu_count=28,
+        ram_bytes=224 * 1024**3,
+    )
+    monkeypatch.setattr(server_environment, "_collect_facts", lambda: facts)
+    monkeypatch.setattr(server_environment, "_probe_cuda_device", lambda _device: True)
+
+    receipt = validate_server_environment(expectation)
+
+    assert server_environment.NOMINAL_24_GB_BYTES == 24_000_000_000
+    assert receipt.gpu_vram_bytes == facts.gpu_vram_bytes

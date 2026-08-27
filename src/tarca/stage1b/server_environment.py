@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import platform
 import sys
 from dataclasses import asdict, dataclass
@@ -10,6 +9,10 @@ from io import BytesIO
 
 import psutil
 import torch
+
+from tarca.stage1b.hardware import effective_cpu_counts
+
+NOMINAL_24_GB_BYTES = 24_000_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +83,7 @@ def _collect_facts() -> ServerEnvironmentFacts:
     gpu_vram_bytes = tuple(
         int(torch.cuda.get_device_properties(index).total_memory) for index in range(gpu_count)
     )
-    physical_cpu_count = psutil.cpu_count(logical=False) or os.cpu_count() or 0
+    _, physical_cpu_count = effective_cpu_counts()
     return ServerEnvironmentFacts(
         python_version=platform.python_version(),
         python_minor=(sys.version_info.major, sys.version_info.minor),
