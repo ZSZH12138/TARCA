@@ -246,6 +246,7 @@ def _apply_precision_policy(artifact_root: Path) -> None:
 
 def launch_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
     _configure_cuda_determinism()
+    os.environ["TARCA_STAGE1B_RESUME_CHECKPOINTS"] = "0"
     database = arguments.artifact_root / "runtime/execution.sqlite3"
     if database.exists():
         raise RuntimeError("execution database already exists; use resume")
@@ -256,6 +257,7 @@ def launch_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
 
 def resume_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
     _configure_cuda_determinism()
+    os.environ["TARCA_STAGE1B_RESUME_CHECKPOINTS"] = "1"
     database = arguments.artifact_root / "runtime/execution.sqlite3"
     if not database.is_file():
         raise RuntimeError("execution database is required before resume")

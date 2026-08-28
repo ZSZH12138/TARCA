@@ -173,6 +173,48 @@ def test_resumed_training_matches_uninterrupted(tmp_path: Path) -> None:
     )
 
 
+def test_resume_if_available_loads_the_matching_checkpoint(tmp_path: Path) -> None:
+    train_x, train_y, tune_x, tune_y = _data()
+    policy = TrainingPolicy(
+        device="cpu",
+        precision="FP32",
+        batch_size=8,
+        max_epochs=3,
+        patience=2,
+        learning_rate=1e-3,
+        dataloader_workers=0,
+        checkpoint_root=tmp_path,
+    )
+    interrupted = train_candidate(
+        _model(dropout=0.1),
+        train_x,
+        train_y,
+        tune_x,
+        tune_y,
+        seed=903,
+        policy=policy,
+        stop_after_epoch=1,
+    )
+    assert interrupted.receipt.completed is False
+    progress = _ProgressRecorder()
+
+    resumed = train_candidate(
+        _model(dropout=0.1),
+        train_x,
+        train_y,
+        tune_x,
+        tune_y,
+        seed=903,
+        policy=policy,
+        progress=progress,
+        resume_if_available=True,
+    )
+
+    assert resumed.receipt.completed is True
+    assert resumed.receipt.epochs_completed >= 2
+    assert progress.values[0].completed_steps == 4
+
+
 def test_resume_rejects_changed_training_data(tmp_path: Path) -> None:
     train_x, train_y, tune_x, tune_y = _data()
     policy = TrainingPolicy(

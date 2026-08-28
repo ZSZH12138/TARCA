@@ -38,6 +38,19 @@ class _Probe:
     def gpu_samples(self) -> tuple[object, ...]:
         return ()
 
+    def monitor_snapshot(self, process_id: int) -> HostTelemetry:
+        assert process_id == 5000
+        return HostTelemetry(
+            host_cpu_percent=64.0,
+            effective_busy_cores=0.25,
+            process_rss_bytes=256 * 1024**2,
+            process_pss_bytes=192 * 1024**2,
+            process_affinity_cpu_ids=tuple(range(24)),
+            host_memory_used_bytes=96 * 1024**3,
+            disk_read_bytes_per_second=0.0,
+            disk_write_bytes_per_second=0.0,
+        )
+
 
 class _FailingProbe:
     def host_snapshot(self, process_id: int) -> HostTelemetry:
@@ -109,6 +122,7 @@ def test_supervisor_records_due_run_and_process_samples(tmp_path: Path) -> None:
     assert supervisor.sample_if_due("run-a", supervisor_pid=5000) is True
     assert len(store.resource_samples("run-a", attempt_id=None)) == 2
     assert len(store.resource_samples("run-a", attempt_id=attempt_id)) == 2
+    assert store.alerts("run-a") == ()
 
 
 def test_supervisor_deduplicates_probe_failure_alerts(tmp_path: Path) -> None:

@@ -465,6 +465,9 @@ def train_neural_job(
         dataloader_workers=workers,
         checkpoint_root=repo_root / "artifacts/stage1b/runtime/checkpoints",
     )
+    resume_flag = os.environ.get("TARCA_STAGE1B_RESUME_CHECKPOINTS", "0")
+    if resume_flag not in {"0", "1"}:
+        raise ValueError("TARCA_STAGE1B_RESUME_CHECKPOINTS must be 0 or 1")
     model = _new_model(model_config, world_config, inputs.qualification)
     result = train_candidate(
         model,
@@ -475,6 +478,7 @@ def train_neural_job(
         seed=_training_seed(world_config.world_id, task.identity.seed, model.adapter_name),
         policy=policy,
         progress=progress,
+        resume_if_available=resume_flag == "1",
     )
     if not result.receipt.completed:
         raise RuntimeError("neural training stopped before a complete checkpoint")

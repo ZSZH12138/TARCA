@@ -254,16 +254,16 @@ class _FakeProcess:
     def __init__(self, *, child: bool = False, affinity_error: bool = False) -> None:
         self.child = child
         self.affinity_error = affinity_error
+        self.cpu_seconds = 1.0
 
     def children(self, recursive: bool) -> tuple[_FakeProcess, ...]:
         assert recursive is True
         return (_FakeProcess(child=True),)
 
-    def cpu_percent(self, interval: None) -> float:
-        assert interval is None
+    def cpu_times(self) -> Any:
         if self.child:
             raise psutil.NoSuchProcess(pid=999)
-        return 250.0
+        return SimpleNamespace(user=self.cpu_seconds, system=0.0)
 
     def memory_info(self) -> Any:
         return SimpleNamespace(rss=2048)
@@ -285,16 +285,14 @@ def test_production_host_snapshot_collects_process_tree_and_disk_rates(
         (
             SimpleNamespace(read_bytes=100, write_bytes=200),
             SimpleNamespace(read_bytes=160, write_bytes=290),
+            SimpleNamespace(read_bytes=220, write_bytes=380),
         )
     )
-    monotonic_values = iter((10.0, 12.0))
+    monotonic_values = iter((10.0, 12.0, 14.0))
     monkeypatch.setattr(telemetry_module.psutil, "disk_io_counters", lambda: next(disk_values))
     monkeypatch.setattr(telemetry_module.importlib, "import_module", lambda _name: None)
-    monkeypatch.setattr(
-        telemetry_module.psutil,
-        "Process",
-        lambda _pid: _FakeProcess(affinity_error=affinity_error),
-    )
+    process = _FakeProcess(affinity_error=affinity_error)
+    monkeypatch.setattr(telemetry_module.psutil, "Process", lambda _pid: process)
     monkeypatch.setattr(telemetry_module.psutil, "cpu_count", lambda logical: 8)
     monkeypatch.setattr(telemetry_module.psutil, "cpu_percent", lambda interval: 25.0)
     monkeypatch.setattr(
@@ -303,11 +301,37 @@ def test_production_host_snapshot_collects_process_tree_and_disk_rates(
     monkeypatch.setattr(telemetry_module.time, "monotonic", lambda: next(monotonic_values))
     probe = PsutilNvmlTelemetryProbe()
 
+    initial = probe.host_snapshot(123)
+    process.cpu_seconds = 6.0
     sample = probe.host_snapshot(123)
 
+    assert initial.effective_busy_cores == 0.0
     assert sample.effective_busy_cores == 2.5
     assert sample.process_rss_bytes == 2048
     assert sample.process_pss_bytes == 1024
     assert sample.process_affinity_cpu_ids == ((tuple(range(8))) if affinity_error else (1, 3))
     assert sample.disk_read_bytes_per_second == 30.0
     assert sample.disk_write_bytes_per_second == 45.0
+
+
+def test_production_monitor_snapshot_excludes_worker_descendants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = _FakeProcess()
+    monkeypatch.setattr(
+        telemetry_module.psutil,
+        "disk_io_counters",
+        lambda: SimpleNamespace(read_bytes=0, write_bytes=0),
+    )
+    monkeypatch.setattr(telemetry_module.importlib, "import_module", lambda _name: None)
+    monkeypatch.setattr(telemetry_module.psutil, "Process", lambda _pid: process)
+    monkeypatch.setattr(telemetry_module.psutil, "cpu_percent", lambda interval: 0.0)
+    monkeypatch.setattr(
+        telemetry_module.psutil, "virtual_memory", lambda: SimpleNamespace(used=8192)
+    )
+    monkeypatch.setattr(telemetry_module.time, "monotonic", lambda: 10.0)
+    probe = PsutilNvmlTelemetryProbe()
+
+    snapshot = probe.monitor_snapshot(123)
+
+    assert snapshot.process_rss_bytes == 2048

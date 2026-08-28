@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -16,7 +17,7 @@ from tarca.contracts import canonical_json_hash
 from tarca.execution.contracts import ExecutionContext, PlannedTask
 from tarca.execution.registry import ExecutorRegistry
 from tarca.execution.resources import HostAdmissionPolicy, ResourceCapacity, plan_resources
-from tarca.execution.state import AttemptState, ExecutionStateStore, QueuedTask
+from tarca.execution.state import AttemptState, ExecutionStateStore, ProcessIdentity, QueuedTask
 from tarca.execution.supervision import RuntimeSupervisor
 from tarca.execution.worker import run_worker
 
@@ -37,6 +38,38 @@ class ProcessLike(Protocol):
 class WorkerHandle:
     attempt_id: str
     process: ProcessLike | None
+
+
+class PsutilProcessProbe:
+    """Read a worker's persisted identity from its immutable argv and start time."""
+
+    def __init__(self, process_factory: Callable[[int], Any] = psutil.Process) -> None:
+        self._process_factory = process_factory
+
+    @staticmethod
+    def _argument(arguments: tuple[str, ...], name: str) -> str | None:
+        for index, value in enumerate(arguments):
+            if value == name and index + 1 < len(arguments):
+                return arguments[index + 1]
+            prefix = f"{name}="
+            if value.startswith(prefix):
+                return value.removeprefix(prefix)
+        return None
+
+    def inspect(self, pid: int) -> ProcessIdentity | None:
+        if pid <= 0:
+            return None
+        try:
+            process = self._process_factory(pid)
+            arguments = tuple(str(value) for value in process.cmdline())
+            run_id = self._argument(arguments, "--run-id")
+            task_id = self._argument(arguments, "--task-id")
+            if run_id is None or task_id is None:
+                return None
+            started = datetime.fromtimestamp(float(process.create_time()), UTC)
+            return ProcessIdentity(pid, started, run_id, task_id)
+        except (psutil.Error, OSError, ValueError):
+            return None
 
 
 @dataclass(frozen=True, slots=True)

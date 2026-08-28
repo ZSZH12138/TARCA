@@ -156,7 +156,7 @@ def collect_resource_sample(
 
 
 def monitor_overhead_alerts(
-    sample: ResourceSample,
+    sample: ResourceSample | HostTelemetry,
     policy: TelemetryPolicy | None = None,
 ) -> tuple[str, ...]:
     resolved = policy or TelemetryPolicy()
@@ -176,6 +176,7 @@ class PsutilNvmlTelemetryProbe:
         self._last_disk_read = int(disk.read_bytes) if disk is not None else 0
         self._last_disk_write = int(disk.write_bytes) if disk is not None else 0
         self._last_disk_time = time.monotonic()
+        self._last_process_cpu: dict[tuple[int, bool], tuple[float, float]] = {}
         self._pynvml: Any | None = None
         try:
             module = importlib.import_module("pynvml")
@@ -185,20 +186,27 @@ class PsutilNvmlTelemetryProbe:
             self._pynvml = None
 
     @staticmethod
-    def _process_tree(process_id: int) -> tuple[Any, ...]:
+    def _process_tree(process_id: int, *, include_descendants: bool) -> tuple[Any, ...]:
         root = psutil.Process(process_id)
-        children = tuple(root.children(recursive=True))
+        children = tuple(root.children(recursive=True)) if include_descendants else ()
         return (root, *children)
 
-    def host_snapshot(self, process_id: int) -> HostTelemetry:
-        processes = self._process_tree(process_id)
-        cpu_percent = 0.0
+    def _host_snapshot(
+        self,
+        process_id: int,
+        *,
+        include_descendants: bool,
+        track_disk: bool,
+    ) -> HostTelemetry:
+        processes = self._process_tree(process_id, include_descendants=include_descendants)
+        cpu_seconds = 0.0
         rss = 0
         pss_total = 0
         has_pss = True
         for process in processes:
             try:
-                cpu_percent += float(process.cpu_percent(interval=None))
+                cpu_times = process.cpu_times()
+                cpu_seconds += float(cpu_times.user) + float(cpu_times.system)
                 rss += int(process.memory_info().rss)
                 full = process.memory_full_info()
                 pss = getattr(full, "pss", None)
@@ -212,20 +220,34 @@ class PsutilNvmlTelemetryProbe:
             affinity = tuple(sorted(int(cpu) for cpu in processes[0].cpu_affinity()))
         except (AttributeError, psutil.AccessDenied, psutil.NoSuchProcess):
             affinity = tuple(range(psutil.cpu_count(logical=True) or 1))
-        disk = psutil.disk_io_counters()
         now = time.monotonic()
-        elapsed = max(now - self._last_disk_time, 1e-9)
-        current_read = int(disk.read_bytes) if disk is not None else self._last_disk_read
-        current_write = int(disk.write_bytes) if disk is not None else self._last_disk_write
-        read_rate = max(0.0, (current_read - self._last_disk_read) / elapsed)
-        write_rate = max(0.0, (current_write - self._last_disk_write) / elapsed)
-        self._last_disk_read = current_read
-        self._last_disk_write = current_write
-        self._last_disk_time = now
+        cpu_key = (process_id, include_descendants)
+        previous_cpu = self._last_process_cpu.get(cpu_key)
+        busy_cores = (
+            0.0
+            if previous_cpu is None
+            else max(0.0, (cpu_seconds - previous_cpu[1]) / max(now - previous_cpu[0], 1e-9))
+        )
+        self._last_process_cpu = {
+            **self._last_process_cpu,
+            cpu_key: (now, cpu_seconds),
+        }
+        read_rate = 0.0
+        write_rate = 0.0
+        if track_disk:
+            disk = psutil.disk_io_counters()
+            elapsed = max(now - self._last_disk_time, 1e-9)
+            current_read = int(disk.read_bytes) if disk is not None else self._last_disk_read
+            current_write = int(disk.write_bytes) if disk is not None else self._last_disk_write
+            read_rate = max(0.0, (current_read - self._last_disk_read) / elapsed)
+            write_rate = max(0.0, (current_write - self._last_disk_write) / elapsed)
+            self._last_disk_read = current_read
+            self._last_disk_write = current_write
+            self._last_disk_time = now
         memory = psutil.virtual_memory()
         return HostTelemetry(
             host_cpu_percent=float(psutil.cpu_percent(interval=None)),
-            effective_busy_cores=cpu_percent / 100.0,
+            effective_busy_cores=busy_cores,
             process_rss_bytes=rss,
             process_pss_bytes=pss_total if has_pss else None,
             process_affinity_cpu_ids=affinity,
@@ -233,6 +255,12 @@ class PsutilNvmlTelemetryProbe:
             disk_read_bytes_per_second=read_rate,
             disk_write_bytes_per_second=write_rate,
         )
+
+    def host_snapshot(self, process_id: int) -> HostTelemetry:
+        return self._host_snapshot(process_id, include_descendants=True, track_disk=True)
+
+    def monitor_snapshot(self, process_id: int) -> HostTelemetry:
+        return self._host_snapshot(process_id, include_descendants=False, track_disk=False)
 
     def gpu_samples(self) -> tuple[GpuSample, ...]:
         module = self._pynvml

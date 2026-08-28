@@ -44,7 +44,9 @@ class RuntimeSupervisor:
             self._record_unavailable(run_id, error)
             return False
 
-        for category in monitor_overhead_alerts(run_sample, self._policy):
+        monitor_reader = getattr(self._probe, "monitor_snapshot", None)
+        monitor_sample = monitor_reader(supervisor_pid) if callable(monitor_reader) else run_sample
+        for category in monitor_overhead_alerts(monitor_sample, self._policy):
             self._store.add_alert_once(
                 run_id,
                 category,

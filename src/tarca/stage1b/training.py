@@ -369,6 +369,7 @@ def train_candidate(
     policy: TrainingPolicy | None = None,
     progress: ProgressSink | None = None,
     resume_from: Path | None = None,
+    resume_if_available: bool = False,
     stop_after_epoch: int | None = None,
     batch_size: int | None = None,
     max_epochs: int | None = None,
@@ -389,6 +390,10 @@ def train_candidate(
     )
     if type(seed) is not int or seed < 0:
         raise ValueError("training seed must be a non-negative integer")
+    if type(resume_if_available) is not bool:
+        raise ValueError("resume_if_available must be boolean")
+    if resume_from is not None and resume_if_available:
+        raise ValueError("explicit and automatic checkpoint resume are mutually exclusive")
     if stop_after_epoch is not None and not 1 <= stop_after_epoch <= resolved_policy.max_epochs:
         raise ValueError("stop_after_epoch must be within the training budget")
     device = torch.device(resolved_policy.device)
@@ -397,7 +402,9 @@ def train_candidate(
         raise RuntimeError("requested CUDA training but CUDA is unavailable")
     if resolved_policy.precision == "AMP_FP16" and not use_cuda:
         raise ValueError("AMP_FP16 requires CUDA")
-    if not explicit_policy and (resume_from is not None or stop_after_epoch is not None):
+    if not explicit_policy and (
+        resume_from is not None or resume_if_available or stop_after_epoch is not None
+    ):
         raise ValueError("checkpoint and interruption controls require an explicit policy")
 
     previous_determinism = torch.are_deterministic_algorithms_enabled()
@@ -431,6 +438,9 @@ def train_candidate(
             }
         )
         checkpoint = _checkpoint_path(resolved_policy, task_sha256) if explicit_policy else None
+        resolved_resume = resume_from
+        if resume_if_available and checkpoint is not None and checkpoint.is_file():
+            resolved_resume = checkpoint
         model.to(device)
         for parameter in model.parameters():
             parameter.requires_grad_(True)
@@ -463,8 +473,8 @@ def train_candidate(
         stale_epochs = 0
         epochs_completed = 0
         start_epoch = 0
-        if resume_from is not None:
-            resume_path = _resolve_resume_path(resume_from, resolved_policy.checkpoint_root)
+        if resolved_resume is not None:
+            resume_path = _resolve_resume_path(resolved_resume, resolved_policy.checkpoint_root)
             payload = _load_checkpoint(resume_path)
             start_epoch, best_loss, best_epoch, best_state, stale_epochs = _restore_checkpoint(
                 payload,

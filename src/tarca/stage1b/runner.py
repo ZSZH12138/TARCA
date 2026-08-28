@@ -26,7 +26,7 @@ from tarca.contracts import (
     canonical_json_hash,
 )
 from tarca.execution.resources import ResourceCapacity
-from tarca.execution.scheduler import Scheduler, WorkerBackend
+from tarca.execution.scheduler import PsutilProcessProbe, Scheduler, WorkerBackend
 from tarca.execution.state import ExecutionStateStore
 from tarca.execution.supervision import RuntimeSupervisor
 from tarca.execution.telemetry import (
@@ -1180,6 +1180,7 @@ def run_scheduled_qualification(
     state.create_run(run_id, graph.graph_id)
     plan_nodes = _runtime_plan_nodes(graph)
     state.register_run_plan(run_id, plan_nodes)
+    state.reconcile_processes(PsutilProcessProbe())
     if state.planned_task_count(run_id) != len(graph.nodes):
         raise RuntimeError("persisted Stage1B run plan is incomplete")
     backend = LocalMultiProcessBackend(root)

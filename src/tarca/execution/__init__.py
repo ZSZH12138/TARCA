@@ -38,6 +38,7 @@ from .resources import (
 )
 from .scheduler import (
     LocalMultiProcessBackend,
+    PsutilProcessProbe,
     RunTerminalStatus,
     Scheduler,
     SchedulerLaunch,
@@ -99,6 +100,7 @@ __all__ = [
     "ProcessProbe",
     "ProgressSink",
     "PsutilNvmlTelemetryProbe",
+    "PsutilProcessProbe",
     "QueuedTask",
     "ReconciliationResult",
     "RemainingTask",

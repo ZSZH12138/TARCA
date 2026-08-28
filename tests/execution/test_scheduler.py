@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from tarca.execution.registry import ExecutorRegistry
 from tarca.execution.resources import ResourceCapacity
 from tarca.execution.scheduler import (
     LocalMultiProcessBackend,
+    PsutilProcessProbe,
     RunTerminalStatus,
     Scheduler,
     SynchronousTestBackend,
@@ -232,6 +234,33 @@ def test_local_backend_launches_tuple_without_shell_and_sets_resource_environmen
     assert environment["OMP_NUM_THREADS"] == "2"
     assert environment["MKL_NUM_THREADS"] == "2"
     assert environment["TARCA_CPU_AFFINITY"]
+
+
+def test_psutil_process_probe_reads_worker_identity_from_argv() -> None:
+    started = datetime(2026, 8, 28, 1, 2, 3, tzinfo=UTC)
+
+    class Process:
+        def cmdline(self) -> list[str]:
+            return [
+                "python",
+                "-m",
+                "tarca.execution.worker_entry",
+                "--run-id",
+                "run-a",
+                "--task-id",
+                "task-a",
+            ]
+
+        def create_time(self) -> float:
+            return started.timestamp()
+
+    identity = PsutilProcessProbe(process_factory=lambda _pid: Process()).inspect(321)
+
+    assert identity is not None
+    assert identity.pid == 321
+    assert identity.run_id == "run-a"
+    assert identity.task_id == "task-a"
+    assert identity.process_started_at_utc == started
 
 
 def test_synchronous_backend_reaches_terminal_completion(tmp_path: Path) -> None:
