@@ -15,7 +15,7 @@ from tarca.artifacts.store import LocalArtifactStore
 from tarca.contracts import ArtifactRef, canonical_json_bytes, canonical_json_hash
 from tarca.execution.contracts import ExecutionContext, TaskSpec
 from tarca.execution.registry import ExecutorRegistry, ProgressSink
-from tarca.stage1b.compiler import repository_v2_inputs
+from tarca.stage1b.compiler import repository_v2_inputs, target_primary_worlds
 from tarca.stage1b.config import (
     QualificationPartition,
     RegimeSplitRole,
@@ -66,8 +66,24 @@ from tarca.stage1b.sources import (
 from tarca.stage1b.training import TrainingPolicy, train_candidate
 from tarca.stage1b.worlds import build_world
 
-_STORE_ROOT = "artifacts/stage1b/runtime/store"
 _SCHEMA_VERSION = "2.0.0"
+
+
+def _artifact_root(repo_root: Path) -> Path:
+    raw = os.environ.get("TARCA_STAGE1B_ARTIFACT_ROOT", "").strip()
+    root = (repo_root / raw if raw else repo_root / "artifacts/stage1b").resolve()
+    try:
+        root.relative_to(repo_root.resolve())
+    except ValueError as error:
+        raise ValueError("Stage1B artifact root must stay inside the repository") from error
+    return root
+
+
+def _qualification_config_path(repo_root: Path) -> Path:
+    raw = os.environ.get(
+        "TARCA_STAGE1B_QUALIFICATION_CONFIG", "configs/stage1b/qualification_v2.yaml"
+    )
+    return (repo_root / raw).resolve()
 
 
 def _source_cache_root(repo_root: Path) -> Path:
@@ -94,13 +110,14 @@ def stage1b_artifact_store(
     task: TaskSpec | None = None,
 ) -> LocalArtifactStore:
     identity_hash = "0" * 64 if task is None else canonical_json_hash(task.identity)
+    store_root = (_artifact_root(repo_root) / "runtime/store").relative_to(repo_root.resolve())
     return LocalArtifactStore(
         repo_root,
         producer_stage="stage1b",
         producer_task_id="verifier" if task is None else task.task_id,
         scientific_identity_hash=identity_hash,
         dependencies=() if task is None else task.inputs,
-        store_relative_root=_STORE_ROOT,
+        store_relative_root=store_root.as_posix(),
     )
 
 
@@ -479,7 +496,7 @@ def train_neural_job(
         patience=model_config.patience,
         learning_rate=model_config.learning_rate,
         dataloader_workers=workers,
-        checkpoint_root=repo_root / "artifacts/stage1b/runtime/checkpoints",
+        checkpoint_root=_artifact_root(repo_root) / "runtime/checkpoints",
     )
     resume_flag = os.environ.get("TARCA_STAGE1B_RESUME_CHECKPOINTS", "0")
     if resume_flag not in {"0", "1"}:
@@ -616,8 +633,18 @@ def aggregate_qualification_job(
         for ref in task.inputs
         if ref.artifact_type == "QUALIFICATION_COMPARISON"
     )
+    primary_worlds = target_primary_worlds(inputs)
+    worlds = (
+        primary_worlds
+        if inputs.qualification.target_world_ids
+        else tuple(
+            world
+            for world in inputs.world_suite.worlds
+            if world.role is not WorldRole.REFERENCE_ONLY
+        )
+    )
     expected_scores = (
-        sum(world.role is WorldRole.PRIMARY_MECHANISTIC for world in inputs.world_suite.worlds)
+        len(primary_worlds)
         * len(inputs.qualification.qualification_seeds)
         * len(inputs.qualification.models)
     )
@@ -626,9 +653,7 @@ def aggregate_qualification_job(
     decisions = []
     all_comparisons: list[TrajectoryComparison] = []
     training_receipts: list[dict[str, Any]] = []
-    for world in inputs.world_suite.worlds:
-        if world.role is WorldRole.REFERENCE_ONLY:
-            continue
+    for world in worlds:
         health_payload = health.get(world.world_id)
         if health_payload is None:
             raise RuntimeError(f"world health evidence is missing: {world.world_id}")
@@ -677,6 +702,9 @@ def aggregate_qualification_job(
                 minimum_win_rate=gate.minimum_win_rate,
                 minimum_skill_score=gate.minimum_skill_score,
                 require_seen_and_unseen_majority=gate.require_seen_and_unseen_majority,
+                primary_horizon_group=gate.primary_horizon_group,
+                calibration_guardrail_mode=gate.calibration_guardrail_mode,
+                maximum_absolute_calibration_error=gate.maximum_absolute_calibration_error,
             )
         )
     suite_decision = evaluate_suite_gate(
@@ -710,11 +738,11 @@ def publish_qualification_receipt_job(
     )
     if not reproductions or any(not item.passed for item in reproductions):
         raise RuntimeError("official reproduction suite is incomplete")
-    runtime_root = repo_root / "artifacts/stage1b/runtime"
+    runtime_root = _artifact_root(repo_root) / "runtime"
     _, hardware_hash = _load_hardware_receipt(
         runtime_root,
         repo_root / "configs/stage1b/worlds_v2.yaml",
-        repo_root / "configs/stage1b/qualification_v2.yaml",
+        _qualification_config_path(repo_root),
         inputs.world_suite.source_manifest_sha256(),
     )
     execution_evidence_path = runtime_root / "qualification_execution_evidence_v2.json"
@@ -742,7 +770,7 @@ def publish_qualification_receipt_job(
         "source_evidence_verified": True,
         "world_config_sha256": _file_sha256(repo_root / "configs/stage1b/worlds_v2.yaml"),
         "qualification_config_sha256": _file_sha256(
-            repo_root / "configs/stage1b/qualification_v2.yaml"
+            _qualification_config_path(repo_root)
         ),
         "hardware_receipt_sha256": hardware_hash,
         "qualification_evidence": qualification_evidence,
@@ -754,7 +782,7 @@ def publish_qualification_receipt_job(
     }
     validate_qualification_receipt_boundaries(receipt)
     artifact = _publish_json(repo_root, task, receipt)
-    _write_json(repo_root / "artifacts/stage1b/qualification_v2_summary.json", receipt)
+    _write_json(_artifact_root(repo_root) / inputs.qualification.summary_filename, receipt)
     return artifact
 
 

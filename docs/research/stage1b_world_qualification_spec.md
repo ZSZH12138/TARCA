@@ -1,17 +1,17 @@
 # Stage1B 世界资格规范 v2
 
-> 状态：`BUILT_NOT_QUALIFIED`
+> 状态：`PILOT_FAILED_CONFIRMATION_PENDING`
 > 构建日期：2026-08-25
 > 协议身份：`TARCA-E2E-STAGE-PROTOCOL-2.0`
-> 边界：v2 已构建，但未执行完整资格、E01 或 E02，也未冻结。
+> 边界：v2 首次完整资格已完成并作为 pilot 失败证据保留；v2-r2 双尺度短期确认尚未执行，E01/E02 未执行，未冻结。
 
 ```text
-Implementation status: BUILT_NOT_QUALIFIED
+Implementation status: PILOT_FAILED_CONFIRMATION_PENDING
 Active scientific series: v2
 Freeze default: immutable after qualification
 Authorized override: next immutable v2 revision + active pointer
-Executed: unit/integration/E2E/bounded probes only
-Not executed: full Stage1B qualification, E01, E02
+Executed: full Stage1B pilot qualification (74/74 tasks), unit/integration/E2E/probes
+Not executed: v2-r2 blind confirmation, E01, E02
 ```
 
 ## 1. 功能目标
@@ -155,6 +155,23 @@ seed、regime 和配置哈希。
 
 ## 7. v2 资格判定
 
+### 7.1 首次完整运行结果
+
+首次 74/74 任务运行是探索性筛选：套件总门禁失败。双尺度世界的 iTransformer 总体胜率
+为 98.6111%、CRPS skill 为 +4.067%；h1–6 为 72/72 胜、skill +13.2423%，h7–12
+为 64/72 胜、skill +2.0937%，h13–24 为 19/72 胜、skill -1.0055%。原相对校准
+护栏仍使该世界失败。单尺度世界未表现出跨时距优势。完整运行被保留，但不能直接作为确认
+结论或活动冻结版本。
+
+### 7.2 v2-r2 盲确认
+
+依据 `docs/auth/TARCA_PROTOCOL_CHANGE_CONTROL_CCP_0002.md`，确认只运行
+`lorenz96_twoscale_v2 + ITransformerReference + tuned VAR`。h1–6 是主要门禁；h7–12
+只报告次要趋势；h13–24 只报告已知能力边界。新种子为 `1649910005`、`2058661680`、
+`723243092`，必须重新生成轨迹、训练和预测。校准护栏为名义 90% 区间平均绝对覆盖误差
+不超过 0.05。其余既有比较单元、CRPS、种子、seen/unseen、NLL、MAE、最坏状态、尺度和
+可操作性门槛保持不变。
+
 每个主世界分别从未见资格轨迹形成完整轨迹比较单元。一个神经候选通过需要：
 
 - 至少 40 个比较单元；
@@ -181,7 +198,8 @@ BUILT_NOT_QUALIFIED
 → FROZEN v2
 ```
 
-当前只完成第一步。不得把通过单元测试或短健康探针写成“神经模型已胜过 VAR”。
+当前首次完整运行已失败并保存，v2-r2 盲确认尚未执行。不得把 pilot 的短期结果或通过单元
+测试写成确认通过。
 
 完整资格通过后，首次冻结写入 `versions/v2/revisions/r1/`。正常情况下，修订目录和其中
 的完整资格收据不可修改。用户可以授权修改或覆盖，但必须在同一个 v2 科学系列中创建下一
@@ -197,6 +215,9 @@ BUILT_NOT_QUALIFIED
 
 - 世界配置：`configs/stage1b/worlds_v2.yaml`
 - 资格配置：`configs/stage1b/qualification_v2.yaml`
+- v2-r2 确认配置：`configs/stage1b/qualification_v2_confirmation_r2.yaml`
+- v2-r2 确认设计：`docs/superpowers/specs/2026-08-29-stage1b-v2-confirmation-design.md`
+- v2-r2 实施计划：`docs/superpowers/plans/2026-08-29-stage1b-v2-confirmation.md`
 - 来源清单：`third_party_manifest/stage1b_sources_v2.yaml`
 - 构建设计：`docs/superpowers/specs/2026-08-25-stage1b-v2-design.md`
 - 实施计划：`docs/superpowers/plans/2026-08-25-stage1b-v2-implementation.md`

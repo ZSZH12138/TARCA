@@ -12,7 +12,9 @@ services:
     environment:
       TARCA_STAGE1B_SOURCE_CACHE_ROOT: /opt/tarca/official_sources
       TARCA_STAGE1B_SOURCE_MODE: offline-capsule
-      TARCA_STAGE1B_DATABASE: /opt/tarca/artifacts/stage1b/runtime/execution.sqlite3
+      TARCA_STAGE1B_ARTIFACT_ROOT: /opt/tarca/artifacts/stage1b/confirmation-r2
+      TARCA_STAGE1B_QUALIFICATION_CONFIG: /opt/tarca/configs/stage1b/qualification_v2_confirmation_r2.yaml
+      TARCA_STAGE1B_DATABASE: /opt/tarca/artifacts/stage1b/confirmation-r2/runtime/execution.sqlite3
       TARCA_STAGE1B_STATIC_ROOT: /opt/tarca/frontend/stage1b-monitor/dist
       TARCA_STAGE1B_DEVICE: cuda
       TARCA_STAGE1B_DATALOADER_WORKERS: "3"
@@ -31,7 +33,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 2
+              count: all
               capabilities: [gpu]
 
   stage1b-source-import:

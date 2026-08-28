@@ -462,7 +462,11 @@ def _full_work_units(suite: WorldSuiteConfig, qualification: QualificationConfig
     )
     train_windows = qualification.trajectories_per_partition.qual_train * windows_per_trajectory
     tune_windows = qualification.trajectories_per_partition.qual_tune * windows_per_trajectory
-    primary_count = sum(world.role is WorldRole.PRIMARY_MECHANISTIC for world in suite.worlds)
+    primary_count = (
+        len(qualification.target_world_ids)
+        if qualification.target_world_ids
+        else sum(world.role is WorldRole.PRIMARY_MECHANISTIC for world in suite.worlds)
+    )
     units_per_world_seed = sum(
         model.max_epochs
         * (math.ceil(train_windows / model.batch_size) + math.ceil(tune_windows / model.batch_size))
@@ -492,8 +496,12 @@ def run_hardware_probe(
     suite = load_world_suite(worlds_path)
     qualification = load_qualification_config(qualification_path)
     inventory = inventory_hardware()
-    primary_worlds = tuple(
-        world for world in suite.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
+    primary_worlds = (
+        tuple(suite.world(world_id) for world_id in qualification.target_world_ids)
+        if qualification.target_world_ids
+        else tuple(
+            world for world in suite.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
+        )
     )
     resolved_device = device or ("cuda" if inventory.gpu_vram_bytes else "cpu")
     resolved_workers = (
@@ -701,18 +709,19 @@ def run_hardware_probe(
         "inventory": _jsonable(inventory),
         "decision": _jsonable(decision),
         "minimum_server": {
-            "cpu_cores": 16,
-            "ram_gib": 32,
-            "gpu": "NVIDIA GPU with at least 12 GiB VRAM",
-            "storage_gib": 40,
+            "physical_cpu_cores": 20,
+            "ram_gib": 128,
+            "gpu": "at least one CUDA GPU with 20 GiB usable VRAM",
+            "storage_gib": 100,
             "target_runtime_hours": "at most 120",
         },
         "recommended_server": {
-            "cpu_cores": 32,
-            "ram_gib": 64,
-            "gpu": "NVIDIA RTX 4090, RTX A5000, or newer with 24 GiB VRAM",
-            "storage_gib": 80,
-            "target_runtime_hours": "24 to 72; verify with a server-side probe",
+            "policy": "use every safely admitted device from this receipt",
+            "physical_cpu_cores": inventory.physical_cpu_count,
+            "ram_gib": inventory.available_memory_bytes // 1024**3,
+            "gpu_count": len(inventory.gpu_vram_bytes),
+            "gpu_vram_gib": [value / 1024**3 for value in inventory.gpu_vram_bytes],
+            "estimated_hours": decision.estimated_hours,
         },
     }
     _write_json(runtime_root.resolve() / "hardware_probe_v2.json", receipt)
@@ -760,7 +769,12 @@ def run_qualification(
     training_receipts: list[dict[str, Any]] = []
     world_decisions: list[WorldGateDecision] = []
     all_comparisons: list[TrajectoryComparison] = []
-    for world_config in suite.worlds:
+    selected_worlds = (
+        tuple(suite.world(world_id) for world_id in qualification.target_world_ids)
+        if qualification.target_world_ids
+        else suite.worlds
+    )
+    for world_config in selected_worlds:
         world = build_world(world_config)
         source = suite.source(world_config.source_id)
         candidate_configs = (
@@ -917,6 +931,11 @@ def run_qualification(
             minimum_win_rate=qualification.gate.minimum_win_rate,
             minimum_skill_score=qualification.gate.minimum_skill_score,
             require_seen_and_unseen_majority=(qualification.gate.require_seen_and_unseen_majority),
+            primary_horizon_group=qualification.gate.primary_horizon_group,
+            calibration_guardrail_mode=qualification.gate.calibration_guardrail_mode,
+            maximum_absolute_calibration_error=(
+                qualification.gate.maximum_absolute_calibration_error
+            ),
         )
         world_decisions.append(decision)
         all_comparisons.extend(comparisons)
@@ -946,7 +965,7 @@ def run_qualification(
         "failure_ledger": failure_ledger,
     }
     validate_qualification_receipt_boundaries(receipt)
-    _write_json(artifact_root.resolve() / "qualification_v2_summary.json", receipt)
+    _write_json(artifact_root.resolve() / qualification.summary_filename, receipt)
     return receipt
 
 
@@ -1160,6 +1179,7 @@ def _enqueue_ready_tasks(
 def run_scheduled_qualification(
     repository_root: Path,
     artifact_root: Path,
+    qualification_config: Path | None = None,
 ) -> dict[str, Any]:
     """Execute the frozen official Stage1B graph through isolated local workers."""
     from tarca.execution.scheduler import LocalMultiProcessBackend, RunTerminalStatus
@@ -1172,8 +1192,14 @@ def run_scheduled_qualification(
     root = repository_root.resolve()
     resolved_artifact_root = artifact_root.resolve()
     worlds_path = root / "configs/stage1b/worlds_v2.yaml"
-    qualification_path = root / "configs/stage1b/qualification_v2.yaml"
-    inputs = repository_v2_inputs(root)
+    qualification_path = (
+        qualification_config or root / "configs/stage1b/qualification_v2.yaml"
+    ).resolve()
+    artifact_relative = resolved_artifact_root.relative_to(root)
+    qualification_relative = qualification_path.relative_to(root)
+    os.environ["TARCA_STAGE1B_ARTIFACT_ROOT"] = artifact_relative.as_posix()
+    os.environ["TARCA_STAGE1B_QUALIFICATION_CONFIG"] = qualification_relative.as_posix()
+    inputs = repository_v2_inputs(root, qualification_path)
     _load_hardware_receipt(
         resolved_artifact_root / "runtime",
         worlds_path,
@@ -1181,8 +1207,6 @@ def run_scheduled_qualification(
         inputs.world_suite.source_manifest_sha256(),
     )
     inventory = inventory_hardware()
-    if len(inventory.gpu_vram_bytes) < 2:
-        raise RuntimeError("scheduled Stage1B qualification requires the authorized two-GPU host")
     disk = shutil.disk_usage(resolved_artifact_root.parent)
     capacity = ResourceCapacity(
         logical_cpu_count=inventory.logical_cpu_count,

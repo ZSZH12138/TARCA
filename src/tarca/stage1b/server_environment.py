@@ -20,8 +20,8 @@ class ServerEnvironmentExpectation:
     python_minor: tuple[int, int]
     torch_version: str
     cuda_version: str
-    gpu_count: int
-    gpu_name_substring: str
+    minimum_gpu_count: int
+    gpu_name_substring: str | None
     minimum_vram_bytes: int
     minimum_cpu_count: int
     minimum_ram_bytes: int
@@ -29,11 +29,11 @@ class ServerEnvironmentExpectation:
     def __post_init__(self) -> None:
         if len(self.python_minor) != 2 or any(item < 0 for item in self.python_minor):
             raise ValueError("python_minor must contain two nonnegative components")
-        if not self.torch_version or not self.cuda_version or not self.gpu_name_substring:
-            raise ValueError("runtime version and GPU expectations must be nonblank")
+        if not self.torch_version or not self.cuda_version:
+            raise ValueError("runtime version expectations must be nonblank")
         if (
             min(
-                self.gpu_count,
+                self.minimum_gpu_count,
                 self.minimum_vram_bytes,
                 self.minimum_cpu_count,
                 self.minimum_ram_bytes,
@@ -138,11 +138,14 @@ def _validate_facts(
         raise RuntimeError(
             f"CUDA version mismatch: expected {expectation.cuda_version}, got {facts.cuda_version}"
         )
-    if len(facts.gpu_names) != expectation.gpu_count:
+    if len(facts.gpu_names) < expectation.minimum_gpu_count:
         raise RuntimeError(
-            f"GPU count mismatch: expected {expectation.gpu_count}, got {len(facts.gpu_names)}"
+            f"GPU count mismatch: expected at least {expectation.minimum_gpu_count}, "
+            f"got {len(facts.gpu_names)}"
         )
-    if any(expectation.gpu_name_substring not in name for name in facts.gpu_names):
+    if expectation.gpu_name_substring is not None and any(
+        expectation.gpu_name_substring not in name for name in facts.gpu_names
+    ):
         raise RuntimeError(
             f"GPU model mismatch: expected all devices to contain "
             f"{expectation.gpu_name_substring!r}"
@@ -167,7 +170,7 @@ def validate_server_environment(
     facts = _collect_facts()
     _validate_facts(expectation, facts)
     cuda_probe_passed = all(
-        _probe_cuda_device(device_index) for device_index in range(expectation.gpu_count)
+        _probe_cuda_device(device_index) for device_index in range(len(facts.gpu_names))
     )
     if not cuda_probe_passed:
         raise RuntimeError("one or more CUDA device probes failed")

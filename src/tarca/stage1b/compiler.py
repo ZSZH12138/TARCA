@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from tarca.contracts import (
     PROTOCOL_ID,
@@ -109,12 +111,24 @@ def _paths_sha256(root: Path, paths: tuple[Path, ...]) -> str:
     return digest.hexdigest()
 
 
-def repository_v2_inputs(repository_root: Path | None = None) -> Stage1BCompilationInputs:
+def repository_v2_inputs(
+    repository_root: Path | None = None,
+    qualification_path: Path | None = None,
+) -> Stage1BCompilationInputs:
     root = (repository_root or _repository_root()).resolve()
     world_path = root / "configs/stage1b/worlds_v2.yaml"
-    qualification_path = root / "configs/stage1b/qualification_v2.yaml"
+    environment_path = os.environ.get("TARCA_STAGE1B_QUALIFICATION_CONFIG", "").strip()
+    resolved_qualification_path = (
+        qualification_path
+        or (root / environment_path if environment_path else None)
+        or root / "configs/stage1b/qualification_v2.yaml"
+    ).resolve()
+    try:
+        resolved_qualification_path.relative_to(root / "configs/stage1b")
+    except ValueError as error:
+        raise ValueError("qualification config must stay inside configs/stage1b") from error
     reproduction_path = root / "configs/stage1b/official_reproduction_v2.yaml"
-    config_paths = (world_path, qualification_path, reproduction_path)
+    config_paths = (world_path, resolved_qualification_path, reproduction_path)
     scientific_roots = (
         root / "src/tarca/artifacts",
         root / "src/tarca/contracts",
@@ -126,11 +140,25 @@ def repository_v2_inputs(repository_root: Path | None = None) -> Stage1BCompilat
     )
     return Stage1BCompilationInputs(
         world_suite=load_world_suite(world_path),
-        qualification=load_qualification_config(qualification_path),
+        qualification=load_qualification_config(resolved_qualification_path),
         reproduction_suite=load_reproduction_suite(reproduction_path),
         config_sha256=_paths_sha256(root, config_paths),
         code_sha256=_paths_sha256(root, code_paths),
     )
+
+
+def target_primary_worlds(inputs: Stage1BCompilationInputs) -> tuple[Any, ...]:
+    primary = tuple(
+        world for world in inputs.world_suite.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
+    )
+    targets = inputs.qualification.target_world_ids
+    if not targets:
+        return primary
+    by_id = {world.world_id: world for world in primary}
+    unknown = tuple(world_id for world_id in targets if world_id not in by_id)
+    if unknown:
+        raise ValueError(f"qualification targets are not primary worlds: {', '.join(unknown)}")
+    return tuple(by_id[world_id] for world_id in targets)
 
 
 def _resources(phase: str) -> ResourceRequest:
@@ -237,10 +265,18 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
         )
         for case in inputs.reproduction_suite.cases
     }
+    primary_worlds = target_primary_worlds(inputs)
     health_nodes: dict[str, Stage1BJobNode] = {}
-    for world in inputs.world_suite.worlds:
-        if world.role is WorldRole.REFERENCE_ONLY:
-            continue
+    health_worlds = (
+        primary_worlds
+        if inputs.qualification.target_world_ids
+        else tuple(
+            world
+            for world in inputs.world_suite.worlds
+            if world.role is not WorldRole.REFERENCE_ONLY
+        )
+    )
+    for world in health_worlds:
         source_ids = (world.source_id, *world.supporting_source_ids)
         dependencies = tuple(
             dependency
@@ -258,9 +294,6 @@ def compile_stage1b_graph(inputs: Stage1BCompilationInputs) -> Stage1BRunGraph:
             executor_key="stage1b.check_world_health",
         )
 
-    primary_worlds = tuple(
-        world for world in inputs.world_suite.worlds if world.role is WorldRole.PRIMARY_MECHANISTIC
-    )
     score_nodes: list[Stage1BJobNode] = []
     for world in primary_worlds:
         for seed in inputs.qualification.qualification_seeds:

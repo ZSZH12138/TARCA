@@ -339,6 +339,21 @@ def test_repository_v2_configs_load_with_published_parameters() -> None:
     }
 
 
+def test_confirmation_r2_config_freezes_narrow_blind_scope() -> None:
+    qualification = load_qualification_config(
+        REPOSITORY_ROOT / "configs/stage1b/qualification_v2_confirmation_r2.yaml"
+    )
+    assert qualification.target_world_ids == ("lorenz96_twoscale_v2",)
+    assert qualification.qualification_seeds == (1649910005, 2058661680, 723243092)
+    assert tuple(model.adapter for model in qualification.models) == (
+        "ITRANSFORMER_REFERENCE",
+    )
+    assert qualification.gate.primary_horizon_group == (1, 6)
+    assert qualification.gate.calibration_guardrail_mode == "ABSOLUTE"
+    assert qualification.gate.maximum_absolute_calibration_error == pytest.approx(0.05)
+    assert qualification.summary_filename == "qualification_v2_confirmation_r2_summary.json"
+
+
 def test_world_lookup_rejects_unknown_world() -> None:
     suite = load_world_suite(REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml")
     with pytest.raises(KeyError, match="unknown_world"):

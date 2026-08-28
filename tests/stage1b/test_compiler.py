@@ -41,6 +41,23 @@ def test_primary_training_graph_contains_twelve_gpu_nodes() -> None:
     }
 
 
+def test_confirmation_graph_contains_only_three_twoscale_itransformer_trainings() -> None:
+    inputs = repository_v2_inputs(
+        REPOSITORY_ROOT,
+        REPOSITORY_ROOT / "configs/stage1b/qualification_v2_confirmation_r2.yaml",
+    )
+    graph = compile_stage1b_graph(inputs)
+    training = tuple(node for node in graph.nodes if node.phase == "NEURAL_TRAIN")
+    assert {
+        (node.identity.data_id, node.identity.model_id, node.identity.seed) for node in training
+    } == {
+        ("lorenz96_twoscale_v2", "itransformer_reference", seed)
+        for seed in (1649910005, 2058661680, 723243092)
+    }
+    assert "lorenz96_f10_v2" not in repr(training)
+    assert "patchtst_reference" not in repr(training)
+
+
 def test_data_generation_leaves_capacity_for_both_gpu_training_workers() -> None:
     graph = compile_stage1b_graph(repository_v2_inputs(REPOSITORY_ROOT))
     data_node = next(node for node in graph.nodes if node.phase == "DATA_GENERATE")

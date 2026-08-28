@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from tarca.stage1b.config import WorldRole
 from tarca.stage1b.gates import (
     GateStatus,
@@ -94,6 +96,36 @@ def test_world_gate_rejects_fewer_than_40_blind_units() -> None:
     decision = _evaluate(_world_evidence(winning_units=39, total_units=39))
     assert decision.status is GateStatus.FAIL
     assert "comparison_unit_count" in decision.failed_checks
+
+
+def test_confirmation_gate_decides_only_h1_6_with_absolute_calibration() -> None:
+    original = _world_evidence(winning_units=42, total_units=42)
+    comparisons = tuple(
+        replace(
+            row,
+            neural_crps=0.90 if row.horizon_group == "h1_6" else 1.20,
+            neural_calibration_error=0.04,
+        )
+        for row in original.comparisons
+    )
+    evidence = replace(original, comparisons=comparisons)
+
+    decision = evaluate_world_gate(
+        evidence,
+        bootstrap_replicates=2000,
+        confidence_level=0.95,
+        guardrail_relative_tolerance=0.05,
+        minimum_comparison_units=40,
+        minimum_win_rate=0.65,
+        minimum_skill_score=0.0,
+        require_seen_and_unseen_majority=True,
+        primary_horizon_group=(1, 6),
+        calibration_guardrail_mode="ABSOLUTE",
+        maximum_absolute_calibration_error=0.05,
+    )
+
+    assert decision.status is GateStatus.PASS
+    assert decision.comparison_unit_count == 42
 
 
 def test_world_gate_fails_before_scoring_when_structural_truth_is_missing() -> None:

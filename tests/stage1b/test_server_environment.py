@@ -47,7 +47,7 @@ def _expectation() -> ServerEnvironmentExpectation:
         python_minor=(3, 10),
         torch_version="2.2.2",
         cuda_version="12.1",
-        gpu_count=2,
+        minimum_gpu_count=2,
         gpu_name_substring="RTX 4090",
         minimum_vram_bytes=24 * 1024**3,
         minimum_cpu_count=28,
@@ -113,7 +113,7 @@ def test_runtime_expectation_accepts_driver_reported_rtx4090_capacity(
         python_minor=(3, 10),
         torch_version="2.2.2",
         cuda_version="12.1",
-        gpu_count=2,
+        minimum_gpu_count=2,
         gpu_name_substring="RTX 4090",
         minimum_vram_bytes=server_environment.NOMINAL_24_GB_BYTES,
         minimum_cpu_count=28,
@@ -136,3 +136,34 @@ def test_runtime_expectation_accepts_driver_reported_rtx4090_capacity(
 
     assert server_environment.NOMINAL_24_GB_BYTES == 24_000_000_000
     assert receipt.gpu_vram_bytes == facts.gpu_vram_bytes
+
+
+def test_hardware_neutral_expectation_accepts_one_sufficient_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expectation = ServerEnvironmentExpectation(
+        python_minor=(3, 10),
+        torch_version="2.2.2",
+        cuda_version="12.1",
+        minimum_gpu_count=1,
+        gpu_name_substring=None,
+        minimum_vram_bytes=20 * 1024**3,
+        minimum_cpu_count=20,
+        minimum_ram_bytes=128 * 1024**3,
+    )
+    facts = ServerEnvironmentFacts(
+        python_version="3.10.20",
+        python_minor=(3, 10),
+        torch_version="2.2.2+cu121",
+        cuda_version="12.1",
+        gpu_names=("NVIDIA A100",),
+        gpu_vram_bytes=(40 * 1024**3,),
+        cpu_count=24,
+        ram_bytes=128 * 1024**3,
+    )
+    monkeypatch.setattr(server_environment, "_collect_facts", lambda: facts)
+    monkeypatch.setattr(server_environment, "_probe_cuda_device", lambda _device: True)
+
+    receipt = validate_server_environment(expectation)
+
+    assert receipt.gpu_names == ("NVIDIA A100",)

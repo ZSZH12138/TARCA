@@ -160,8 +160,21 @@ def _evaluate_candidate(
     minimum_win_rate: float,
     minimum_skill_score: float,
     require_seen_and_unseen_majority: bool,
+    primary_horizon_group: tuple[int, int] | None,
+    calibration_guardrail_mode: str,
+    maximum_absolute_calibration_error: float | None,
 ) -> _CandidateDecision:
-    rows = tuple(row for row in evidence.comparisons if row.neural_adapter == adapter)
+    horizon_label = (
+        None
+        if primary_horizon_group is None
+        else f"h{primary_horizon_group[0]}_{primary_horizon_group[1]}"
+    )
+    rows = tuple(
+        row
+        for row in evidence.comparisons
+        if row.neural_adapter == adapter
+        and (horizon_label is None or row.horizon_group == horizon_label)
+    )
     units = _comparison_units(rows)
     failed: set[str] = set()
     if len(units) < minimum_comparison_units:
@@ -230,11 +243,6 @@ def _evaluate_candidate(
         for neural_field, var_field, check in (
             ("neural_nll", "var_nll", "nll_guardrail"),
             ("neural_mae", "var_mae", "mae_guardrail"),
-            (
-                "neural_calibration_error",
-                "var_calibration_error",
-                "calibration_guardrail",
-            ),
         ):
             if not _relative_guardrail(
                 _mean(rows, neural_field),
@@ -242,6 +250,19 @@ def _evaluate_candidate(
                 guardrail_relative_tolerance,
             ):
                 failed.add(check)
+        neural_calibration = _mean(rows, "neural_calibration_error")
+        if calibration_guardrail_mode == "ABSOLUTE":
+            if (
+                maximum_absolute_calibration_error is None
+                or neural_calibration > maximum_absolute_calibration_error
+            ):
+                failed.add("calibration_guardrail")
+        elif not _relative_guardrail(
+            neural_calibration,
+            _mean(rows, "var_calibration_error"),
+            guardrail_relative_tolerance,
+        ):
+            failed.add("calibration_guardrail")
         for regime_id in {row.regime_id for row in rows}:
             regime_rows = tuple(row for row in rows if row.regime_id == regime_id)
             if not _relative_guardrail(
@@ -307,6 +328,9 @@ def evaluate_world_gate(
     minimum_win_rate: float = 0.65,
     minimum_skill_score: float = 0.0,
     require_seen_and_unseen_majority: bool = True,
+    primary_horizon_group: tuple[int, int] | None = None,
+    calibration_guardrail_mode: str = "RELATIVE_TO_VAR",
+    maximum_absolute_calibration_error: float | None = None,
 ) -> WorldGateDecision:
     if not _structural_truth_passes(evidence.structural_checks):
         return _empty_decision(evidence, GateStatus.FAIL, ("structural_truth",))
@@ -326,6 +350,9 @@ def evaluate_world_gate(
             minimum_win_rate=minimum_win_rate,
             minimum_skill_score=minimum_skill_score,
             require_seen_and_unseen_majority=require_seen_and_unseen_majority,
+            primary_horizon_group=primary_horizon_group,
+            calibration_guardrail_mode=calibration_guardrail_mode,
+            maximum_absolute_calibration_error=maximum_absolute_calibration_error,
         )
         for adapter in adapters
     )

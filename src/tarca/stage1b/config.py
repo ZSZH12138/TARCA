@@ -612,6 +612,23 @@ class QualificationGateConfig(FrozenModel):
     minimum_win_rate: float = Field(gt=0.5, le=1.0)
     minimum_skill_score: float = Field(ge=0.0, lt=1.0)
     require_seen_and_unseen_majority: bool
+    primary_horizon_group: tuple[int, int] | None = None
+    calibration_guardrail_mode: Literal["RELATIVE_TO_VAR", "ABSOLUTE"] = "RELATIVE_TO_VAR"
+    maximum_absolute_calibration_error: float | None = None
+
+    @model_validator(mode="after")
+    def _calibration_rule_is_coherent(self) -> Self:
+        if self.primary_horizon_group is not None:
+            start, end = self.primary_horizon_group
+            if start <= 0 or end < start:
+                raise ValueError("primary_horizon_group must be a positive ordered interval")
+        if self.calibration_guardrail_mode == "ABSOLUTE":
+            value = self.maximum_absolute_calibration_error
+            if value is None or not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError("absolute calibration mode requires a finite threshold in [0, 1]")
+        elif self.maximum_absolute_calibration_error is not None:
+            raise ValueError("relative calibration mode must not set an absolute threshold")
+        return self
 
 
 class QualificationConfig(FrozenModel):
@@ -629,6 +646,8 @@ class QualificationConfig(FrozenModel):
     models: tuple[NeuralModelConfig, ...]
     var_search: VarSearchConfig
     gate: QualificationGateConfig
+    target_world_ids: tuple[str, ...] = ()
+    summary_filename: str = "qualification_v2_summary.json"
 
     @field_validator("partitions", mode="before")
     @classmethod
@@ -661,9 +680,26 @@ class QualificationConfig(FrozenModel):
         if covered != list(range(1, self.horizon + 1)):
             raise ValueError("horizon groups must cover each horizon exactly once in order")
         model_ids = tuple(model.model_id for model in self.models)
-        adapters = {model.adapter for model in self.models}
-        if len(model_ids) != len(set(model_ids)) or adapters != set(NeuralAdapter):
-            raise ValueError("qualification requires one unique PatchTST and iTransformer adapter")
+        adapters = tuple(model.adapter for model in self.models)
+        if not model_ids or len(model_ids) != len(set(model_ids)) or len(adapters) != len(
+            set(adapters)
+        ):
+            raise ValueError("qualification requires one or more unique neural adapters")
+        if not set(adapters).issubset(set(NeuralAdapter)):
+            raise ValueError("qualification contains an unsupported neural adapter")
+        if len(self.target_world_ids) != len(set(self.target_world_ids)) or any(
+            not world_id.strip() for world_id in self.target_world_ids
+        ):
+            raise ValueError("target_world_ids must contain unique nonblank identifiers")
+        if (
+            Path(self.summary_filename).name != self.summary_filename
+            or not self.summary_filename.endswith(".json")
+        ):
+            raise ValueError("summary_filename must be a JSON basename")
+        if self.gate.primary_horizon_group is not None and (
+            self.gate.primary_horizon_group not in self.horizon_groups
+        ):
+            raise ValueError("primary_horizon_group must be one declared horizon group")
         return self
 
 

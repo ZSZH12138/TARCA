@@ -16,7 +16,7 @@ def test_monitor_port_is_host_loopback_only() -> None:
     assert compose["services"]["stage1b"]["ports"] == ["127.0.0.1:8765:8765"]
 
 
-def test_container_uses_exact_authorized_base_and_two_gpus() -> None:
+def test_container_uses_exact_authorized_base_and_all_visible_gpus() -> None:
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
     service = compose["services"]["stage1b"]
@@ -25,7 +25,10 @@ def test_container_uses_exact_authorized_base_and_two_gpus() -> None:
     assert "pip install --require-hashes" in dockerfile
     assert "COPY --from=ui-build" in dockerfile
     devices = service["deploy"]["resources"]["reservations"]["devices"]
-    assert devices == [{"driver": "nvidia", "count": 2, "capabilities": ["gpu"]}]
+    assert devices == [{"driver": "nvidia", "count": "all", "capabilities": ["gpu"]}]
+    assert service["environment"]["TARCA_STAGE1B_QUALIFICATION_CONFIG"].endswith(
+        "qualification_v2_confirmation_r2.yaml"
+    )
     assert service["shm_size"] == "16gb"
 
 

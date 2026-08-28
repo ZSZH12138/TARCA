@@ -28,7 +28,6 @@ from tarca.stage1b.runner import (  # noqa: E402
     run_scheduled_qualification,
 )
 from tarca.stage1b.server_environment import (  # noqa: E402
-    NOMINAL_24_GB_BYTES,
     ServerEnvironmentExpectation,
     validate_server_environment,
 )
@@ -45,6 +44,7 @@ from tarca.stage1b.sources import (  # noqa: E402
 class RuntimeArguments:
     command: str
     artifact_root: Path
+    qualification_config: Path = REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml"
     empty_ok: bool = False
     authorize_over_24_hours: bool = False
 
@@ -58,7 +58,22 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--artifact-root",
         type=Path,
-        default=REPOSITORY_ROOT / "artifacts/stage1b",
+        default=Path(
+            os.environ.get(
+                "TARCA_STAGE1B_ARTIFACT_ROOT",
+                str(REPOSITORY_ROOT / "artifacts/stage1b"),
+            )
+        ),
+    )
+    parser.add_argument(
+        "--qualification-config",
+        type=Path,
+        default=Path(
+            os.environ.get(
+                "TARCA_STAGE1B_QUALIFICATION_CONFIG",
+                str(REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml"),
+            )
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     preflight = subparsers.add_parser("preflight", help="Run bounded server checks and probes.")
@@ -74,6 +89,7 @@ def _arguments(namespace: argparse.Namespace) -> RuntimeArguments:
     return RuntimeArguments(
         command=str(namespace.command),
         artifact_root=namespace.artifact_root.resolve(),
+        qualification_config=namespace.qualification_config.resolve(),
         empty_ok=bool(getattr(namespace, "empty_ok", False)),
         authorize_over_24_hours=bool(getattr(namespace, "authorize_over_24_hours", False)),
     )
@@ -96,11 +112,11 @@ def _expectation() -> ServerEnvironmentExpectation:
         python_minor=(3, 10),
         torch_version="2.2.2",
         cuda_version="12.1",
-        gpu_count=2,
-        gpu_name_substring="RTX 4090",
-        minimum_vram_bytes=NOMINAL_24_GB_BYTES,
-        minimum_cpu_count=28,
-        minimum_ram_bytes=224 * 1024**3,
+        minimum_gpu_count=1,
+        gpu_name_substring=None,
+        minimum_vram_bytes=20 * 1024**3,
+        minimum_cpu_count=20,
+        minimum_ram_bytes=128 * 1024**3,
     )
 
 
@@ -173,7 +189,7 @@ def run_preflight(arguments: RuntimeArguments) -> dict[str, Any]:
         raise ValueError("TARCA_STAGE1B_DATALOADER_WORKERS must be an integer") from error
     hardware = run_hardware_probe(
         REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml",
-        REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml",
+        arguments.qualification_config,
         runtime_root,
         authorized_over_24_hours=arguments.authorize_over_24_hours,
         device=os.environ.get("TARCA_STAGE1B_DEVICE", "cuda"),
@@ -244,15 +260,26 @@ def _apply_precision_policy(artifact_root: Path) -> None:
     os.environ["TARCA_STAGE1B_PRECISION"] = str(selected)
 
 
+def _bind_worker_artifact_root(artifact_root: Path) -> None:
+    try:
+        artifact_relative = artifact_root.relative_to(REPOSITORY_ROOT)
+    except ValueError as error:
+        raise ValueError("launched artifact root must stay inside the repository") from error
+    os.environ["TARCA_STAGE1B_ARTIFACT_ROOT"] = artifact_relative.as_posix()
+
+
 def launch_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
     _configure_cuda_determinism()
     os.environ["TARCA_STAGE1B_RESUME_CHECKPOINTS"] = "0"
     database = arguments.artifact_root / "runtime/execution.sqlite3"
     if database.exists():
         raise RuntimeError("execution database already exists; use resume")
+    _bind_worker_artifact_root(arguments.artifact_root)
     _required_receipts(arguments.artifact_root)
     _apply_precision_policy(arguments.artifact_root)
-    return run_scheduled_qualification(REPOSITORY_ROOT, arguments.artifact_root)
+    return run_scheduled_qualification(
+        REPOSITORY_ROOT, arguments.artifact_root, arguments.qualification_config
+    )
 
 
 def resume_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
@@ -261,9 +288,12 @@ def resume_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
     database = arguments.artifact_root / "runtime/execution.sqlite3"
     if not database.is_file():
         raise RuntimeError("execution database is required before resume")
+    _bind_worker_artifact_root(arguments.artifact_root)
     _required_receipts(arguments.artifact_root)
     _apply_precision_policy(arguments.artifact_root)
-    return run_scheduled_qualification(REPOSITORY_ROOT, arguments.artifact_root)
+    return run_scheduled_qualification(
+        REPOSITORY_ROOT, arguments.artifact_root, arguments.qualification_config
+    )
 
 
 def emit_safe_status(arguments: RuntimeArguments) -> dict[str, Any]:
@@ -287,6 +317,13 @@ _HANDLERS: MappingProxyType[str, RuntimeHandler] = MappingProxyType(
 
 
 def dispatch_runtime_command(arguments: RuntimeArguments) -> dict[str, Any]:
+    try:
+        qualification_relative = arguments.qualification_config.relative_to(REPOSITORY_ROOT)
+    except ValueError as error:
+        raise ValueError("qualification config must stay inside the repository") from error
+    if not arguments.qualification_config.is_file():
+        raise ValueError("qualification config is unavailable")
+    os.environ["TARCA_STAGE1B_QUALIFICATION_CONFIG"] = qualification_relative.as_posix()
     try:
         handler = _HANDLERS[arguments.command]
     except KeyError as error:
