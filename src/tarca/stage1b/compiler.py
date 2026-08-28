@@ -138,7 +138,7 @@ def _resources(phase: str) -> ResourceRequest:
         "SOURCE_MATERIALIZE": (2, 0, 0.0, 4.0),
         "OFFICIAL_REPRODUCTION": (2, 0, 0.0, 8.0),
         "WORLD_HEALTH": (4, 0, 0.0, 16.0),
-        "DATA_GENERATE": (24, 0, 0.0, 96.0),
+        "DATA_GENERATE": (16, 0, 0.0, 96.0),
         "DATA_VALIDATE": (8, 0, 0.0, 32.0),
         "VAR_SCORE": (8, 0, 0.0, 32.0),
         "NEURAL_TRAIN": (4, 1, 20.0, 32.0),

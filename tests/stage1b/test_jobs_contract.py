@@ -21,6 +21,7 @@ from tarca.stage1b.dataset import (
 from tarca.stage1b.jobs import (
     _dataset_from_payload,
     _dataset_payload,
+    _generation_worker_count,
     _load_json,
     _load_torch,
     _publish_json,
@@ -154,6 +155,17 @@ def test_source_receipt_round_trip_and_cache_override(
     override = tmp_path / "official_sources"
     monkeypatch.setenv("TARCA_STAGE1B_SOURCE_CACHE_ROOT", str(override))
     assert _source_cache_root(tmp_path) == override.resolve()
+
+
+def test_generation_worker_count_uses_the_scheduler_affinity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TARCA_CPU_AFFINITY", "2,4,6,8")
+    assert _generation_worker_count() == 4
+
+    monkeypatch.setenv("TARCA_CPU_AFFINITY", "2,2")
+    with pytest.raises(ValueError, match="unique"):
+        _generation_worker_count()
 
 
 @pytest.mark.parametrize("unsafe", ["../escape", "C:/escape"])

@@ -14,10 +14,11 @@ from tarca.execution import (
     ScientificIdentity,
     TaskSpec,
 )
-from tarca.execution.state import ExecutionStateStore
+from tarca.execution.state import AttemptState, ExecutionStateStore
 from tarca.stage1b.compiler import compile_stage1b_graph, repository_v2_inputs
 from tarca.stage1b.runner import (
     QualificationBoundaryError,
+    _enqueue_ready_tasks,
     _qualification_execution_evidence,
     _runtime_plan_nodes,
     _runtime_scheduler,
@@ -190,6 +191,58 @@ def test_runtime_plan_contains_all_74_frozen_graph_nodes() -> None:
 
     assert len(nodes) == len(graph.nodes) == 74
     assert tuple(node.task_id for node in nodes) == tuple(node.node_id for node in graph.nodes)
+
+
+def test_ready_child_is_enqueued_while_an_unrelated_root_is_still_running(
+    tmp_path: Path,
+) -> None:
+    graph = compile_stage1b_graph(repository_v2_inputs(REPOSITORY_ROOT))
+    run_id = "run-dynamic"
+    store = ExecutionStateStore(tmp_path / "execution.sqlite3", artifact_verifier=lambda _: True)
+    store.create_run(run_id, graph.graph_id)
+    store.register_run_plan(run_id, _runtime_plan_nodes(graph))
+    roots = tuple(node for node in graph.nodes if not node.dependency_ids)
+    completed_root, running_root = roots[:2]
+
+    completed_task = TaskSpec(
+        identity=completed_root.identity,
+        phase=completed_root.phase,
+        inputs=(),
+        output_artifact_type=completed_root.output_artifact_type,
+        resource_request=completed_root.resource_request,
+    )
+    completed_attempt = store.enqueue_task(
+        run_id, completed_task, completed_root.executor_key
+    )
+    store.transition(completed_attempt, AttemptState.READY, AttemptState.RUNNING)
+    store.complete_attempt(
+        completed_attempt,
+        ArtifactRef(
+            artifact_id="completed-root-output",
+            artifact_type=completed_root.output_artifact_type,
+            content_hash="a" * 64,
+            schema_version="2.0.0",
+            relative_path="stage1b/completed-root.json",
+        ),
+    )
+    running_task = TaskSpec(
+        identity=running_root.identity,
+        phase=running_root.phase,
+        inputs=(),
+        output_artifact_type=running_root.output_artifact_type,
+        resource_request=running_root.resource_request,
+    )
+    running_attempt = store.enqueue_task(run_id, running_task, running_root.executor_key)
+    store.transition(running_attempt, AttemptState.READY, AttemptState.RUNNING)
+
+    enqueued = _enqueue_ready_tasks(graph, store, run_id)
+
+    child = next(
+        node for node in graph.nodes if node.dependency_ids == (completed_root.node_id,)
+    )
+    assert child.node_id in enqueued
+    assert store.attempt_state(f"{child.node_id}-attempt-1") is AttemptState.READY
+    assert store.attempt_state(running_attempt) is AttemptState.RUNNING
 
 
 def test_formal_runtime_scheduler_samples_and_respects_two_gpu_capacity(

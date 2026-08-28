@@ -74,6 +74,21 @@ def _source_cache_root(repo_root: Path) -> Path:
     return source_cache_root_from_environment(repo_root)
 
 
+def _generation_worker_count() -> int:
+    raw = os.environ.get("TARCA_CPU_AFFINITY", "").strip()
+    if not raw:
+        return 1
+    try:
+        cpu_ids = tuple(int(item) for item in raw.split(","))
+    except ValueError as error:
+        raise ValueError("generation CPU affinity must contain integers") from error
+    if any(cpu_id < 0 for cpu_id in cpu_ids):
+        raise ValueError("generation CPU affinity must be nonnegative")
+    if len(cpu_ids) != len(set(cpu_ids)):
+        raise ValueError("generation CPU affinity must contain unique CPU IDs")
+    return len(cpu_ids)
+
+
 def stage1b_artifact_store(
     repo_root: Path,
     task: TaskSpec | None = None,
@@ -352,7 +367,7 @@ def generate_dataset_job(
     context: ExecutionContext,
     progress: ProgressSink,
 ) -> ArtifactRef:
-    del context, progress
+    del context
     inputs = repository_v2_inputs(repo_root)
     world_config = inputs.world_suite.world(task.identity.data_id)
     world = build_world(world_config)
@@ -361,6 +376,7 @@ def generate_dataset_job(
         inputs.qualification,
         qualification_seed=task.identity.seed,
         source_commit=inputs.world_suite.source(world_config.source_id).commit,
+        worker_count=_generation_worker_count(),
     )
     dataset = prepare_dataset(
         split,

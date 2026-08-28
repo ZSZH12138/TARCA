@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from tarca.contracts import ArtifactRef
+from tarca.execution import ResourceAllocation, ResourceCapacity, TaskSpec, plan_resources
 from tarca.stage1b.compiler import (
     compile_ready_manifest,
     compile_stage1b_graph,
@@ -38,6 +39,47 @@ def test_primary_training_graph_contains_twelve_gpu_nodes() -> None:
         for model in ("patchtst_reference", "itransformer_reference")
         for seed in (104729, 130363, 155921)
     }
+
+
+def test_data_generation_leaves_capacity_for_both_gpu_training_workers() -> None:
+    graph = compile_stage1b_graph(repository_v2_inputs(REPOSITORY_ROOT))
+    data_node = next(node for node in graph.nodes if node.phase == "DATA_GENERATE")
+    neural_nodes = tuple(node for node in graph.nodes if node.phase == "NEURAL_TRAIN")[:2]
+    data_task = TaskSpec(
+        identity=data_node.identity,
+        phase=data_node.phase,
+        inputs=(),
+        output_artifact_type=data_node.output_artifact_type,
+        resource_request=data_node.resource_request,
+    )
+    neural_tasks = tuple(
+        TaskSpec(
+            identity=node.identity,
+            phase=node.phase,
+            inputs=(),
+            output_artifact_type=node.output_artifact_type,
+            resource_request=node.resource_request,
+        )
+        for node in neural_nodes
+    )
+    capacity = ResourceCapacity(
+        logical_cpu_count=28,
+        physical_cpu_count=28,
+        available_memory_bytes=224 * 1024**3,
+        gpu_memory_bytes=(24 * 1024**3, 24 * 1024**3),
+        local_storage_available=True,
+        local_storage_free_bytes=1024**4,
+    )
+    active = ResourceAllocation(
+        cpu_threads=data_node.resource_request.cpu_threads,
+        gpu_ids=(),
+        host_memory_gib_limit=data_node.resource_request.host_memory_gib,
+        worker_id="data-worker",
+    )
+
+    allocations = plan_resources(neural_tasks, capacity, active=((data_task, active),))
+
+    assert tuple(allocation.gpu_ids for allocation in allocations) == ((0,), (1,))
 
 
 def test_graph_is_acyclic_prehashed_and_excludes_formal_experiments() -> None:

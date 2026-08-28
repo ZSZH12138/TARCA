@@ -19,7 +19,7 @@ export function ResourceGrid({ resources }: { resources: ResourceStatus[] }) {
     <section aria-labelledby="resource-title">
       <div className="section-heading">
         <div><p className="eyebrow">LIVE CAPACITY</p><h2 id="resource-title">硬件资源</h2></div>
-        <p>期望分配与实际占用每 2 秒刷新</p>
+        <p>调度预留与实际占用每 2 秒刷新</p>
       </div>
       <div className="resource-grid">
         {resources.map((resource) => (
@@ -36,14 +36,14 @@ export function ResourceGrid({ resources }: { resources: ResourceStatus[] }) {
             <div className="meter"><span className={meterTone(resource.utilization_percent)} style={{ width: `${resource.utilization_percent ?? 0}%` }} /></div>
             {resource.kind === "HOST" ? (
               <dl>
-                <div><dt>期望核数</dt><dd>{resource.expected_cpu_cores}</dd></div>
+                <div><dt>已预留核数</dt><dd>{resource.expected_cpu_cores}</dd></div>
                 <div><dt>有效忙核</dt><dd>{formatDecimal(resource.actual_effective_busy_cores)}</dd></div>
-                <div><dt>期望内存</dt><dd>{formatBytes(resource.expected_memory_bytes)}</dd></div>
+                <div><dt>已预留内存</dt><dd>{formatBytes(resource.expected_memory_bytes)}</dd></div>
                 <div><dt>实际内存</dt><dd>{formatBytes(resource.actual_memory_bytes)}</dd></div>
               </dl>
             ) : (
               <dl>
-                <div><dt>期望显存</dt><dd>{formatBytes(resource.expected_memory_bytes)}</dd></div>
+                <div><dt>已预留显存</dt><dd>{formatBytes(resource.expected_memory_bytes)}</dd></div>
                 <div><dt>实际显存</dt><dd>{formatBytes(resource.actual_memory_bytes)}</dd></div>
                 <div><dt>温度</dt><dd>{resource.temperature_celsius === null ? "—" : `${resource.temperature_celsius.toFixed(0)}°C`}</dd></div>
                 <div><dt>功率</dt><dd>{resource.power_watts === null ? "—" : `${resource.power_watts.toFixed(0)} W`}</dd></div>

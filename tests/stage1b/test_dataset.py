@@ -127,3 +127,67 @@ def test_real_world_generation_uses_all_qualification_partitions_deterministical
     for left, right in zip(first.records, second.records, strict=True):
         torch.testing.assert_close(left.values, right.values, rtol=0.0, atol=0.0)
     assert all("TEST" not in record.partition.value for record in first.records)
+
+
+def test_parallel_world_generation_is_bitwise_identical_to_sequential_generation() -> None:
+    suite = load_world_suite(REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml")
+    qualification = load_qualification_config(
+        REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml"
+    ).model_copy(
+        update={
+            "trajectory_length": 48,
+            "warmup_steps": 8,
+            "trajectories_per_partition": TrajectoryPartitionCounts(
+                QUAL_TRAIN=1,
+                QUAL_TUNE=1,
+                QUAL_SEEN=1,
+                QUAL_UNSEEN=1,
+            ),
+        }
+    )
+    world = build_world(suite.world("corrected_cml_v2"))
+    source_commit = suite.source(world.config.source_id).commit
+
+    sequential = generate_world_split(
+        world,
+        qualification,
+        qualification_seed=104729,
+        source_commit=source_commit,
+        worker_count=1,
+    )
+    parallel = generate_world_split(
+        world,
+        qualification,
+        qualification_seed=104729,
+        source_commit=source_commit,
+        worker_count=2,
+    )
+
+    assert tuple(record.trajectory_id for record in parallel.records) == tuple(
+        record.trajectory_id for record in sequential.records
+    )
+    for left, right in zip(sequential.records, parallel.records, strict=True):
+        assert (
+            left.trajectory_id,
+            left.world_id,
+            left.family_id,
+            left.regime_id,
+            left.partition,
+            left.seed,
+            left.graph_sha256,
+            left.future_noise_sha256,
+            left.source_commit,
+            left.config_sha256,
+        ) == (
+            right.trajectory_id,
+            right.world_id,
+            right.family_id,
+            right.regime_id,
+            right.partition,
+            right.seed,
+            right.graph_sha256,
+            right.future_noise_sha256,
+            right.source_commit,
+            right.config_sha256,
+        )
+        torch.testing.assert_close(left.values, right.values, rtol=0.0, atol=0.0)

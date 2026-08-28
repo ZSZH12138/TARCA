@@ -245,7 +245,12 @@ class Scheduler:
 
     def tick(self, run_id: str) -> tuple[SchedulerLaunch, ...]:
         self.backend.poll()
-        queued = self.store.ready_tasks(run_id)
+        queued = tuple(
+            sorted(
+                self.store.ready_tasks(run_id),
+                key=lambda item: item.task.resource_request.gpu_count == 0,
+            )
+        )
         active = self.store.running_attempts(run_id)
         allocations = (
             plan_resources(

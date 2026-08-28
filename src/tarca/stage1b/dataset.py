@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -313,16 +316,84 @@ def _trajectory_seed(
     return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big") % (2**32 - 1)
 
 
+@dataclass(frozen=True, slots=True)
+class _TrajectoryWork:
+    world: PublishedWorldAdapter
+    qualification_seed: int
+    partition: QualificationPartition
+    index: int
+    regime_id: str
+    length: int
+    warmup_steps: int
+    source_commit: str
+    config_sha256: str
+
+
+def _limit_generation_worker_threads() -> None:
+    thread_variables = (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    )
+    for name in thread_variables:
+        os.environ[name] = "1"
+    torch.set_num_threads(1)
+    with suppress(RuntimeError):
+        torch.set_num_interop_threads(1)
+
+
+def _generate_trajectory_record(work: _TrajectoryWork) -> TrajectoryRecord:
+    seed = _trajectory_seed(
+        work.world.config.world_id,
+        work.qualification_seed,
+        work.partition,
+        work.index,
+    )
+    trajectory = work.world.simulate(
+        SimulationRequest(
+            seed=seed,
+            partition=work.partition,
+            regime_id=work.regime_id,
+            length=work.length,
+            warmup_steps=work.warmup_steps,
+        )
+    )
+    identity = hashlib.sha256(
+        (
+            f"{work.world.config.world_id}|{work.qualification_seed}|"
+            f"{work.partition.value}|{work.index}|{seed}"
+        ).encode()
+    ).hexdigest()[:24]
+    return TrajectoryRecord(
+        trajectory_id=f"{work.world.config.world_id}-{identity}",
+        world_id=work.world.config.world_id,
+        family_id=work.world.config.family_id,
+        regime_id=work.regime_id,
+        partition=work.partition,
+        seed=seed,
+        graph_sha256=trajectory.truth.graph_sha256,
+        future_noise_sha256=trajectory.future_noise_sha256,
+        source_commit=work.source_commit,
+        config_sha256=work.config_sha256,
+        values=trajectory.values.clone(),
+    )
+
+
 def generate_world_split(
     world: PublishedWorldAdapter,
     qualification: QualificationConfig,
     qualification_seed: int,
     source_commit: str,
+    *,
+    worker_count: int = 1,
 ) -> QualificationSplit:
     from tarca.stage1b.splits import build_qualification_split
 
     if qualification_seed not in qualification.qualification_seeds:
         raise ValueError("generation seed is outside the qualification namespace")
+    if type(worker_count) is not int or worker_count <= 0:
+        raise ValueError("generation worker count must be a positive integer")
     counts = {
         QualificationPartition.QUAL_TRAIN: qualification.trajectories_per_partition.qual_train,
         QualificationPartition.QUAL_TUNE: qualification.trajectories_per_partition.qual_tune,
@@ -338,7 +409,7 @@ def generate_world_split(
         ),
     }
     config_sha256 = _config_sha256(world, qualification)
-    records: list[TrajectoryRecord] = []
+    work_items: list[_TrajectoryWork] = []
     for partition in QualificationPartition:
         split_role = (
             RegimeSplitRole.UNSEEN
@@ -350,39 +421,26 @@ def generate_world_split(
             raise ValueError(f"world has no {split_role.value} qualification regime")
         for index in range(counts[partition]):
             regime = eligible_regimes[index % len(eligible_regimes)]
-            seed = _trajectory_seed(
-                world.config.world_id,
-                qualification_seed,
-                partition,
-                index,
-            )
-            trajectory = world.simulate(
-                SimulationRequest(
-                    seed=seed,
+            work_items.append(
+                _TrajectoryWork(
+                    world=world,
+                    qualification_seed=qualification_seed,
                     partition=partition,
+                    index=index,
                     regime_id=regime.regime_id,
                     length=qualification.trajectory_length,
                     warmup_steps=qualification.warmup_steps,
-                )
-            )
-            identity = hashlib.sha256(
-                (
-                    f"{world.config.world_id}|{qualification_seed}|{partition.value}|{index}|{seed}"
-                ).encode()
-            ).hexdigest()[:24]
-            records.append(
-                TrajectoryRecord(
-                    trajectory_id=f"{world.config.world_id}-{identity}",
-                    world_id=world.config.world_id,
-                    family_id=world.config.family_id,
-                    regime_id=regime.regime_id,
-                    partition=partition,
-                    seed=seed,
-                    graph_sha256=trajectory.truth.graph_sha256,
-                    future_noise_sha256=trajectory.future_noise_sha256,
                     source_commit=source_commit,
                     config_sha256=config_sha256,
-                    values=trajectory.values.clone(),
                 )
             )
+    resolved_workers = min(worker_count, len(work_items))
+    if resolved_workers == 1:
+        records = tuple(_generate_trajectory_record(item) for item in work_items)
+    else:
+        with ProcessPoolExecutor(
+            max_workers=resolved_workers,
+            initializer=_limit_generation_worker_threads,
+        ) as executor:
+            records = tuple(executor.map(_generate_trajectory_record, work_items, chunksize=1))
     return build_qualification_split(tuple(records))

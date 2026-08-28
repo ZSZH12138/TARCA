@@ -7,6 +7,7 @@ from typing import Any
 from tarca.contracts import ArtifactRef, canonical_json_hash
 from tarca.execution.contracts import (
     ExecutionContext,
+    ResourceAllocation,
     ResourceRequest,
     ScientificIdentity,
     TaskSpec,
@@ -120,6 +121,52 @@ def test_two_gpus_launch_two_of_three_ready_gpu_jobs(tmp_path: Path) -> None:
     assert len(launches) == 2
     assert {launch.task.allocation.gpu_ids for launch in launches} == {(0,), (1,)}
     assert store.attempt_state("task-2-attempt-1") is AttemptState.READY
+
+
+def test_scheduler_fills_idle_gpus_before_an_older_cpu_only_job(tmp_path: Path) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    data_task = _task(90, gpu=False).model_copy(
+        update={
+            "phase": "DATA_GENERATE",
+            "resource_request": ResourceRequest(
+                cpu_threads=16,
+                gpu_count=0,
+                gpu_memory_gib=0.0,
+                host_memory_gib=96.0,
+            ),
+        }
+    )
+    data_attempt = store.enqueue_task("run-a", data_task, "test.execute")
+    store.claim_attempt(
+        data_attempt,
+        "data-worker",
+        ResourceAllocation(
+            cpu_threads=16,
+            gpu_ids=(),
+            host_memory_gib_limit=96.0,
+            worker_id="data-worker",
+        ),
+    )
+    older_cpu = _task(91, gpu=False).model_copy(
+        update={
+            "resource_request": ResourceRequest(
+                cpu_threads=8,
+                gpu_count=0,
+                gpu_memory_gib=0.0,
+                host_memory_gib=32.0,
+            )
+        }
+    )
+    store.enqueue_task("run-a", older_cpu, "test.execute")
+    store.enqueue_task("run-a", _task(92, gpu_memory_gib=20.0), "test.execute")
+    store.enqueue_task("run-a", _task(93, gpu_memory_gib=20.0), "test.execute")
+
+    launches = Scheduler(store, _RecordingBackend(), _capacity()).tick("run-a")
+
+    assert tuple(launch.task.task_id for launch in launches) == ("task-92", "task-93")
+    assert {launch.task.allocation.gpu_ids for launch in launches} == {(0,), (1,)}
+    assert store.attempt_state("task-91-attempt-1") is AttemptState.READY
 
 
 def test_repeated_ticks_never_reuse_resources_held_by_running_attempts(

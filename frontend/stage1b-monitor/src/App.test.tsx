@@ -10,7 +10,10 @@ describe("Stage1B runtime dashboard", () => {
 
     expect(await screen.findByText("GPU 0")).toBeVisible();
     expect(screen.getByText("GPU 1")).toBeVisible();
-    expect(screen.getAllByText("期望显存").length).toBeGreaterThan(0);
+    expect(screen.getByText("调度预留与实际占用每 2 秒刷新")).toBeVisible();
+    expect(screen.getByText("已预留核数")).toBeVisible();
+    expect(screen.getByText("CPU（实际 / 预留）")).toBeVisible();
+    expect(screen.getAllByText("已预留显存").length).toBeGreaterThan(0);
     expect(screen.getAllByText("实际显存").length).toBeGreaterThan(0);
     expect(screen.getByText("有效忙核")).toBeVisible();
     expect(screen.getByText("预计剩余时间")).toBeVisible();
@@ -145,7 +148,8 @@ describe("Stage1B runtime dashboard", () => {
     });
 
     expect(await screen.findByText("CPU")).toBeVisible();
-    expect(screen.getByText("未检测到进程")).toBeVisible();
+    expect(screen.getByText("等待依赖，尚未启动")).toBeVisible();
+    expect(screen.queryByText("未检测到进程")).not.toBeInTheDocument();
     expect(screen.getByText("等待")).toBeVisible();
     expect(screen.getByText("等待下一批任务")).toBeVisible();
   });

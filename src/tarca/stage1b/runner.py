@@ -1136,6 +1136,27 @@ def _runtime_scheduler(
     return Scheduler(state, backend, capacity, supervisor=supervisor)
 
 
+def _enqueue_ready_tasks(
+    graph: Any,
+    state: ExecutionStateStore,
+    run_id: str,
+) -> tuple[str, ...]:
+    from tarca.stage1b.compiler import compile_ready_manifest
+
+    completed = state.completed_artifacts(run_id)
+    manifest = compile_ready_manifest(graph, completed)
+    node_by_id = {node.node_id: node for node in graph.nodes}
+    for task in manifest.tasks:
+        node = node_by_id[task.task_id]
+        state.enqueue_task(
+            run_id,
+            task,
+            node.executor_key,
+            dependency_task_ids=node.dependency_ids,
+        )
+    return tuple(task.task_id for task in manifest.tasks)
+
+
 def run_scheduled_qualification(
     repository_root: Path,
     artifact_root: Path,
@@ -1143,7 +1164,6 @@ def run_scheduled_qualification(
     """Execute the frozen official Stage1B graph through isolated local workers."""
     from tarca.execution.scheduler import LocalMultiProcessBackend, RunTerminalStatus
     from tarca.stage1b.compiler import (
-        compile_ready_manifest,
         compile_stage1b_graph,
         repository_v2_inputs,
     )
@@ -1196,10 +1216,13 @@ def run_scheduled_qualification(
             if not isinstance(result, dict):
                 raise RuntimeError("final Stage1B receipt artifact is invalid")
             return cast(dict[str, Any], result)
-        manifest = compile_ready_manifest(graph, completed)
-        if not manifest.tasks:
+        ready_task_ids = _enqueue_ready_tasks(graph, state, run_id)
+        if not ready_task_ids:
             raise RuntimeError("Stage1B task graph has no ready work before completion")
-        if len(manifest.tasks) == 1 and manifest.tasks[0].phase == "QUALIFICATION_RECEIPT":
+        if (
+            len(ready_task_ids) == 1
+            and node_by_id[ready_task_ids[0]].phase == "QUALIFICATION_RECEIPT"
+        ):
             _qualification_execution_evidence(
                 root,
                 resolved_artifact_root / "runtime",
@@ -1207,14 +1230,6 @@ def run_scheduled_qualification(
                 completed,
                 capacity,
             )
-        for task in manifest.tasks:
-            node = node_by_id[task.task_id]
-            state.enqueue_task(
-                run_id,
-                task,
-                node.executor_key,
-                dependency_task_ids=node.dependency_ids,
-            )
-        status = scheduler.run_until_terminal(run_id)
-        if status is not RunTerminalStatus.COMPLETED:
+        status = scheduler.run_until_terminal(run_id, maximum_wait_seconds=1.0)
+        if status is RunTerminalStatus.FAILED:
             raise RuntimeError(f"Stage1B scheduled execution stopped with {status.value}")
