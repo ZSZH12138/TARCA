@@ -49,6 +49,10 @@ class RuntimeArguments:
     authorize_over_24_hours: bool = False
 
 
+def _configure_cuda_determinism() -> None:
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Operate the TARCA Stage1B v2 server runtime.")
     parser.add_argument(
@@ -157,6 +161,7 @@ def _materialize_sources() -> dict[str, Any]:
 
 
 def run_preflight(arguments: RuntimeArguments) -> dict[str, Any]:
+    _configure_cuda_determinism()
     runtime_root = arguments.artifact_root / "runtime"
     environment = validate_server_environment(_expectation())
     sources = _materialize_sources()
@@ -240,6 +245,7 @@ def _apply_precision_policy(artifact_root: Path) -> None:
 
 
 def launch_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
+    _configure_cuda_determinism()
     database = arguments.artifact_root / "runtime/execution.sqlite3"
     if database.exists():
         raise RuntimeError("execution database already exists; use resume")
@@ -249,6 +255,7 @@ def launch_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
 
 
 def resume_runtime(arguments: RuntimeArguments) -> dict[str, Any]:
+    _configure_cuda_determinism()
     database = arguments.artifact_root / "runtime/execution.sqlite3"
     if not database.is_file():
         raise RuntimeError("execution database is required before resume")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import runpy
 import subprocess
 import sys
@@ -151,7 +152,11 @@ def test_preflight_benchmarks_with_the_selected_formal_training_policy(
         captured.update(kwargs)
         return {"decision": {"feasible": True}}
 
-    monkeypatch.setitem(runtime_globals, "validate_server_environment", lambda _value: object())
+    def validate_environment(_value: object) -> object:
+        captured["cublas_workspace_config"] = os.environ.get("CUBLAS_WORKSPACE_CONFIG")
+        return object()
+
+    monkeypatch.setitem(runtime_globals, "validate_server_environment", validate_environment)
     monkeypatch.setitem(runtime_globals, "_materialize_sources", lambda: {})
     monkeypatch.setitem(
         runtime_globals,
@@ -174,3 +179,4 @@ def test_preflight_benchmarks_with_the_selected_formal_training_policy(
     assert captured["device"] == "cuda"
     assert captured["precision"] == "AMP_FP16"
     assert captured["dataloader_workers"] == 3
+    assert captured["cublas_workspace_config"] == ":4096:8"
