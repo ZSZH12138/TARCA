@@ -160,14 +160,21 @@ def run_preflight(arguments: RuntimeArguments) -> dict[str, Any]:
     runtime_root = arguments.artifact_root / "runtime"
     environment = validate_server_environment(_expectation())
     sources = _materialize_sources()
+    fp32, amp = _precision_probes()
+    precision = select_precision(fp32, amp, maximum_allowed_error=0.1)
+    try:
+        dataloader_workers = int(os.environ.get("TARCA_STAGE1B_DATALOADER_WORKERS", "3"))
+    except ValueError as error:
+        raise ValueError("TARCA_STAGE1B_DATALOADER_WORKERS must be an integer") from error
     hardware = run_hardware_probe(
         REPOSITORY_ROOT / "configs/stage1b/worlds_v2.yaml",
         REPOSITORY_ROOT / "configs/stage1b/qualification_v2.yaml",
         runtime_root,
         authorized_over_24_hours=arguments.authorize_over_24_hours,
+        device=os.environ.get("TARCA_STAGE1B_DEVICE", "cuda"),
+        precision=precision.selected,
+        dataloader_workers=dataloader_workers,
     )
-    fp32, amp = _precision_probes()
-    precision = select_precision(fp32, amp, maximum_allowed_error=0.1)
     environment_hash = _atomic_json(
         runtime_root / "environment_receipt_v2.json",
         asdict(environment),

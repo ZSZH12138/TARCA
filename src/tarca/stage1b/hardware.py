@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import platform
 from dataclasses import dataclass
@@ -31,6 +32,9 @@ class HardwareGateDecision:
     memory_safety_fraction: float
     requires_24_hour_authorization: bool
     infeasible_over_120_hours: bool
+    parallel_work_slots: int
+    fixed_seconds: float
+    safety_factor: float
 
 
 def effective_cpu_counts() -> tuple[int, int]:
@@ -83,6 +87,9 @@ def estimate_full_run(
     maximum_hours: float = 120.0,
     memory_safety_fraction: float = 0.8,
     authorized_over_24_hours: bool = False,
+    parallel_work_slots: int = 1,
+    fixed_seconds: float = 0.0,
+    safety_factor: float = 1.0,
 ) -> HardwareGateDecision:
     if probe_seconds <= 0 or probe_work_units <= 0 or full_work_units <= 0:
         raise ValueError("hardware estimate work and time inputs must be positive")
@@ -90,7 +97,19 @@ def estimate_full_run(
         raise ValueError("hardware estimate memory inputs must be positive")
     if maximum_hours <= 0 or not 0 < memory_safety_fraction < 1:
         raise ValueError("hardware gate limits are invalid")
-    estimated_hours = probe_seconds * full_work_units / probe_work_units / 3600.0
+    if (
+        type(parallel_work_slots) is not int
+        or parallel_work_slots <= 0
+        or not math.isfinite(fixed_seconds)
+        or fixed_seconds < 0
+        or not math.isfinite(safety_factor)
+        or safety_factor <= 0
+    ):
+        raise ValueError("hardware projection controls are invalid")
+    projected_seconds = (
+        fixed_seconds + probe_seconds * full_work_units / probe_work_units / parallel_work_slots
+    ) * safety_factor
+    estimated_hours = projected_seconds / 3600.0
     requires_authorization = estimated_hours > 24.0 and not authorized_over_24_hours
     infeasible_over_120_hours = estimated_hours > 120.0
     failed: list[str] = []
@@ -110,4 +129,7 @@ def estimate_full_run(
         memory_safety_fraction=memory_safety_fraction,
         requires_24_hour_authorization=requires_authorization,
         infeasible_over_120_hours=infeasible_over_120_hours,
+        parallel_work_slots=parallel_work_slots,
+        fixed_seconds=fixed_seconds,
+        safety_factor=safety_factor,
     )

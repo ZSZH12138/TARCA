@@ -385,6 +385,12 @@ def test_tiny_v2_qualification_runs_without_formal_surface(tmp_path: Path) -> No
     probe = run_hardware_probe(worlds_path, qualification_path, artifact_root / "runtime")
     receipt = run_qualification(worlds_path, qualification_path, artifact_root)
     assert probe["decision"]["feasible"] is True
+    assert probe["probe_device"] == "cpu"
+    assert probe["parallel_work_slots"] == 1
+    assert probe["safety_factor"] == 1.25
+    assert len(probe["world_observations"]) == 2
+    assert len(probe["training_observations"]) == 4
+    assert all(observation["device"] == "cpu" for observation in probe["training_observations"])
     assert receipt["partition_names"] == ["QUAL_TRAIN", "QUAL_TUNE", "QUAL_SEEN", "QUAL_UNSEEN"]
     assert receipt["experiment_ids"] == []
     assert len(receipt["world_decisions"]) == 2

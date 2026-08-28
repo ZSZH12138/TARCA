@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tarca.execution.resources import PrecisionProbeResult
 from tarca.stage1b.config import load_world_suite
 from tarca.stage1b.sources import SourceAcquisitionMode, SourceMaterializationReceipt
 
@@ -136,3 +137,40 @@ def test_preflight_materializes_sources_from_the_offline_capsule_cache_only(
     assert result["source_mode"] == "offline-capsule"
     assert result["capsule_sha256"] == "b" * 64
     assert result["manifest_sha256"] == "c" * 64
+
+
+def test_preflight_benchmarks_with_the_selected_formal_training_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    namespace = runpy.run_path(str(SCRIPT), run_name="stage1b_runtime_probe_policy_test")
+    runtime_globals = namespace["run_preflight"].__globals__
+    captured: dict[str, object] = {}
+
+    def hardware_probe(*_args: object, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"decision": {"feasible": True}}
+
+    monkeypatch.setitem(runtime_globals, "validate_server_environment", lambda _value: object())
+    monkeypatch.setitem(runtime_globals, "_materialize_sources", lambda: {})
+    monkeypatch.setitem(
+        runtime_globals,
+        "_precision_probes",
+        lambda: (
+            PrecisionProbeResult("FP32", 1.0, 0.0),
+            PrecisionProbeResult("AMP_FP16", 2.0, 0.0),
+        ),
+    )
+    monkeypatch.setitem(runtime_globals, "run_hardware_probe", hardware_probe)
+    monkeypatch.setitem(runtime_globals, "asdict", lambda _value: {})
+    monkeypatch.setitem(runtime_globals, "_atomic_json", lambda _path, _value: "a" * 64)
+    monkeypatch.setenv("TARCA_STAGE1B_DEVICE", "cuda")
+    monkeypatch.setenv("TARCA_STAGE1B_DATALOADER_WORKERS", "3")
+
+    arguments = namespace["RuntimeArguments"]("preflight", tmp_path)
+    result = namespace["run_preflight"](arguments)
+
+    assert result["status"] == "PASS"
+    assert captured["device"] == "cuda"
+    assert captured["precision"] == "AMP_FP16"
+    assert captured["dataloader_workers"] == 3

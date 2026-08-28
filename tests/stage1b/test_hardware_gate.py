@@ -75,6 +75,44 @@ def test_hardware_gate_accepts_safe_runtime_and_memory() -> None:
     assert decision.failed_checks == ()
 
 
+def test_hardware_gate_accounts_for_parallel_slots_fixed_work_and_safety_margin() -> None:
+    decision = estimate_full_run(
+        probe_seconds=7200.0,
+        probe_work_units=1,
+        full_work_units=1,
+        projected_peak_memory_bytes=4 * 1024**3,
+        available_memory_bytes=16 * 1024**3,
+        parallel_work_slots=2,
+        fixed_seconds=3600.0,
+        safety_factor=1.25,
+    )
+
+    assert decision.estimated_hours == 2.5
+    assert decision.feasible
+
+
+@pytest.mark.parametrize(
+    ("parallel_work_slots", "fixed_seconds", "safety_factor"),
+    ((0, 0.0, 1.0), (1, -1.0, 1.0), (1, 0.0, 0.0)),
+)
+def test_hardware_gate_rejects_invalid_projection_controls(
+    parallel_work_slots: int,
+    fixed_seconds: float,
+    safety_factor: float,
+) -> None:
+    with pytest.raises(ValueError, match="projection controls"):
+        estimate_full_run(
+            probe_seconds=1.0,
+            probe_work_units=1,
+            full_work_units=1,
+            projected_peak_memory_bytes=1,
+            available_memory_bytes=2,
+            parallel_work_slots=parallel_work_slots,
+            fixed_seconds=fixed_seconds,
+            safety_factor=safety_factor,
+        )
+
+
 def test_hardware_gate_requires_authorization_between_24_and_120_hours() -> None:
     blocked = estimate_full_run(
         probe_seconds=36.0,
