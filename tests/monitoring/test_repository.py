@@ -134,6 +134,156 @@ def test_zero_progress_keeps_eta_calibrating(tmp_path: Path) -> None:
     assert snapshot.run.eta_status == "CALIBRATING"
 
 
+def test_run_eta_uses_phase_and_resource_history_for_unseen_tail_tasks(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "execution.sqlite3"
+    store = ExecutionStateStore(path, artifact_verifier=lambda _: True)
+    store.create_run("run-a", "graph-a")
+
+    gpu_request = ResourceRequest(
+        cpu_threads=2,
+        gpu_count=1,
+        gpu_memory_gib=8.0,
+        host_memory_gib=16.0,
+    )
+    cpu_request = ResourceRequest(
+        cpu_threads=2,
+        gpu_count=0,
+        gpu_memory_gib=0.0,
+        host_memory_gib=8.0,
+    )
+    train_request = ResourceRequest(
+        cpu_threads=4,
+        gpu_count=1,
+        gpu_memory_gib=20.0,
+        host_memory_gib=32.0,
+    )
+
+    def identity(task_id: str, model_id: str) -> ScientificIdentity:
+        return ScientificIdentity(
+            protocol_id="tarca-v1",
+            experiment_id="stage1b-v2",
+            task_id=task_id,
+            model_id=model_id,
+            data_id="world-a",
+            seed=104729,
+        )
+
+    plan = (
+        RunPlanNode(
+            identity=identity("freeze-history", "itransformer_reference"),
+            phase="MODEL_FREEZE_CHECK",
+            resource_request=gpu_request,
+            dependency_task_ids=(),
+        ),
+        RunPlanNode(
+            identity=identity("cpu-history", "model-none"),
+            phase="OFFICIAL_REPRODUCTION",
+            resource_request=cpu_request,
+            dependency_task_ids=(),
+        ),
+        RunPlanNode(
+            identity=identity("training", "itransformer_reference"),
+            phase="NEURAL_TRAIN",
+            resource_request=train_request,
+            dependency_task_ids=(),
+        ),
+        RunPlanNode(
+            identity=identity("freeze-pending", "patchtst_reference"),
+            phase="MODEL_FREEZE_CHECK",
+            resource_request=gpu_request,
+            dependency_task_ids=("training",),
+        ),
+        RunPlanNode(
+            identity=identity("receipt-pending", "model-none"),
+            phase="QUALIFICATION_RECEIPT",
+            resource_request=cpu_request,
+            dependency_task_ids=("freeze-pending",),
+        ),
+    )
+    store.register_run_plan("run-a", plan)
+
+    def start(node: RunPlanNode, allocation: ResourceAllocation) -> str:
+        task = TaskSpec(
+            identity=node.identity,
+            phase=node.phase,
+            inputs=(),
+            output_artifact_type="TEST_ARTIFACT",
+            resource_request=node.resource_request,
+        )
+        attempt_id = store.enqueue_task("run-a", task, "test.execute")
+        assert store.claim_attempt(attempt_id, allocation.worker_id, allocation) is not None
+        store.bind_running_process(
+            attempt_id,
+            allocation.worker_id,
+            987650 + len(attempt_id),
+            datetime(2026, 8, 26, 11, 59, 40, tzinfo=UTC),
+            now=datetime(2026, 8, 26, 11, 59, 40, tzinfo=UTC),
+        )
+        return attempt_id
+
+    freeze_attempt = start(
+        plan[0],
+        ResourceAllocation(
+            cpu_threads=2,
+            gpu_ids=(0,),
+            host_memory_gib_limit=16.0,
+            worker_id="freeze-worker",
+        ),
+    )
+    cpu_attempt = start(
+        plan[1],
+        ResourceAllocation(
+            cpu_threads=2,
+            gpu_ids=(),
+            host_memory_gib_limit=8.0,
+            worker_id="cpu-worker",
+        ),
+    )
+    training_attempt = start(
+        plan[2],
+        ResourceAllocation(
+            cpu_threads=4,
+            gpu_ids=(1,),
+            host_memory_gib_limit=32.0,
+            worker_id="training-worker",
+        ),
+    )
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE attempts SET state = 'COMPLETED', "
+            "process_started_at_utc = ?, updated_at_utc = ? WHERE attempt_id = ?",
+            (
+                "2026-08-26T11:59:30+00:00",
+                "2026-08-26T12:00:00+00:00",
+                freeze_attempt,
+            ),
+        )
+        connection.execute(
+            "UPDATE attempts SET state = 'COMPLETED', "
+            "process_started_at_utc = ?, updated_at_utc = ? WHERE attempt_id = ?",
+            (
+                "2026-08-26T11:59:40+00:00",
+                "2026-08-26T12:00:00+00:00",
+                cpu_attempt,
+            ),
+        )
+    store.record_progress(
+        training_attempt,
+        {"completed_steps": 20, "total_steps": 100},
+        now=SAMPLED_AT,
+    )
+
+    snapshot = MonitoringRepository(path, now=lambda: SAMPLED_AT).snapshot()
+    jobs = {job.task_id: job for job in snapshot.jobs}
+
+    assert jobs["freeze-pending"].eta_seconds == 30.0
+    assert jobs["receipt-pending"].eta_seconds == 20.0
+    assert snapshot.run.eta_status == "AVAILABLE"
+    assert snapshot.run.eta_seconds == 130.0
+
+
 def test_monitoring_connection_is_sqlite_read_only(monitoring_database: Path) -> None:
     with (
         open_readonly(monitoring_database) as connection,

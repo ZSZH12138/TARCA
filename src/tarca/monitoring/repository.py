@@ -3,17 +3,18 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
+from types import MappingProxyType
 from typing import Any, Literal, cast
 
 import psutil
 
-from tarca.execution.contracts import RunPlanNode
+from tarca.execution.contracts import ResourceRequest, RunPlanNode
 from tarca.monitoring.schemas import (
     AlertView,
     JobStatusView,
@@ -119,6 +120,25 @@ class _JobRecord:
     process_started_at_utc: datetime | None
     progress_recorded_at_utc: datetime | None
     updated_at_utc: datetime | None
+
+
+_ResourceHistoryKey = tuple[int, int, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class _DurationHistory:
+    exact: Mapping[tuple[str, str], float]
+    phase: Mapping[str, float]
+    resource: Mapping[_ResourceHistoryKey, float]
+
+
+def _resource_history_key(request: ResourceRequest) -> _ResourceHistoryKey:
+    return (
+        request.cpu_threads,
+        request.gpu_count,
+        request.gpu_memory_gib,
+        request.host_memory_gib,
+    )
 
 
 def _attempt_rows(connection: sqlite3.Connection, run_id: str) -> dict[str, sqlite3.Row]:
@@ -255,8 +275,10 @@ class MonitoringRepository:
         )
 
     @staticmethod
-    def _history(records: tuple[_JobRecord, ...]) -> dict[tuple[str, str], float]:
-        durations: dict[tuple[str, str], list[float]] = {}
+    def _history(records: tuple[_JobRecord, ...]) -> _DurationHistory:
+        exact_durations: dict[tuple[str, str], list[float]] = {}
+        phase_durations: dict[str, list[float]] = {}
+        resource_durations: dict[_ResourceHistoryKey, list[float]] = {}
         for record in records:
             if record.state != "COMPLETED":
                 continue
@@ -267,12 +289,29 @@ class MonitoringRepository:
             duration = (finished - started).total_seconds()
             if not math.isfinite(duration) or duration < 0:
                 continue
-            key = (record.node.phase, record.node.identity.model_id)
-            durations[key] = [*durations.get(key, []), duration]
-        return {key: float(median(values)) for key, values in durations.items()}
+            exact_key = (record.node.phase, record.node.identity.model_id)
+            phase_key = record.node.phase
+            resource_key = _resource_history_key(record.node.resource_request)
+            exact_durations[exact_key] = [*exact_durations.get(exact_key, []), duration]
+            phase_durations[phase_key] = [*phase_durations.get(phase_key, []), duration]
+            resource_durations[resource_key] = [
+                *resource_durations.get(resource_key, []),
+                duration,
+            ]
+        return _DurationHistory(
+            exact=MappingProxyType(
+                {key: float(median(values)) for key, values in exact_durations.items()}
+            ),
+            phase=MappingProxyType(
+                {key: float(median(values)) for key, values in phase_durations.items()}
+            ),
+            resource=MappingProxyType(
+                {key: float(median(values)) for key, values in resource_durations.items()}
+            ),
+        )
 
     @staticmethod
-    def _job_view(record: _JobRecord, history: dict[tuple[str, str], float]) -> JobStatusView:
+    def _job_view(record: _JobRecord, history: _DurationHistory) -> JobStatusView:
         request = record.node.resource_request
         gpu_ids = tuple(
             int(item)
@@ -281,7 +320,12 @@ class MonitoringRepository:
         )
         eta = _remaining_seconds(record)
         if record.state in {"PENDING", "READY"}:
-            eta = history.get((record.node.phase, record.node.identity.model_id))
+            candidates = (
+                history.exact.get((record.node.phase, record.node.identity.model_id)),
+                history.phase.get(record.node.phase),
+                history.resource.get(_resource_history_key(request)),
+            )
+            eta = next((candidate for candidate in candidates if candidate is not None), None)
         return JobStatusView(
             task_id=record.node.task_id,
             phase=record.node.phase,
