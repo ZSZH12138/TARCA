@@ -11,6 +11,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 from tarca.stage1b.freeze import (  # noqa: E402
     OverrideAuthorization,
     freeze_suite,
+    verify_frozen_suite,
 )
 from tarca.stage1b.runner import (  # noqa: E402
     run_hardware_probe,
@@ -57,9 +58,7 @@ def _parser() -> argparse.ArgumentParser:
         default=REPOSITORY_ROOT / "artifacts/stage1b",
     )
     freeze.add_argument("--series", default="v2", choices=("v2",))
-    freeze.add_argument("--revision-id", default="v2-r1")
     freeze.add_argument("--authorize-override", action="store_true")
-    freeze.add_argument("--prior-revision-id")
     freeze.add_argument("--authorization-reason")
     return parser
 
@@ -92,20 +91,18 @@ def main() -> int:
             receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
             authorization = None
             if args.authorize_override:
-                if not args.prior_revision_id or not args.authorization_reason:
-                    raise ValueError(
-                        "authorized override requires prior revision and authorization reason"
-                    )
+                if not args.authorization_reason:
+                    raise ValueError("authorized override requires an authorization reason")
+                active = verify_frozen_suite(args.artifact_root)
                 authorization = OverrideAuthorization(
                     authorized_by="user",
                     reason=args.authorization_reason,
-                    prior_revision_id=args.prior_revision_id,
+                    prior_manifest_sha256=active["manifest_sha256"],
                 )
             result = freeze_suite(
                 receipt,
                 args.artifact_root,
                 series=args.series,
-                revision_id=args.revision_id,
                 authorization=authorization,
             )
     except Exception as exc:

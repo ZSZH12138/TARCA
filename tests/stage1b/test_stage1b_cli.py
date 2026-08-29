@@ -24,6 +24,28 @@ def test_qualification_cli_exposes_only_probe_qualify_and_freeze_commands() -> N
     assert "E02" not in completed.stdout
 
 
+def test_freeze_cli_uses_single_v2_without_revision_arguments() -> None:
+    completed = subprocess.run(
+        [sys.executable, "scripts/run_stage1b_qualification.py", "freeze", "--help"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    check_completed = subprocess.run(
+        [sys.executable, "scripts/check_stage1b.py", "--help"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--authorize-override" in completed.stdout
+    assert "--authorization-reason" in completed.stdout
+    assert "revision" not in completed.stdout.lower()
+    assert "revision" not in check_completed.stdout.lower()
+
+
 def test_check_cli_truthfully_allows_unfrozen_state() -> None:
     completed = subprocess.run(
         [sys.executable, "scripts/check_stage1b.py", "--allow-unfrozen", "--json"],

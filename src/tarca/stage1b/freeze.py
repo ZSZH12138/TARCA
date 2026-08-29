@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Self
@@ -47,12 +49,13 @@ class QualificationEvidence(FrozenModel):
 class OverrideAuthorization:
     authorized_by: str
     reason: str
-    prior_revision_id: str
+    prior_manifest_sha256: str
 
     def __post_init__(self) -> None:
         if not self.authorized_by.strip() or not self.reason.strip():
             raise ValueError("override authorization identity and reason must not be blank")
-        _parse_revision_id(self.prior_revision_id, "v2")
+        if re.fullmatch(r"[0-9a-f]{64}", self.prior_manifest_sha256) is None:
+            raise ValueError("prior manifest hash must be a lowercase SHA-256")
 
 
 def _sha256(payload: bytes) -> str:
@@ -76,16 +79,8 @@ def _mapping(value: object, label: str) -> dict[str, Any]:
     return value
 
 
-def _parse_revision_id(revision_id: str, series: str) -> int:
-    match = re.fullmatch(rf"{re.escape(series)}-r([1-9][0-9]*)", revision_id)
-    if match is None:
-        raise ValueError(f"revision ID must use {series}-rN format")
-    return int(match.group(1))
-
-
-def revision_root(artifact_root: Path, revision_id: str) -> Path:
-    revision_number = _parse_revision_id(revision_id, "v2")
-    return artifact_root.resolve() / "versions" / "v2" / "revisions" / f"r{revision_number}"
+def freeze_root(artifact_root: Path) -> Path:
+    return artifact_root.resolve() / "frozen" / "v2"
 
 
 def _integer_seed_set(value: object, label: str, *, allow_empty: bool) -> set[int]:
@@ -173,42 +168,64 @@ def load_active_pointer(artifact_root: Path) -> dict[str, Any]:
     return _mapping(json.loads(active_path.read_text(encoding="utf-8")), "active pointer")
 
 
+def _remove_internal_tree(path: Path) -> None:
+    if not path.exists():
+        return
+    for child in path.rglob("*"):
+        if child.is_file():
+            child.chmod(0o644)
+    path.chmod(0o755)
+    shutil.rmtree(path)
+
+
+def _publish_freeze_directory(
+    staging_root: Path,
+    selected_root: Path,
+    active_path: Path,
+    active: dict[str, Any],
+) -> None:
+    backup_root = selected_root.with_name(f".{selected_root.name}.{uuid.uuid4().hex}.backup")
+    had_prior = selected_root.exists()
+    if had_prior:
+        os.replace(selected_root, backup_root)
+    try:
+        os.replace(staging_root, selected_root)
+        _write_json(active_path, active, replace=True)
+    except Exception:
+        _remove_internal_tree(selected_root)
+        if had_prior and backup_root.exists():
+            os.replace(backup_root, selected_root)
+        raise
+    else:
+        _remove_internal_tree(backup_root)
+
+
 def freeze_suite(
     receipt: dict[str, Any],
     artifact_root: Path,
     *,
     series: str = "v2",
-    revision_id: str = "v2-r1",
     authorization: OverrideAuthorization | None = None,
 ) -> dict[str, Any]:
     if series != "v2":
         raise FreezeRejected("the active scientific series is fixed to v2")
-    try:
-        revision_number = _parse_revision_id(revision_id, series)
-    except ValueError as error:
-        raise FreezeRejected(str(error)) from error
     evidence = _validate_receipt(receipt)
     root = artifact_root.resolve()
-    selected_revision_root = revision_root(root, revision_id)
-    if selected_revision_root.exists():
-        raise FreezeRejected("frozen revisions are immutable and cannot be overwritten")
+    selected_root = freeze_root(root)
     active_path = root / "active.json"
     prior_pointer = load_active_pointer(root) if active_path.is_file() else None
     if prior_pointer is not None:
+        verified = verify_frozen_suite(root)
         if authorization is None:
-            raise FreezeRejected("moving the active pointer requires user authorization")
-        prior_revision = str(prior_pointer.get("revision_id", ""))
-        if authorization.prior_revision_id != prior_revision:
-            raise FreezeRejected("authorization prior revision does not match the active pointer")
+            raise FreezeRejected("replacing frozen v2 requires user authorization")
+        if authorization.prior_manifest_sha256 != verified["manifest_sha256"]:
+            raise FreezeRejected("authorization prior manifest does not match the active pointer")
         if prior_pointer.get("series") != series:
             raise FreezeRejected("authorization cannot change the active scientific series")
-        prior_number = _parse_revision_id(prior_revision, series)
-        if revision_number != prior_number + 1:
-            raise FreezeRejected("authorized override must create the next v2 revision")
     elif authorization is not None:
         raise FreezeRejected("initial freeze must not claim an override authorization")
-    elif revision_number != 1:
-        raise FreezeRejected("initial v2 freeze must create revision v2-r1")
+    elif selected_root.exists():
+        raise FreezeRejected("frozen v2 exists without an active pointer")
 
     receipt_payload = canonical_json_bytes(receipt) + b"\n"
     selected_models = {
@@ -220,7 +237,6 @@ def freeze_suite(
     manifest: dict[str, Any] = {
         "schema_version": "2.0.0",
         "series": series,
-        "revision_id": revision_id,
         "qualification_id": receipt.get("qualification_id"),
         "suite_id": receipt.get("suite_id"),
         "suite_gate_status": "PASS",
@@ -233,24 +249,33 @@ def freeze_suite(
         "selected_models": selected_models,
         "override_authorization": asdict(authorization) if authorization is not None else None,
     }
-    receipt_path = selected_revision_root / "qualification_receipt.json"
-    written_receipt = _write_json(receipt_path, receipt, replace=False)
-    if _sha256(written_receipt) != manifest["receipt_sha256"]:
-        raise FreezeRejected("qualification receipt changed while freezing")
-    manifest_path = selected_revision_root / "manifest.json"
-    manifest_payload = _write_json(manifest_path, manifest, replace=False)
-    manifest_hash = _sha256(manifest_payload)
-    hash_path = selected_revision_root / "manifest.sha256"
-    hash_path.write_text(f"{manifest_hash}\n", encoding="ascii")
-    for frozen_path in (receipt_path, manifest_path, hash_path):
-        frozen_path.chmod(0o444)
-    active = {
-        "schema_version": "2.0.0",
-        "series": series,
-        "revision_id": revision_id,
-        "manifest_sha256": manifest_hash,
-    }
-    _write_json(active_path, active, replace=True)
+    selected_root.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = selected_root.with_name(f".{selected_root.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        receipt_path = staging_root / "qualification_receipt.json"
+        written_receipt = _write_json(receipt_path, receipt, replace=False)
+        if _sha256(written_receipt) != manifest["receipt_sha256"]:
+            raise FreezeRejected("qualification receipt changed while freezing")
+        manifest_path = staging_root / "manifest.json"
+        manifest_payload = _write_json(manifest_path, manifest, replace=False)
+        manifest_hash = _sha256(manifest_payload)
+        hash_path = staging_root / "manifest.sha256"
+        hash_path.write_text(f"{manifest_hash}\n", encoding="ascii")
+        if _sha256(manifest_path.read_bytes()) != hash_path.read_text(
+            encoding="ascii"
+        ).strip():
+            raise FreezeRejected("staged manifest hash does not match")
+        for frozen_path in (receipt_path, manifest_path, hash_path):
+            frozen_path.chmod(0o444)
+        active = {
+            "schema_version": "2.0.0",
+            "series": series,
+            "manifest_sha256": manifest_hash,
+        }
+        _publish_freeze_directory(staging_root, selected_root, active_path, active)
+    except Exception:
+        _remove_internal_tree(staging_root)
+        raise
     return manifest
 
 
@@ -258,24 +283,21 @@ def verify_frozen_suite(
     artifact_root: Path,
     *,
     series: str | None = None,
-    revision_id: str | None = None,
     allow_unfrozen: bool = False,
 ) -> dict[str, Any]:
     root = artifact_root.resolve()
     active_path = root / "active.json"
     if not active_path.is_file():
         if allow_unfrozen:
-            return {"status": "UNFROZEN", "active_revision_id": None}
+            return {"status": "UNFROZEN", "active_series": None}
         raise FreezeRejected("Stage1B is not frozen")
     active = load_active_pointer(root)
     selected_series = series or str(active.get("series", ""))
-    selected_revision = revision_id or str(active.get("revision_id", ""))
     if selected_series != "v2":
         raise FreezeRejected("active scientific series is invalid")
-    try:
-        selected_root = revision_root(root, selected_revision)
-    except ValueError as error:
-        raise FreezeRejected(str(error)) from error
+    if active.get("series") != selected_series:
+        raise FreezeRejected("active pointer scientific series does not match")
+    selected_root = freeze_root(root)
     manifest_path = selected_root / "manifest.json"
     receipt_path = selected_root / "qualification_receipt.json"
     hash_path = selected_root / "manifest.sha256"
@@ -286,22 +308,18 @@ def verify_frozen_suite(
     actual_hash = _sha256(manifest_payload)
     if actual_hash != expected_hash:
         raise FreezeRejected("frozen manifest hash does not match")
-    is_active = selected_revision == active.get("revision_id")
-    if is_active and active.get("manifest_sha256") != actual_hash:
+    if active.get("manifest_sha256") != actual_hash:
         raise FreezeRejected("active pointer manifest hash does not match")
     manifest = _mapping(json.loads(manifest_payload), "frozen manifest")
     if (
         manifest.get("suite_gate_status") != "PASS"
         or manifest.get("series") != selected_series
-        or manifest.get("revision_id") != selected_revision
     ):
-        raise FreezeRejected("frozen manifest gate or revision is invalid")
+        raise FreezeRejected("frozen manifest gate or series is invalid")
     if _sha256(receipt_path.read_bytes()) != manifest.get("receipt_sha256"):
         raise FreezeRejected("frozen qualification receipt hash does not match")
     return {
         "status": "PASS",
         "active_series": active.get("series"),
-        "active_revision_id": active.get("revision_id"),
-        "verified_revision_id": selected_revision,
         "manifest_sha256": actual_hash,
     }
