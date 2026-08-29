@@ -203,4 +203,3 @@ def _dataset_from_payload(payload: dict[str, Any]) -> QualificationDataset:
         history_length=int(payload["history_length"]),
         horizon=int(payload["horizon"]),
     )
-

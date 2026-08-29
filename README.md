@@ -147,6 +147,7 @@ Windows：
 
 ```powershell
 D:\software\MyAnaconda\Scripts\conda.exe run -n tarca-local-py311 python -m uv sync --frozen --extra research --group dev
+D:\software\MyAnaconda\Scripts\conda.exe run -n tarca-local-py311 python -m uv pip install --python .venv\Scripts\python.exe --require-hashes -r deploy/stage1b/requirements-test.lock
 .\.venv\Scripts\python.exe scripts/doctor.py
 .\.venv\Scripts\python.exe scripts/run_reference_smoke.py --network
 .\.venv\Scripts\python.exe -m pytest
@@ -159,6 +160,7 @@ Linux 或服务器：
 
 ```bash
 python -m uv sync --frozen --extra research --group dev
+python -m uv pip install --python .venv/bin/python --require-hashes -r deploy/stage1b/requirements-test.lock
 .venv/bin/python scripts/doctor.py
 .venv/bin/python scripts/run_reference_smoke.py --network
 .venv/bin/python -m pytest

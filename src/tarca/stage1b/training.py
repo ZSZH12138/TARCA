@@ -455,4 +455,3 @@ def train_candidate(
         torch.use_deterministic_algorithms(previous_determinism)
         torch.backends.cudnn.benchmark = previous_benchmark
         torch.backends.cudnn.deterministic = previous_cudnn_deterministic
-

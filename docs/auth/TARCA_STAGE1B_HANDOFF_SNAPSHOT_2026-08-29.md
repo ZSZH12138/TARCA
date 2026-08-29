@@ -135,8 +135,23 @@ artifacts/stage1b/source-capsules/stage1b-v2-official-sources.tar.gz.receipt.jso
 third_party/stage1b/
 ```
 
-本次白名单清理的精确文件数与字节数将在清理完成后回填到本节，清理不会触碰 Stage0、
-Stage1A、最终压缩包、来源胶囊、官方来源缓存或用户已有的未跟踪 Stage0 快照。
+本次白名单清理共删除 53,697 个文件、6,462,267,436 bytes。清理没有触碰 Stage0、
+Stage1A、最终压缩包、来源胶囊、官方来源缓存或用户已有的未跟踪 Stage0 快照。以下 6 个旧测试
+临时目录因 Windows ACL 对当前用户和所有者变更都返回 `Access denied`，无法安全检查或删除：
+
+```text
+artifacts/test-tmp-freeze/
+artifacts/test-tmp-freeze-2/
+artifacts/test-tmp-full/
+artifacts/test-tmp-full-pass/
+artifacts/test-tmp-runner/
+artifacts/test-tmp-source-audit-2/
+```
+
+这些目录被 Git 忽略，不属于冻结证据，也不会进入 GitHub；后续只能由拥有相应 Windows 管理
+权限的用户删除。为保持 Stage0 环境身份不变，`pyproject.toml` 和 `uv.lock` 已恢复为 Stage0
+冻结哈希；Stage1B 新增的服务器与测试依赖分别由
+`deploy/stage1b/requirements-server.lock` 和 `deploy/stage1b/requirements-test.lock` 独立锁定。
 
 ## 7. 已知限制与风险
 
@@ -151,6 +166,8 @@ Stage1A、最终压缩包、来源胶囊、官方来源缓存或用户已有的�
   未重验精度身份时直接更改正式训练行为；
 - 正式服务器仍以 `pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04` 和服务器锁文件为准；
   本地 Python 3.11 环境只用于代码、文档和冻结验证。
+- 六个旧测试临时目录受 Windows ACL 阻断，只能由具备相应管理权限的用户删除；它们已被 Git
+  忽略，不影响 Stage1B 冻结检查或远端上传边界。
 
 ## 8. 中断、恢复与核验
 

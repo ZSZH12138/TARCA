@@ -294,7 +294,7 @@ def verify_frozen_suite(
     receipt_path = selected_root / "qualification_receipt.json"
     hash_path = selected_root / "manifest.sha256"
     if not manifest_path.is_file() or not receipt_path.is_file() or not hash_path.is_file():
-        raise FreezeRejected("frozen revision files are missing")
+        raise FreezeRejected("frozen v2 files are missing")
     manifest_payload = manifest_path.read_bytes()
     expected_hash = hash_path.read_text(encoding="ascii").strip()
     actual_hash = sha256_bytes(manifest_payload)

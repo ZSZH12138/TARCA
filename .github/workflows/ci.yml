@@ -21,11 +21,13 @@ jobs:
           python-version: "3.11"
       - name: Restore frozen environment
         run: uv sync --frozen --extra research --group dev
+      - name: Restore Stage1B runtime and test add-on
+        run: uv pip install --python .venv/bin/python --require-hashes -r deploy/stage1b/requirements-test.lock
       - name: Lint
-        run: uv run --frozen ruff check .
+        run: uv run --frozen --no-sync ruff check .
       - name: Type check
-        run: uv run --frozen mypy
+        run: uv run --frozen --no-sync mypy
       - name: Test with coverage
-        run: uv run --frozen pytest --cov=tarca --cov-report=term-missing --cov-report=xml
+        run: uv run --frozen --no-sync pytest --cov=tarca --cov-report=term-missing --cov-report=xml
       - name: Stage 0 offline gate
-        run: uv run --frozen python scripts/check_stage0.py --json
+        run: uv run --frozen --no-sync python scripts/check_stage0.py --json
