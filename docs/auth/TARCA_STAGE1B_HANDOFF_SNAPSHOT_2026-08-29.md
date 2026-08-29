@@ -135,7 +135,7 @@ artifacts/stage1b/source-capsules/stage1b-v2-official-sources.tar.gz.receipt.jso
 third_party/stage1b/
 ```
 
-本次白名单清理共删除 53,697 个文件、6,462,267,436 bytes。清理没有触碰 Stage0、
+本次白名单清理共删除 60,700 个文件、6,723,538,978 bytes。清理没有触碰 Stage0、
 Stage1A、最终压缩包、来源胶囊、官方来源缓存或用户已有的未跟踪 Stage0 快照。以下 6 个旧测试
 临时目录因 Windows ACL 对当前用户和所有者变更都返回 `Access denied`，无法安全检查或删除：
 
