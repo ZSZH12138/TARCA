@@ -24,9 +24,20 @@ Thumbs.db
 /data/
 checkpoints/
 /third_party/stage1b/
-artifacts/stage1b/source-capsules/
 artifacts/**/runtime/
 /artifacts/test-tmp-*/
+
+# Stage1B 默认全部留在本地，只发布活动指针和唯一 v2 的小型冻结证据。
+/artifacts/stage1b/**
+!/artifacts/stage1b/
+!/artifacts/stage1b/active.json
+!/artifacts/stage1b/frozen/
+/artifacts/stage1b/frozen/**
+!/artifacts/stage1b/frozen/v2/
+/artifacts/stage1b/frozen/v2/**
+!/artifacts/stage1b/frozen/v2/qualification_receipt.json
+!/artifacts/stage1b/frozen/v2/manifest.json
+!/artifacts/stage1b/frozen/v2/manifest.sha256
 
 # Stage 0 的小型合同和 Gate artifact 应保留。
 !artifacts/stage0/

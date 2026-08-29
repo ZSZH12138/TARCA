@@ -1,17 +1,18 @@
 # Stage1B 世界资格规范 v2
 
-> 状态：`PILOT_FAILED_CONFIRMATION_PENDING`
+> 状态：`FROZEN_V2`
 > 构建日期：2026-08-25
 > 协议身份：`TARCA-E2E-STAGE-PROTOCOL-2.0`
-> 边界：v2 首次完整资格已完成并作为 pilot 失败证据保留；v2-r2 双尺度短期确认尚未执行，E01/E02 未执行，未冻结。
+> 完成日期：2026-08-29
+> 边界：v2 首次完整资格作为 pilot 失败证据保留；双尺度短期独立确认已通过并冻结为唯一活动 v2；E01/E02 未执行。
 
 ```text
-Implementation status: PILOT_FAILED_CONFIRMATION_PENDING
+Implementation status: FROZEN_V2
 Active scientific series: v2
 Freeze default: immutable after qualification
-Authorized override: next immutable v2 revision + active pointer
-Executed: full Stage1B pilot qualification (74/74 tasks), unit/integration/E2E/probes
-Not executed: v2-r2 blind confirmation, E01, E02
+Authorized override: exact prior-manifest hash + atomic replacement, still named v2
+Executed: full Stage1B pilot, independent short-horizon confirmation, freeze, unit/integration/E2E/probes
+Not executed: E01, E02
 ```
 
 ## 1. 功能目标
@@ -163,9 +164,9 @@ seed、regime 和配置哈希。
 护栏仍使该世界失败。单尺度世界未表现出跨时距优势。完整运行被保留，但不能直接作为确认
 结论或活动冻结版本。
 
-### 7.2 v2-r2 盲确认
+### 7.2 双尺度短期独立确认
 
-依据 `docs/auth/TARCA_PROTOCOL_CHANGE_CONTROL_CCP_0002.md`，确认只运行
+依据 `docs/auth/TARCA_PROTOCOL_CHANGE_CONTROL_CCP_0002.md`，本次确认只运行
 `lorenz96_twoscale_v2 + ITransformerReference + tuned VAR`。h1–6 是主要门禁；h7–12
 只报告次要趋势；h13–24 只报告已知能力边界。新种子为 `1649910005`、`2058661680`、
 `723243092`，必须重新生成轨迹、训练和预测。校准护栏为名义 90% 区间平均绝对覆盖误差
@@ -187,24 +188,28 @@ seed、regime 和配置哈希。
 失败单元必须保留。套件至少需要一个独立主世界家族通过；另一个主世界失败会被完整报告，
 但不会自动否决已存在的有效主世界。
 
+确认运行已经按新种子重新生成、重新训练和重新预测：h1–6 为 72/72 胜，CRPS skill
++13.5274%，seen/unseen 胜率均为 100%，平均绝对校准误差 0.01101、最大 0.03015，
+paired bootstrap 95% CI 为 [0.05267, 0.05525]。世界与套件门禁均为 `PASS`。
+h7–12 胜率 84.7222%、skill +1.8070%，仅作次要诊断；h13–24 胜率 34.7222%、skill
+-1.0366%，作为预先声明的能力边界。
+
 ## 8. 构建、资格与冻结状态
 
 ```text
-BUILT_NOT_QUALIFIED
+BUILT_NOT_QUALIFIED（历史）
 → 硬件探针通过
-→ 完整 Stage1B 资格一次性运行
+→ 首次完整 pilot 与独立确认
 → WQ-01～13 自动决策
 → 用户审阅
-→ FROZEN v2
+→ FROZEN_V2（当前）
 ```
 
-当前首次完整运行已失败并保存，v2-r2 盲确认尚未执行。不得把 pilot 的短期结果或通过单元
-测试写成确认通过。
-
-完整资格通过后，首次冻结写入 `versions/v2/revisions/r1/`。正常情况下，修订目录和其中
-的完整资格收据不可修改。用户可以授权修改或覆盖，但必须在同一个 v2 科学系列中创建下一
-个不可变修订（例如 `v2-r2`），记录授权人、原因和前一修订，并更新 `active.json` 指针；
-旧修订始终保留。失败或不完整运行不会被冻结，也不会登记成历史活动版本。
+当前独立确认已通过并冻结。唯一活动目录为 `artifacts/stage1b/frozen/v2/`，活动指针为
+`artifacts/stage1b/active.json`。正常情况下完整资格收据和 manifest 不可修改。用户可以授权
+修改或覆盖，但必须记录授权人、原因和当前 manifest 的精确 SHA-256，并在验证新旧内容后
+原子替换；活动身份仍为 `v2`，不创建递增修订。失败或不完整运行不会被冻结，也不会登记成
+历史活动版本。具体规则以 `docs/auth/TARCA_PROTOCOL_CHANGE_CONTROL_CCP_0003.md` 为准。
 
 冻结前会验证：官方来源、官方复现、服务器环境、精度策略、硬件探针、运行图、完整
 `TaskManifest`、`ExecutionPlan` 和全部任务计数。全部比较行与失败行保存在修订内的完整
@@ -215,12 +220,14 @@ BUILT_NOT_QUALIFIED
 
 - 世界配置：`configs/stage1b/worlds_v2.yaml`
 - 资格配置：`configs/stage1b/qualification_v2.yaml`
-- v2-r2 确认配置：`configs/stage1b/qualification_v2_confirmation_r2.yaml`
-- v2-r2 确认设计：`docs/superpowers/specs/2026-08-29-stage1b-v2-confirmation-design.md`
-- v2-r2 实施计划：`docs/superpowers/plans/2026-08-29-stage1b-v2-confirmation.md`
+- 当前冻结：`artifacts/stage1b/frozen/v2/`
+- 确认运行的历史配置：`configs/stage1b/qualification_v2_confirmation_r2.yaml`
+- 确认运行设计（历史命名已被 CCP-0003 取代）：`docs/superpowers/specs/2026-08-29-stage1b-v2-confirmation-design.md`
+- 确认运行计划（历史命名已被 CCP-0003 取代）：`docs/superpowers/plans/2026-08-29-stage1b-v2-confirmation.md`
 - 来源清单：`third_party_manifest/stage1b_sources_v2.yaml`
 - 构建设计：`docs/superpowers/specs/2026-08-25-stage1b-v2-design.md`
 - 实施计划：`docs/superpowers/plans/2026-08-25-stage1b-v2-implementation.md`
 - 服务器运行入口：`scripts/run_stage1b_runtime.py`
 - 只读监控前端：`frontend/stage1b-monitor/`
 - 历史失败快照：`docs/research/stage1b_world_qualification_report_v1.md`
+- 当前权威交接：`docs/auth/TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md`

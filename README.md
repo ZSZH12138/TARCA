@@ -27,8 +27,8 @@ TARCA 的计划研究链路为：
 
 ## 仓库范围
 
-本仓库保留 Stage 0 研究合同、Stage 1A 的统一数据/接口/制品边界，以及已构建但尚未执行
-完整资格的 Stage1B v2 官方运行时：
+本仓库保留 Stage 0 研究合同、Stage 1A 的统一数据/接口/制品边界，以及已经完成资格并冻结
+的 Stage1B v2 官方运行时：
 
 ```text
 artifacts/stage0/       结构化研究合同、环境、Gate 与完成凭证
@@ -38,7 +38,7 @@ src/tarca/contracts/    严格、冻结的公共契约
 src/tarca/artifacts/    Stage 1A 类型化原子制品仓库与冻结目录
 src/tarca/data/         registry 驱动的既有物理窗口读取边界
 src/tarca/stage0/       Stage 0 冻结与核验逻辑
-src/tarca/stage1b/      官方世界、生成器真值、模型适配、资格 Gate 与冻结修订
+src/tarca/stage1b/      官方世界、生成器真值、模型适配、资格 Gate 与单一 v2 冻结
 src/tarca/execution/    不可变任务、双 GPU 调度、恢复和资源遥测
 src/tarca/monitoring/   只读监控 API
 frontend/stage1b-monitor/ Stage1B 中文运行监控前端
@@ -49,10 +49,11 @@ tests/stage1a/          Stage 1A 高风险边界和最小闭环验证
 third_party_manifest/   第三方论文、仓库、版本和许可证边界
 ```
 
-Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage1B v2 的实现与服务器运行时
-已经存在，但当前状态严格是 `BUILT_NOT_QUALIFIED`：未运行完整 Stage1B、未运行 E01/E02、
-未冻结。Stage 1A 范围见 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)，Stage1B 交接见
-[`stage1b_v2_official_runtime_build_report.md`](docs/research/stage1b_v2_official_runtime_build_report.md)。
+Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage1B 当前状态为 `FROZEN_V2`：
+`lorenz96_twoscale_v2 + ITransformerReference` 已在独立确认种子上通过 h1–6 资格门禁，并以
+内容哈希绑定为唯一活动 `v2`；E01/E02 仍未运行。Stage 1A 范围见
+[`docs/stage1a_scope.md`](docs/stage1a_scope.md)，Stage1B 当前权威交接见
+[`TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md`](docs/auth/TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md)。
 
 ## Stage1B v2 服务器入口
 
@@ -76,7 +77,7 @@ GitHub 的可用性、TLS 差异或仓库状态不会影响正式运行。
 export PYTHONPATH="$PWD/deploy/stage1b/py310:$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 export TARCA_STAGE1B_SOURCE_MODE=offline-capsule
 export TARCA_STAGE1B_SOURCE_CACHE_ROOT="${TARCA_STAGE1B_SOURCE_CACHE_ROOT:-$PWD/third_party/stage1b}"
-export TARCA_STAGE1B_ARTIFACT_ROOT="${TARCA_STAGE1B_ARTIFACT_ROOT:-$PWD/artifacts/stage1b/confirmation-r2}"
+export TARCA_STAGE1B_ARTIFACT_ROOT="${TARCA_STAGE1B_ARTIFACT_ROOT:-$PWD/artifacts/stage1b/runtime}"
 export TARCA_STAGE1B_QUALIFICATION_CONFIG="${TARCA_STAGE1B_QUALIFICATION_CONFIG:-$PWD/configs/stage1b/qualification_v2_confirmation_r2.yaml}"
 export TARCA_STAGE1B_DATABASE="${TARCA_STAGE1B_DATABASE:-$TARCA_STAGE1B_ARTIFACT_ROOT/runtime/execution.sqlite3}"
 export TARCA_STAGE1B_STATIC_ROOT="${TARCA_STAGE1B_STATIC_ROOT:-$PWD/frontend/stage1b-monitor/dist}"
@@ -107,7 +108,8 @@ docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm stage1b prefli
 docker compose -f deploy/stage1b/compose.stage1b-v2.yaml run --rm --service-ports stage1b launch
 ```
 
-当前 Compose 默认启动 v2-r2 双尺度短期盲确认，并把它与旧的 74 节点 pilot 放在不同目录。
+当前 Compose 默认运行双尺度短期资格配置；其原始确认配置文件名作为实验来源标识保留，
+不构成活动版本号。调度器会把运行目录与已经冻结的 `artifacts/stage1b/frozen/v2` 分开。
 调度器每轮都扣除正在运行任务已经占用的 CPU、内存和 GPU；20 GiB 神经任务默认每张满足
 准入条件的 GPU 只运行一个，数据任务按探针允许的核数运行，
 资源释放后再补位。SQLite 状态、已验证制品和 checkpoint 保存在命名卷中，断电或人为中断后
@@ -121,9 +123,10 @@ ssh -L 8765:127.0.0.1:8765 <user>@<server>
 
 正式运行每 2 秒采集一次主机、进程和 NVML 数据。页面把 10 秒内样本显示为“数据正常”，
 旧样本显示为“数据过期”，没有真实样本显示为“遥测不可用”；缺失值不会伪装成 0。训练
-任务 ETA 使用真实开始时间和 `completed_steps / total_steps`，证据不足时显示“校准中”。只有
-v2-r2 确认 Gate 通过并审阅后，才冻结为 `v2-r2`；用户授权覆盖会创建下一不可变 v2 修订，
-不会覆盖已有修订。完整硬件合同、恢复、状态查询和冻结命令见上述交接报告。
+任务 ETA 使用真实开始时间和 `completed_steps / total_steps`，证据不足时显示“校准中”。
+Stage1B 已冻结为唯一 `v2`；正常情况下禁止覆盖，用户明确授权时必须绑定当前 manifest 哈希
+进行原子替换，活动名称仍为 `v2`。完整结果与边界见权威交接快照，硬件合同、恢复和状态
+查询见服务器 runbook。
 
 ## 权威文档
 

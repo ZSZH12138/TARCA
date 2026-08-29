@@ -1,10 +1,14 @@
 # Stage1B v2 官方运行时构建与服务器交接报告
 
-> 构建状态：`BUILT_NOT_QUALIFIED`
+> 当前状态：`FROZEN_V2`
 > 活动科学系列：`v2`
 > 报告日期：2026-08-27
+> 完成更新：2026-08-29
 > 当前分支：`codex/stage1b-runtime-supervision-fix`
 > 原始运行时回退点：`codex/stage1b-v2-official-runtime`（`f2104f7`）
+
+> 本报告保留服务器运行时在执行前的构建与验收事实。资格完成结果、单一 v2 冻结语义和下一
+> 任务入口以 `docs/auth/TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md` 与 CCP-0003 为准。
 
 ## 1. 功能层结论
 
@@ -18,10 +22,9 @@ Stage1B v2 的 17 个实施任务已经构建完成。当前仓库可以在指�
 5. 每 2 秒采集真实主机、进程和 NVML 数据，通过只读中文前端显示进程、期望/实际 CPU、
    内存、双卡利用率/显存、采样新鲜度和有证据的 ETA；
 6. 把最终结果绑定到来源、环境、精度、硬件、运行图、任务清单和执行计划哈希；
-7. 首次冻结为 `v2-r1`，用户授权覆盖时新增下一不可变 v2 修订并移动活动指针。
+7. 资格通过后冻结为唯一 `v2`；正常禁止覆盖，用户授权时绑定旧 manifest 哈希原子替换。
 
-这不表示资格已经通过。构建期间没有运行完整 Stage1B，没有运行 E01/E02，也没有创建
-冻结修订。
+以上两句描述的是构建时能力。此后资格已经通过并冻结；E01/E02 仍未运行。
 
 ## 2. 实际构建的流程
 
@@ -39,7 +42,7 @@ Stage1B v2 的 17 个实施任务已经构建完成。当前仓库可以在指�
 → 自动门槛与完整失败台账
 → 哈希绑定资格收据
 → 用户审阅
-→ v2-r1 冻结
+→ 唯一 v2 冻结
 ```
 
 来源导入与科学运行被故意拆开。本地使用精确 commit、关键资产与完整树哈希审核来源，导出
@@ -102,7 +105,7 @@ ECharts 已拆成独立动态分块。它仍产生一个大于 500KB 的性能�
 - 固定哈希 Python 锁文件直接审计：没有已知漏洞；
 - 秘密模式扫描：未发现私钥、API key、密码或 token；
 - Stage1A 检查：`PASS`，未触碰正式数据、未训练；
-- Stage1B 检查：`UNFROZEN`，与真实状态一致；
+- Stage1B 检查：构建当时为 `UNFROZEN`；2026-08-29 已由最终确认收据冻结为 `FROZEN_V2`；
 - `docs/auth`：无修改。
 
 本地 WSL 没有可见 NVIDIA adapter，因此带双 GPU reservation 的 Compose 容器会在 NVIDIA
@@ -202,32 +205,23 @@ python scripts/run_stage1b_runtime.py status
 bash deploy/stage1b/entrypoint.sh resume
 ```
 
-## 7. 资格后冻结
+## 7. 当前冻结核验
 
-只有 74 个任务全部完成、套件 Gate 为 `PASS`、完整失败台账已审阅后，才运行首次冻结：
-
-```bash
-python scripts/run_stage1b_qualification.py freeze \
-  --series v2 --revision-id v2-r1
-```
-
-以后如用户授权覆盖，必须重新执行受影响资格并新增下一修订，例如：
+资格已经完成并经用户授权冻结。当前核验命令为：
 
 ```bash
-python scripts/run_stage1b_qualification.py freeze \
-  --series v2 --revision-id v2-r2 --authorize-override \
-  --prior-revision-id v2-r1 --authorization-reason "用户批准的覆盖原因"
+python scripts/check_stage1b.py --artifact-root artifacts/stage1b --json
 ```
 
-不得覆盖 `r1`，不得把失败运行冻结为历史版本，也不得把实施修订伪装成 v3 科学系列。
+预期得到 `status=PASS`、`active_series=v2`。冻结目录是 `artifacts/stage1b/frozen/v2/`，不含
+revision 字段。正常情况下不得再次冻结；用户明确授权覆盖时，由 freeze 命令读取活动
+manifest 哈希，记录授权人和原因，再原子替换唯一 v2。
 
-## 8. 仍需在服务器完成的验收
+## 8. 服务器验收结果与剩余边界
 
-1. 实际双 4090 `preflight` 收据；
-2. 24 小时内的真实 ETA 与资源利用率；
-3. 完整 74 任务 Stage1B 资格；
-4. 全部世界、模型、seed、regime、horizon 比较行和失败原因审阅；
-5. 通过后创建 `v2-r1`；
-6. Stage1B 冻结以后，另行授权 E01/E02。
+实际服务器确认运行完成 33/33 个任务，内部清单 123/123 通过，来源与科学身份无漂移；
+`lorenz96_twoscale_v2 + ITransformerReference` 在 h1–6 上 72/72 胜，CRPS skill
++13.5274%，世界与套件 Gate 均为 `PASS`。完整指标、压缩包哈希和中长期能力边界见权威
+交接快照。
 
-在这些步骤发生前，项目状态必须保持 `BUILT_NOT_QUALIFIED` / `UNFROZEN`。
+Stage1B 服务器验收已结束。正式 E01/E02 仍需另行授权，不得因本阶段通过而自动启动。
