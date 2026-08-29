@@ -8,6 +8,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = REPOSITORY_ROOT / "deploy/stage1b/Dockerfile"
 ENTRYPOINT = REPOSITORY_ROOT / "deploy/stage1b/entrypoint.sh"
 COMPOSE_PATH = REPOSITORY_ROOT / "deploy/stage1b/compose.stage1b-v2.yaml"
+RUNBOOK = REPOSITORY_ROOT / "docs/auth/TARCA_SERVER_ACCESS_RUNBOOK.md"
 
 
 def test_monitor_port_is_host_loopback_only() -> None:
@@ -21,7 +22,7 @@ def test_container_uses_exact_authorized_base_and_all_visible_gpus() -> None:
     compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
     service = compose["services"]["stage1b"]
 
-    assert "FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime" in dockerfile
+    assert "FROM pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04" in dockerfile
     assert "pip install --require-hashes" in dockerfile
     assert "COPY --from=ui-build" in dockerfile
     devices = service["deploy"]["resources"]["reservations"]["devices"]
@@ -30,6 +31,27 @@ def test_container_uses_exact_authorized_base_and_all_visible_gpus() -> None:
         "qualification_v2_confirmation_r2.yaml"
     )
     assert service["shm_size"] == "16gb"
+
+
+def test_runtime_artifacts_are_bound_outside_the_container() -> None:
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    service = compose["services"]["stage1b"]
+    artifact_mount = next(
+        item for item in service["volumes"] if item["target"] == "/opt/tarca/artifacts/stage1b"
+    )
+
+    assert artifact_mount["type"] == "bind"
+    assert "TARCA_STAGE1B_ARTIFACT_DIR" in artifact_mount["source"]
+    assert artifact_mount.get("read_only", False) is False
+
+
+def test_runbook_declares_24_hour_reset_and_off_container_recovery() -> None:
+    runbook = RUNBOOK.read_text(encoding="utf-8")
+
+    assert "TARCA_24H_RESET" in runbook
+    assert "TARCA_RESET_MARGIN" in runbook
+    assert "TARCA_HOST_BIND_RECOVERY" in runbook
+    assert "TARCA_MANUAL_RESUME" in runbook
 
 
 def test_runtime_has_no_docker_socket_or_public_port_and_sources_are_read_only() -> None:

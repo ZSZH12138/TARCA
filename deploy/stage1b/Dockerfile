@@ -5,7 +5,7 @@ RUN npm ci
 COPY frontend/stage1b-monitor/ ./
 RUN npm run build
 
-FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime
+FROM pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

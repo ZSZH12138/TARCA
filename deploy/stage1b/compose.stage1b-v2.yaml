@@ -21,8 +21,8 @@ services:
     tmpfs:
       - /tmp:size=4g,mode=1777
     volumes:
-      - type: volume
-        source: stage1b-artifacts
+      - type: bind
+        source: ${TARCA_STAGE1B_ARTIFACT_DIR:-../../artifacts/stage1b-server}
         target: /opt/tarca/artifacts/stage1b
       - type: volume
         source: stage1b-sources
@@ -62,7 +62,5 @@ services:
         read_only: true
 
 volumes:
-  stage1b-artifacts:
-    name: tarca-stage1b-v2-artifacts
   stage1b-sources:
     name: tarca-stage1b-v2-sources
