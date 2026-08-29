@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 import math
 import os
 import re
 import time
-import uuid
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
@@ -18,6 +15,30 @@ from torch.utils.data import DataLoader, TensorDataset
 from tarca.contracts import canonical_json_hash
 from tarca.stage1b.modeling import OfficialOperablePredictor
 from tarca.stage1b.neural import OperableNeuralPredictor
+from tarca.stage1b.training_checkpoints import (
+    atomic_torch_save as _atomic_torch_save,
+)
+from tarca.stage1b.training_checkpoints import (
+    checkpoint_path as _checkpoint_path,
+)
+from tarca.stage1b.training_checkpoints import (
+    checkpoint_payload as _checkpoint_payload,
+)
+from tarca.stage1b.training_checkpoints import (
+    load_checkpoint as _load_checkpoint,
+)
+from tarca.stage1b.training_checkpoints import (
+    policy_hash as _policy_hash,
+)
+from tarca.stage1b.training_checkpoints import (
+    resolve_resume_path as _resolve_resume_path,
+)
+from tarca.stage1b.training_checkpoints import (
+    restore_checkpoint as _restore_checkpoint,
+)
+from tarca.stage1b.training_checkpoints import (
+    training_data_hash as _training_data_hash,
+)
 
 Stage1BNeuralPredictor = OperableNeuralPredictor | OfficialOperablePredictor
 Precision = Literal["FP32", "AMP_FP16"]
@@ -104,90 +125,6 @@ def _gaussian_nll(mean: Tensor, scale: Tensor, target: Tensor) -> Tensor:
     return torch.mean(torch.log(scale) + 0.5 * ((target - mean) / scale) ** 2)
 
 
-def _tensor_digest(name: str, tensor: Tensor, digest: Any) -> None:
-    contiguous = tensor.detach().cpu().contiguous()
-    digest.update(name.encode("utf-8"))
-    digest.update(str(contiguous.dtype).encode("ascii"))
-    digest.update(str(tuple(contiguous.shape)).encode("ascii"))
-    digest.update(contiguous.numpy().tobytes())
-
-
-def _training_data_hash(tensors: Mapping[str, Tensor]) -> str:
-    digest = hashlib.sha256()
-    for name, tensor in sorted(tensors.items()):
-        _tensor_digest(name, tensor, digest)
-    return digest.hexdigest()
-
-
-def _policy_hash(policy: TrainingPolicy) -> str:
-    return canonical_json_hash(
-        {
-            "device": policy.device,
-            "precision": policy.precision,
-            "batch_size": policy.batch_size,
-            "max_epochs": policy.max_epochs,
-            "patience": policy.patience,
-            "learning_rate": policy.learning_rate,
-            "dataloader_workers": policy.dataloader_workers,
-            "checkpoint_every_epochs": policy.checkpoint_every_epochs,
-        }
-    )
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _cpu_snapshot(value: Any) -> Any:
-    if isinstance(value, Tensor):
-        return value.detach().cpu().clone()
-    if isinstance(value, dict):
-        return {key: _cpu_snapshot(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_cpu_snapshot(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_cpu_snapshot(item) for item in value)
-    return value
-
-
-def _atomic_torch_save(payload: Mapping[str, Any], destination: Path) -> str:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}")
-    try:
-        torch.save(dict(payload), temporary)
-        os.replace(temporary, destination)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
-    return _file_sha256(destination)
-
-
-def _checkpoint_path(policy: TrainingPolicy, task_sha256: str) -> Path:
-    return policy.checkpoint_root / f"training-{task_sha256}.pt"
-
-
-def _resolve_resume_path(path: Path, root: Path) -> Path:
-    resolved = path.resolve(strict=True)
-    try:
-        resolved.relative_to(root)
-    except ValueError as error:
-        raise ValueError("resume checkpoint must be inside checkpoint_root") from error
-    if not resolved.is_file():
-        raise ValueError("resume checkpoint must be a regular file")
-    return resolved
-
-
-def _load_checkpoint(path: Path) -> dict[str, Any]:
-    loaded = torch.load(path, map_location="cpu", weights_only=True)
-    if not isinstance(loaded, dict) or loaded.get("schema_version") != "1.0.0":
-        raise ValueError("training checkpoint has an unsupported schema")
-    return cast(dict[str, Any], loaded)
-
-
 def _legacy_policy(
     *,
     batch_size: int | None,
@@ -225,112 +162,6 @@ def _validate_training_tensors(
         raise ValueError("neural training tensors must use floating-point values")
     if any(not bool(torch.isfinite(tensor).all()) for tensor in (train_x, train_y, tune_x, tune_y)):
         raise ValueError("neural training tensors must contain only finite values")
-
-
-def _checkpoint_payload(
-    *,
-    task_sha256: str,
-    data_sha256: str,
-    config_sha256: str,
-    precision_sha256: str,
-    seed: int,
-    epoch: int,
-    model: Stage1BNeuralPredictor,
-    optimizer: torch.optim.Optimizer,
-    scaler: torch.cuda.amp.GradScaler,
-    shuffle_generator: torch.Generator,
-    best_loss: float,
-    best_epoch: int,
-    best_state: Mapping[str, Tensor],
-    stale_epochs: int,
-    status: Literal["IN_PROGRESS", "COMPLETE"],
-) -> dict[str, Any]:
-    cuda_rng = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []
-    return {
-        "schema_version": "1.0.0",
-        "task_sha256": task_sha256,
-        "data_sha256": data_sha256,
-        "config_sha256": config_sha256,
-        "precision_sha256": precision_sha256,
-        "seed": seed,
-        "epoch": epoch,
-        "status": status,
-        "model_state": _cpu_snapshot(model.state_dict()),
-        "optimizer_state": _cpu_snapshot(optimizer.state_dict()),
-        "scaler_state": _cpu_snapshot(scaler.state_dict()),
-        "shuffle_generator_state": shuffle_generator.get_state().clone(),
-        "torch_cpu_rng_state": torch.get_rng_state().clone(),
-        "torch_cuda_rng_states": _cpu_snapshot(cuda_rng),
-        "best_loss": best_loss,
-        "best_epoch": best_epoch,
-        "best_state": _cpu_snapshot(dict(best_state)),
-        "stale_epochs": stale_epochs,
-    }
-
-
-def _restore_checkpoint(
-    payload: Mapping[str, Any],
-    *,
-    expected_task_sha256: str,
-    expected_data_sha256: str,
-    expected_config_sha256: str,
-    expected_precision_sha256: str,
-    model: Stage1BNeuralPredictor,
-    optimizer: torch.optim.Optimizer,
-    scaler: torch.cuda.amp.GradScaler,
-    shuffle_generator: torch.Generator,
-    use_cuda: bool,
-) -> tuple[int, float, int, dict[str, Tensor], int]:
-    if payload.get("data_sha256") != expected_data_sha256:
-        raise ValueError("resume checkpoint does not match the training data")
-    if payload.get("config_sha256") != expected_config_sha256:
-        raise ValueError("resume checkpoint does not match the training configuration")
-    if payload.get("precision_sha256") != expected_precision_sha256:
-        raise ValueError("resume checkpoint does not match device and precision")
-    if payload.get("task_sha256") != expected_task_sha256:
-        raise ValueError("resume checkpoint does not match the training task")
-    model_state = payload.get("model_state")
-    optimizer_state = payload.get("optimizer_state")
-    scaler_state = payload.get("scaler_state")
-    if not isinstance(model_state, dict) or not isinstance(optimizer_state, dict):
-        raise ValueError("resume checkpoint is missing model or optimizer state")
-    if not isinstance(scaler_state, dict):
-        raise ValueError("resume checkpoint is missing scaler state")
-    model.load_state_dict(model_state)
-    optimizer.load_state_dict(optimizer_state)
-    scaler.load_state_dict(scaler_state)
-    shuffle_state = payload.get("shuffle_generator_state")
-    cpu_rng_state = payload.get("torch_cpu_rng_state")
-    if not isinstance(shuffle_state, Tensor) or not isinstance(cpu_rng_state, Tensor):
-        raise ValueError("resume checkpoint is missing deterministic RNG state")
-    shuffle_generator.set_state(shuffle_state)
-    torch.set_rng_state(cpu_rng_state)
-    cuda_states = payload.get("torch_cuda_rng_states")
-    if use_cuda:
-        if not isinstance(cuda_states, list) or not all(
-            isinstance(state, Tensor) for state in cuda_states
-        ):
-            raise ValueError("resume checkpoint is missing CUDA RNG state")
-        torch.cuda.set_rng_state_all(cuda_states)
-    best_state_value = payload.get("best_state")
-    if not isinstance(best_state_value, dict) or not all(
-        isinstance(name, str) and isinstance(tensor, Tensor)
-        for name, tensor in best_state_value.items()
-    ):
-        raise ValueError("resume checkpoint is missing the best model state")
-    epoch = payload.get("epoch")
-    best_loss = payload.get("best_loss")
-    best_epoch = payload.get("best_epoch")
-    stale_epochs = payload.get("stale_epochs")
-    if not isinstance(epoch, int) or epoch < 1:
-        raise ValueError("resume checkpoint epoch is invalid")
-    if not isinstance(best_loss, float) or not math.isfinite(best_loss):
-        raise ValueError("resume checkpoint best loss is invalid")
-    if not isinstance(best_epoch, int) or best_epoch < 0:
-        raise ValueError("resume checkpoint best epoch is invalid")
-    if not isinstance(stale_epochs, int) or stale_epochs < 0:
-        raise ValueError("resume checkpoint stale epoch count is invalid")
-    return epoch, best_loss, best_epoch, cast(dict[str, Tensor], best_state_value), stale_epochs
 
 
 def _evaluate_tune_nll(
@@ -624,3 +455,4 @@ def train_candidate(
         torch.use_deterministic_algorithms(previous_determinism)
         torch.backends.cudnn.benchmark = previous_benchmark
         torch.backends.cudnn.deterministic = previous_cudnn_deterministic
+

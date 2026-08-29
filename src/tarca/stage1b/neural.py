@@ -123,7 +123,7 @@ class OperableNeuralPredictor(nn.Module, ABC):
             if module is self:
                 continue
             if isinstance(module, nn.MultiheadAttention):
-                module._reset_parameters()  # type: ignore[no-untyped-call]
+                module._reset_parameters()
                 continue
             reset = getattr(module, "reset_parameters", None)
             if callable(reset):
