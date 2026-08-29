@@ -32,6 +32,7 @@ from tarca.stage1b.dataset import (
     stack_partition,
     stack_samples,
 )
+from tarca.stage1b.evidence_io import sha256_file
 from tarca.stage1b.gates import (
     StructuralCheck,
     SuiteGateEvidence,
@@ -44,7 +45,6 @@ from tarca.stage1b.predictors import TunedVAR
 from tarca.stage1b.reproduction import ReproductionReceipt, run_reproduction
 from tarca.stage1b.runner import (
     _aggregate_comparisons,
-    _file_sha256,
     _jsonable,
     _load_hardware_receipt,
     _new_model,
@@ -768,8 +768,8 @@ def publish_qualification_receipt_job(
             source.source_id: source.commit for source in inputs.world_suite.sources
         },
         "source_evidence_verified": True,
-        "world_config_sha256": _file_sha256(repo_root / "configs/stage1b/worlds_v2.yaml"),
-        "qualification_config_sha256": _file_sha256(
+        "world_config_sha256": sha256_file(repo_root / "configs/stage1b/worlds_v2.yaml"),
+        "qualification_config_sha256": sha256_file(
             _qualification_config_path(repo_root)
         ),
         "hardware_receipt_sha256": hardware_hash,

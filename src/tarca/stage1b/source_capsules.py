@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gzip
-import hashlib
 import json
 import os
 import shutil
@@ -14,6 +13,7 @@ from typing import cast
 
 from tarca.contracts import canonical_json_bytes, canonical_json_hash
 from tarca.stage1b.config import SourceConfig
+from tarca.stage1b.evidence_io import sha256_file, write_canonical_json
 from tarca.stage1b.sources import (
     GitRunner,
     SourceAcquisitionMode,
@@ -65,26 +65,6 @@ def source_capsule_import_receipt_path(cache_root: Path) -> Path:
     return cache_root / "source-capsule-import-receipt-v2.json"
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _atomic_write_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(payload)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
 def _source_payload(source: SourceCapsuleSource) -> dict[str, object]:
     return {
         "source_id": source.source_id,
@@ -110,7 +90,7 @@ def source_capsule_receipt_payload(receipt: SourceCapsuleReceipt) -> dict[str, o
 def write_source_capsule_receipt(receipt: SourceCapsuleReceipt, path: Path) -> None:
     """Atomically persist the external SHA-256 receipt used by the server importer."""
 
-    _atomic_write_bytes(path, canonical_json_bytes(source_capsule_receipt_payload(receipt)) + b"\n")
+    write_canonical_json(path, source_capsule_receipt_payload(receipt), replace=True)
 
 
 def _require_object(value: object, label: str) -> Mapping[str, object]:
@@ -314,7 +294,7 @@ def build_source_capsule(
                 raise SourceCapsuleVerificationError(
                     f"git did not create source bundle for {source.source_id}"
                 )
-            entries.append(_source_entry(source, source_receipt, _sha256_file(bundle_path)))
+            entries.append(_source_entry(source, source_receipt, sha256_file(bundle_path)))
             bundles.append((bundle_name, bundle_path))
         capsule_sources = tuple(entries)
         manifest = _manifest_payload(capsule_sources)
@@ -323,7 +303,7 @@ def build_source_capsule(
         _write_capsule_archive(resolved_output, manifest_path, tuple(bundles))
         capsule_receipt = SourceCapsuleReceipt(
             schema_version=_SCHEMA_VERSION,
-            capsule_sha256=_sha256_file(resolved_output),
+            capsule_sha256=sha256_file(resolved_output),
             manifest_sha256=canonical_json_hash(manifest),
             sources=capsule_sources,
         )
@@ -458,7 +438,7 @@ def _copy_bundle_from_archive(
         raise SourceCapsuleVerificationError(f"cannot read capsule bundle: {member.name}")
     with stream, destination.open("wb") as target:
         shutil.copyfileobj(stream, target, length=1024 * 1024)
-    actual_sha256 = _sha256_file(destination)
+    actual_sha256 = sha256_file(destination)
     if actual_sha256 != expected_sha256:
         raise SourceCapsuleVerificationError(
             f"capsule bundle SHA-256 mismatch for {member.name}: "
@@ -559,7 +539,7 @@ def import_source_capsule(
     resolved_capsule = capsule_path.resolve()
     if not resolved_capsule.is_file():
         raise SourceCapsuleVerificationError(f"capsule archive is missing: {resolved_capsule}")
-    actual_capsule_sha256 = _sha256_file(resolved_capsule)
+    actual_capsule_sha256 = sha256_file(resolved_capsule)
     if actual_capsule_sha256 != receipt.capsule_sha256:
         raise SourceCapsuleVerificationError(
             "capsule SHA-256 does not match its receipt: "

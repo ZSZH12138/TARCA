@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -14,6 +13,7 @@ from pydantic import Field, ValidationError, model_validator
 
 from tarca.contracts import Sha256Hash, canonical_json_bytes
 from tarca.stage1b.config import FrozenModel
+from tarca.stage1b.evidence_io import sha256_bytes, write_canonical_json
 
 
 class FreezeRejected(RuntimeError):
@@ -58,19 +58,11 @@ class OverrideAuthorization:
             raise ValueError("prior manifest hash must be a lowercase SHA-256")
 
 
-def _sha256(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
-
-
 def _write_json(path: Path, value: dict[str, Any], *, replace: bool) -> bytes:
-    payload = canonical_json_bytes(value) + b"\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists() and not replace:
-        raise FreezeRejected(f"frozen path already exists: {path}")
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_bytes(payload)
-    os.replace(temporary, path)
-    return payload
+    try:
+        return write_canonical_json(path, value, replace=replace)
+    except FileExistsError as error:
+        raise FreezeRejected(f"frozen path already exists: {path}") from error
 
 
 def _mapping(value: object, label: str) -> dict[str, Any]:
@@ -240,7 +232,7 @@ def freeze_suite(
         "qualification_id": receipt.get("qualification_id"),
         "suite_id": receipt.get("suite_id"),
         "suite_gate_status": "PASS",
-        "receipt_sha256": _sha256(receipt_payload),
+        "receipt_sha256": sha256_bytes(receipt_payload),
         "source_manifest_sha256": receipt.get("source_manifest_sha256"),
         "source_commits": receipt.get("source_commits"),
         "world_config_sha256": receipt.get("world_config_sha256"),
@@ -254,14 +246,14 @@ def freeze_suite(
     try:
         receipt_path = staging_root / "qualification_receipt.json"
         written_receipt = _write_json(receipt_path, receipt, replace=False)
-        if _sha256(written_receipt) != manifest["receipt_sha256"]:
+        if sha256_bytes(written_receipt) != manifest["receipt_sha256"]:
             raise FreezeRejected("qualification receipt changed while freezing")
         manifest_path = staging_root / "manifest.json"
         manifest_payload = _write_json(manifest_path, manifest, replace=False)
-        manifest_hash = _sha256(manifest_payload)
+        manifest_hash = sha256_bytes(manifest_payload)
         hash_path = staging_root / "manifest.sha256"
         hash_path.write_text(f"{manifest_hash}\n", encoding="ascii")
-        if _sha256(manifest_path.read_bytes()) != hash_path.read_text(
+        if sha256_bytes(manifest_path.read_bytes()) != hash_path.read_text(
             encoding="ascii"
         ).strip():
             raise FreezeRejected("staged manifest hash does not match")
@@ -305,7 +297,7 @@ def verify_frozen_suite(
         raise FreezeRejected("frozen revision files are missing")
     manifest_payload = manifest_path.read_bytes()
     expected_hash = hash_path.read_text(encoding="ascii").strip()
-    actual_hash = _sha256(manifest_payload)
+    actual_hash = sha256_bytes(manifest_payload)
     if actual_hash != expected_hash:
         raise FreezeRejected("frozen manifest hash does not match")
     if active.get("manifest_sha256") != actual_hash:
@@ -316,7 +308,7 @@ def verify_frozen_suite(
         or manifest.get("series") != selected_series
     ):
         raise FreezeRejected("frozen manifest gate or series is invalid")
-    if _sha256(receipt_path.read_bytes()) != manifest.get("receipt_sha256"):
+    if sha256_bytes(receipt_path.read_bytes()) != manifest.get("receipt_sha256"):
         raise FreezeRejected("frozen qualification receipt hash does not match")
     return {
         "status": "PASS",

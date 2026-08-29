@@ -55,6 +55,7 @@ from tarca.stage1b.dataset import (
     stack_partition,
     stack_samples,
 )
+from tarca.stage1b.evidence_io import sha256_bytes, sha256_file, write_canonical_json
 from tarca.stage1b.gates import (
     StructuralCheck,
     SuiteGateEvidence,
@@ -90,14 +91,6 @@ class QualificationBoundaryError(ValueError):
     """Raised when qualification evidence crosses the sealed formal boundary."""
 
 
-def _sha256(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _file_sha256(path: Path) -> str:
-    return _sha256(path.read_bytes())
-
-
 def _jsonable(value: object) -> Any:
     if isinstance(value, BaseModel):
         return value.model_dump(mode="json")
@@ -117,12 +110,8 @@ def _jsonable(value: object) -> Any:
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> str:
-    payload = canonical_json_bytes(value) + b"\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_bytes(payload)
-    os.replace(temporary, path)
-    return _sha256(payload)
+    payload = write_canonical_json(path, value, replace=True)
+    return sha256_bytes(payload)
 
 
 def validate_qualification_receipt_boundaries(
@@ -687,8 +676,8 @@ def run_hardware_probe(
         "schema_version": "2.0.0",
         "probe_id": "stage1b-hardware-probe-v2",
         "created_at_utc": datetime.now(UTC).isoformat(),
-        "world_config_sha256": _file_sha256(worlds_path),
-        "qualification_config_sha256": _file_sha256(qualification_path),
+        "world_config_sha256": sha256_file(worlds_path),
+        "qualification_config_sha256": sha256_file(qualification_path),
         "source_manifest_sha256": suite.source_manifest_sha256(),
         "source_commits": {source.source_id: source.commit for source in suite.sources},
         "probe_world_ids": [world.world_id for world in primary_worlds],
@@ -739,16 +728,16 @@ def _load_hardware_receipt(
         raise RuntimeError("hardware probe receipt is required before qualification")
     payload = path.read_bytes()
     receipt = json.loads(payload)
-    if receipt.get("world_config_sha256") != _file_sha256(worlds_path):
+    if receipt.get("world_config_sha256") != sha256_file(worlds_path):
         raise RuntimeError("hardware probe world configuration drifted")
-    if receipt.get("qualification_config_sha256") != _file_sha256(qualification_path):
+    if receipt.get("qualification_config_sha256") != sha256_file(qualification_path):
         raise RuntimeError("hardware probe qualification configuration drifted")
     if receipt.get("source_manifest_sha256") != source_manifest_sha256:
         raise RuntimeError("hardware probe source manifest drifted")
     decision = receipt.get("decision")
     if not isinstance(decision, dict) or decision.get("feasible") is not True:
         raise RuntimeError("hardware feasibility gate did not pass")
-    return receipt, _sha256(payload)
+    return receipt, sha256_bytes(payload)
 
 
 def run_qualification(
@@ -951,8 +940,8 @@ def run_qualification(
         "source_manifest_sha256": suite.source_manifest_sha256(),
         "source_commits": {source.source_id: source.commit for source in suite.sources},
         "source_evidence_verified": True,
-        "world_config_sha256": _file_sha256(worlds_path),
-        "qualification_config_sha256": _file_sha256(qualification_path),
+        "world_config_sha256": sha256_file(worlds_path),
+        "qualification_config_sha256": sha256_file(qualification_path),
         "hardware_receipt_sha256": hardware_receipt_sha256,
         "qualification_seeds": list(qualification.qualification_seeds),
         "reserved_formal_seeds": list(qualification.reserved_formal_seeds),
@@ -977,7 +966,7 @@ def _runtime_receipt(runtime_root: Path, filename: str) -> tuple[dict[str, Any],
     decoded = json.loads(payload)
     if not isinstance(decoded, dict):
         raise RuntimeError(f"runtime receipt is not a JSON object: {filename}")
-    return cast(dict[str, Any], decoded), _sha256(payload)
+    return cast(dict[str, Any], decoded), sha256_bytes(payload)
 
 
 def _runtime_plan_nodes(graph: Any) -> tuple[Any, ...]:
