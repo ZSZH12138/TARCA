@@ -1,0 +1,38 @@
+FROM node:20-bookworm-slim AS ui-build
+WORKDIR /ui
+ENV VITE_TARCA_RUNTIME_LABEL="E01-v2 SCM 真值验证" \
+    VITE_TARCA_RUNTIME_EYEBROW="SCM TRUTH V2 RUNTIME" \
+    VITE_TARCA_CONNECTING_LABEL="正在连接 E01-v2 运行时…"
+COPY frontend/stage1b-monitor/package*.json ./
+RUN npm ci
+COPY frontend/stage1b-monitor/ ./
+RUN npm run build
+
+FROM pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/tarca/deploy/e01/py310:/opt/tarca/src \
+    TARCA_EXECUTION_KIND=e01-v2 \
+    TARCA_E01_V2_CONFIG=/opt/tarca/configs/e01/e01_v2.yaml \
+    TARCA_E01_V2_ARTIFACT_ROOT=/opt/tarca/artifacts/e01-v2 \
+    TARCA_RUNTIME_DATABASE=/opt/tarca/artifacts/e01-v2/runtime/execution.sqlite3 \
+    TARCA_RUNTIME_STATIC_ROOT=/opt/tarca/frontend/stage1b-monitor/dist \
+    TARCA_MONITOR_BIND_HOST=0.0.0.0
+WORKDIR /opt/tarca
+COPY deploy/stage1b/requirements-server.lock /tmp/requirements-server.lock
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --require-hashes --no-cache-dir -r /tmp/requirements-server.lock \
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin tarca
+COPY . /opt/tarca
+COPY --from=ui-build /ui/dist /opt/tarca/frontend/stage1b-monitor/dist
+RUN chmod 0555 /opt/tarca/deploy/e01/entrypoint-v2.sh \
+    /opt/tarca/deploy/e01/server_bootstrap_v2.sh \
+    /opt/tarca/deploy/e01/server_supervisor_v2.sh \
+    && mkdir -p /opt/tarca/artifacts/e01-v2/runtime \
+    && chown -R tarca:tarca /opt/tarca/artifacts/e01-v2
+USER tarca
+ENTRYPOINT ["/opt/tarca/deploy/e01/entrypoint-v2.sh"]
+CMD ["status", "--empty-ok"]

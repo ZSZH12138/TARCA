@@ -888,6 +888,13 @@ test_unseen_regime: 后 10%，保留的状态参数或状态组合
 - 错误 SCM 和随机概念明显更差；
 - 真值延迟可从效应曲线中恢复。
 
+实施同步（2026-08-30）：E01 已统一冻结为 `v2/PASS`。解析 E01-A 正式运行 50 个 TEST 种子，
+覆盖真值 48/50，其余 MCSE、区间精度、lag、identity 和三类负对照检查均为 50/50，总体偏差
+0.0001294253（门槛 0.005）；Lorenz-96 E01-B 使用 v1 中已通过的 5/5 证据，经原字节 SHA-256
+复核后并入 v2。活动收据与完整交接分别见 `artifacts/e01/frozen/v2/qualification_receipt.json`
+和 `docs/auth/TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`。E01 通过只解除 oracle 稳定性阻塞，
+下一步仍须完成 Stage 2 和 E02，不得直接进入 Stage 3/4。
+
 ---
 
 ## 7. 阶段 2：基础预测器和概率输出（第 7–9 周）
@@ -2901,7 +2908,7 @@ src/tarca/metrics/
 | 编号 | 实验 | 依赖 | 核心输出 | Gate |
 |---|---|---|---|---|
 | E00 | 环境 smoke | 阶段0 | 环境、CI | 无 |
-| E01 | SCM oracle | 阶段1 | 真值效应、延迟 | 无 |
+| E01 | SCM oracle | 阶段1 | 真值效应、延迟 | E01-v2 PASS（已完成） |
 | E02 | 预测基线 | 阶段2 | NLL/CRPS | 无 |
 | E03 | 植入机制 | 阶段3 | oracle site 效应 | 无 |
 | E04 | 固定交换+负对照 | 阶段4–5 | IIC/Cause/Isolation | Gate A |
@@ -3010,6 +3017,9 @@ docs/stage1_unified_data_contract.md
 > 合成 SCM 与 paired counterfactual oracle 是否在相同未来噪声下产生可复现、可区分且无时间泄漏的真值效应？
 
 若答案为否，不进入基础预测器，更不能进入内部干预或 OT。
+
+当前答案为“是”：E01-v2 已通过并冻结。后续从 Stage 2 基础预测器开始，E02 在 Stage 2 输出
+满足统一 `ForecastDistribution` 契约后实施。
 
 ---
 

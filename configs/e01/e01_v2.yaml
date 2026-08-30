@@ -1,0 +1,62 @@
+schema_version: 2.0.0
+protocol_id: TARCA-E2E-STAGE-PROTOCOL-2.0
+experiment_id: e01_scm_truth_v2
+formal_partition: TEST
+formal_seed_config:
+  algorithm: sha256-first-31-bits-v1
+  namespace: tarca/e01-v2/formal-test
+  count: 50
+  excluded_seeds: [1729, 2718, 3141, 5772, 8111]
+sample_sizes: [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
+horizons: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+conditions:
+  - CORRECT_SCM
+  - WRONG_SCM
+  - WRONG_LAG
+  - RANDOM_CONCEPT
+  - IDENTITY
+worlds:
+  - world_id: analytic_delayed_control_v1
+    study: E01_A
+    true_lag: 3
+    wrong_lag: 6
+    intervention_delta: 1.0
+    decay: 0.75
+    estimator_device: GPU
+gates:
+  gate_freeze_id: e01-gates-v2
+  threshold_source_partition: VALIDATION
+  formal_evaluation_partition: TEST
+  frozen_before_formal: true
+  confidence: 0.95
+  required_seed_count: 45
+  mcse_ratio_max: 0.25
+  interval_half_width_max: 0.01
+  aggregate_multiplier_bias_max: 0.005
+  control_win_fraction_min: 0.65
+  analytic_lag_tolerance_steps: 1
+  endpoint_error_ratio_is_gate: false
+carry_forward:
+  report_path: artifacts/e01/history/e01_v1_history_record.json
+  report_sha256: c31f04988d09efa7de1cd67d65f604d444f70fcf7c066206b981f38202d61528
+  recovery_validation_path: artifacts/e01/history/e01_v1_history_record.json
+  recovery_validation_sha256: 705e82264a880b79e73ae4e89ef3d531af333912bf4cf0dc967974089df6cd9f
+  expected_archive_sha256: d6d3b4716b31437a8dc437260c8a9e9d422c84474bd3ea9ea2d47aace0de82c4
+  expected_stage1b_manifest_sha256: d1b4d09260bcc41b3b94a020474ee0b5e9f9dd5f0f498bb96510228141f44b25
+  expected_scientific_config_sha256: 47e899e6ff9510f780b387921ca5bdaaa2c246fdf2b3f2e4d9f0789d0e8c3d61
+  required_convergence_seed_count: 5
+  required_directional_seed_count: 5
+runtime_profile:
+  profile_id: rtx4090-14c-112g-e01-v2
+  base_image: pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04
+  expected_physical_cpu_cores: 14
+  expected_ram_gib: 112
+  expected_gpu_count: 1
+  expected_gpu_name_substring: RTX 4090
+  expected_gpu_vram_gib: 24
+  minimum_free_storage_gib: 200
+  reset_limit_hours: 24
+  reset_margin_hours: 1
+  host_bind_required: true
+  capacity_probe_required: true
+  monitor_bind_host: 127.0.0.1

@@ -61,6 +61,41 @@ class _FailingProbe:
         raise RuntimeError("NVML unavailable")
 
 
+class _ExternalMonitorProbe:
+    def __init__(self) -> None:
+        self.host_process_ids: list[int] = []
+        self.monitor_process_ids: list[int] = []
+
+    def host_snapshot(self, process_id: int) -> HostTelemetry:
+        self.host_process_ids.append(process_id)
+        return HostTelemetry(
+            host_cpu_percent=64.0,
+            effective_busy_cores=3.5,
+            process_rss_bytes=4 * 1024**3,
+            process_pss_bytes=3 * 1024**3,
+            process_affinity_cpu_ids=tuple(range(24)),
+            host_memory_used_bytes=96 * 1024**3,
+            disk_read_bytes_per_second=1024.0,
+            disk_write_bytes_per_second=2048.0,
+        )
+
+    def gpu_samples(self) -> tuple[object, ...]:
+        return ()
+
+    def monitor_snapshot(self, process_id: int) -> HostTelemetry:
+        self.monitor_process_ids.append(process_id)
+        return HostTelemetry(
+            host_cpu_percent=4.0,
+            effective_busy_cores=0.25,
+            process_rss_bytes=256 * 1024**2,
+            process_pss_bytes=192 * 1024**2,
+            process_affinity_cpu_ids=tuple(range(24)),
+            host_memory_used_bytes=96 * 1024**3,
+            disk_read_bytes_per_second=0.0,
+            disk_write_bytes_per_second=0.0,
+        )
+
+
 def _running_store(tmp_path: Path) -> tuple[ExecutionStateStore, str]:
     store = ExecutionStateStore(tmp_path / "execution.sqlite3", artifact_verifier=lambda _: True)
     store.create_run("run-a", "graph-a")
@@ -137,3 +172,20 @@ def test_supervisor_deduplicates_probe_failure_alerts(tmp_path: Path) -> None:
     alerts = store.alerts("run-a")
     assert len(alerts) == 1
     assert alerts[0]["category"] == "TELEMETRY_UNAVAILABLE"
+
+
+def test_supervisor_can_monitor_a_runtime_from_a_separate_sidecar(tmp_path: Path) -> None:
+    store, attempt_id = _running_store(tmp_path)
+    probe = _ExternalMonitorProbe()
+    supervisor = RuntimeSupervisor(
+        store,
+        probe,
+        TelemetryPolicy(sample_interval_seconds=2.0),
+    )
+
+    assert supervisor.sample_if_due("run-a", supervisor_pid=5000, monitor_pid=7000) is True
+
+    assert probe.host_process_ids == [5000, 6000]
+    assert probe.monitor_process_ids == [7000]
+    assert len(store.resource_samples("run-a", attempt_id=None)) == 1
+    assert len(store.resource_samples("run-a", attempt_id=attempt_id)) == 1

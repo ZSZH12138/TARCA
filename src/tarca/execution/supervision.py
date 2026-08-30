@@ -30,7 +30,15 @@ class RuntimeSupervisor:
         self._clock = clock
         self._last_sampled_by_run: Mapping[str, float] = MappingProxyType({})
 
-    def sample_if_due(self, run_id: str, supervisor_pid: int) -> bool:
+    def sample_if_due(
+        self,
+        run_id: str,
+        supervisor_pid: int,
+        *,
+        monitor_pid: int | None = None,
+    ) -> bool:
+        if monitor_pid is not None and monitor_pid <= 0:
+            raise ValueError("monitor process ID must be positive")
         now = self._clock()
         previous = self._last_sampled_by_run.get(run_id)
         if previous is not None and now - previous < self._policy.sample_interval_seconds:
@@ -45,7 +53,10 @@ class RuntimeSupervisor:
             return False
 
         monitor_reader = getattr(self._probe, "monitor_snapshot", None)
-        monitor_sample = monitor_reader(supervisor_pid) if callable(monitor_reader) else run_sample
+        monitored_process_id = supervisor_pid if monitor_pid is None else monitor_pid
+        monitor_sample = (
+            monitor_reader(monitored_process_id) if callable(monitor_reader) else run_sample
+        )
         for category in monitor_overhead_alerts(monitor_sample, self._policy):
             self._store.add_alert_once(
                 run_id,

@@ -201,13 +201,31 @@ def _job_record(node: RunPlanNode, row: sqlite3.Row | None) -> _JobRecord:
     )
 
 
+_PROGRESS_PAIRS: tuple[tuple[str, str], ...] = (
+    ("completed_steps", "total_steps"),
+    ("completed_conditions", "total_conditions"),
+    ("completed_base_groups", "total_base_groups"),
+    ("completed_seed_worlds", "total_seed_worlds"),
+    ("completed_seed_reports", "total_seed_reports"),
+)
+
+
+def _progress_counts(progress: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    for completed_key, total_key in _PROGRESS_PAIRS:
+        if completed_key in progress or total_key in progress:
+            return (
+                _optional_number(progress.get(completed_key)),
+                _optional_number(progress.get(total_key)),
+            )
+    return None, None
+
+
 def _remaining_seconds(record: _JobRecord) -> float | None:
     if record.state == "COMPLETED":
         return 0.0
     if record.state != "RUNNING":
         return None
-    completed = _optional_number(record.progress.get("completed_steps"))
-    total = _optional_number(record.progress.get("total_steps"))
+    completed, total = _progress_counts(record.progress)
     started = record.process_started_at_utc
     progressed = record.progress_recorded_at_utc
     if completed is None or total is None or started is None or progressed is None:
@@ -371,6 +389,21 @@ class MonitoringRepository:
             return {}, None
         return _object(row["payload_json"]), _datetime(row["sampled_at_utc"])
 
+    @staticmethod
+    def _latest_checkpoint(
+        connection: sqlite3.Connection,
+        run_id: str,
+    ) -> datetime | None:
+        row = connection.execute(
+            """
+            SELECT MAX(attempts.updated_at_utc) AS checkpoint_at_utc
+            FROM attempts JOIN job_nodes USING(task_id)
+            WHERE job_nodes.run_id = ? AND attempts.state = 'COMPLETED'
+            """,
+            (run_id,),
+        ).fetchone()
+        return None if row is None else _datetime(row["checkpoint_at_utc"])
+
     def _telemetry_status(
         self, sampled_at: datetime | None
     ) -> Literal["LIVE", "STALE", "UNAVAILABLE"]:
@@ -384,6 +417,7 @@ class MonitoringRepository:
         row: sqlite3.Row,
         jobs: tuple[JobStatusView, ...],
         last_sampled_at: datetime | None,
+        last_checkpoint_at: datetime | None,
     ) -> RunSummaryView:
         total = len(jobs)
         completed = sum(job.state == "COMPLETED" for job in jobs)
@@ -433,6 +467,7 @@ class MonitoringRepository:
             eta_status=eta_status,
             created_at_utc=datetime.fromisoformat(str(row["created_at_utc"])),
             last_sampled_at_utc=last_sampled_at,
+            last_checkpoint_at_utc=last_checkpoint_at,
         )
 
     def _resources(
@@ -519,8 +554,9 @@ class MonitoringRepository:
             history = self._history(records)
             jobs = tuple(self._job_view(record, history) for record in records)
             sample, sampled_at = self._latest_run_sample(connection, run_id)
+            checkpoint_at = self._latest_checkpoint(connection, run_id)
             return RuntimeSnapshotView(
-                run=self._run_view(run_row, jobs, sampled_at),
+                run=self._run_view(run_row, jobs, sampled_at, checkpoint_at),
                 jobs=jobs,
                 resources=self._resources(jobs, sample, sampled_at),
                 alerts=self._alerts(connection, run_id),

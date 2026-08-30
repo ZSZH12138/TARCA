@@ -33,6 +33,10 @@ class ProcessLike(Protocol):
 
     def poll(self) -> int | None: ...
 
+    def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class WorkerHandle:
@@ -205,6 +209,30 @@ class LocalMultiProcessBackend:
                 handle for handle in self._handles if handle.attempt_id not in finished_ids
             ]
         return finished
+
+    def terminate_all(self, *, timeout_seconds: float = 5.0) -> tuple[str, ...]:
+        if timeout_seconds <= 0.0:
+            raise ValueError("worker termination timeout must be positive")
+        active = tuple(
+            handle
+            for handle in self._handles
+            if handle.process is not None and handle.process.poll() is None
+        )
+        for handle in active:
+            assert handle.process is not None
+            handle.process.terminate()
+        deadline = time.monotonic() + timeout_seconds
+        while (
+            any(handle.process is not None and handle.process.poll() is None for handle in active)
+            and time.monotonic() < deadline
+        ):
+            time.sleep(min(0.05, timeout_seconds))
+        for handle in active:
+            if handle.process is not None and handle.process.poll() is None:
+                handle.process.kill()
+        active_ids = {handle.attempt_id for handle in active}
+        self._handles = [handle for handle in self._handles if handle.attempt_id not in active_ids]
+        return tuple(handle.attempt_id for handle in active)
 
 
 class Scheduler:

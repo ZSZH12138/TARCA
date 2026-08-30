@@ -855,6 +855,9 @@ $$
 - 使用相同未来噪声验证事实与反事实效应；
 - 完成 synthetic easy 和 E01 工程真值 smoke。
 
+> 实施状态不改写本计划的研究边界；E01 的当前冻结结论为 `v2/PASS`，证据与后续任务入口见
+> `TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`。
+
 第 5–6 周（Stage 2）：
 
 - 实现 naive、VAR/DLinear 和小型概率预测器；

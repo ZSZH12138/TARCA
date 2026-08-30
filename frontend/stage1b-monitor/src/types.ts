@@ -13,6 +13,7 @@ export interface RunSummary {
   eta_status: "CALIBRATING" | "AVAILABLE" | "COMPLETE" | "FAILED";
   created_at_utc: string;
   last_sampled_at_utc: string | null;
+  last_checkpoint_at_utc: string | null;
 }
 
 export interface JobStatus {

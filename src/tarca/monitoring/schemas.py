@@ -49,6 +49,7 @@ class RunSummaryView(RuntimeView):
     eta_status: Literal["CALIBRATING", "AVAILABLE", "COMPLETE", "FAILED"]
     created_at_utc: datetime
     last_sampled_at_utc: datetime | None
+    last_checkpoint_at_utc: datetime | None
 
 
 class ResourceView(RuntimeView):

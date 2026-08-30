@@ -30,12 +30,12 @@ class HostAdmissionPolicy:
             raise ValueError("system and I/O reserve must use one to four CPU cores")
         if self.scheduler_monitor_cores != 1:
             raise ValueError("scheduler and monitoring must reserve exactly one CPU core")
-        if not 20 <= self.maximum_data_cores <= 26:
-            raise ValueError("maximum data CPU allocation must stay within 20 to 26 cores")
+        if not 1 <= self.maximum_data_cores <= 256:
+            raise ValueError("maximum data CPU allocation must stay within one to 256 cores")
         if self.maximum_host_memory_bytes <= 0 or self.minimum_local_storage_free_bytes <= 0:
             raise ValueError("host memory and local storage limits must be positive")
-        if not 2 <= self.initial_loader_workers_per_gpu_job <= 4:
-            raise ValueError("initial GPU DataLoader workers must stay within two to four")
+        if not 1 <= self.initial_loader_workers_per_gpu_job <= 4:
+            raise ValueError("initial GPU DataLoader workers must stay within one to four")
 
 
 @dataclass(frozen=True, slots=True)

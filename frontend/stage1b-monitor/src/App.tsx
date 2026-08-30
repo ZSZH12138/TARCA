@@ -9,9 +9,10 @@ import { useRuntimeSnapshot } from "./useRuntimeSnapshot";
 
 export function App({ api = browserMonitoringApi }: { api?: MonitoringApi }) {
   const { snapshot, error } = useRuntimeSnapshot(api);
+  const connectingLabel = import.meta.env.VITE_TARCA_CONNECTING_LABEL ?? "正在连接 Stage1B 运行时…";
 
   if (snapshot === null) {
-    return <main className="loading"><span /><p>{error ?? "正在连接 Stage1B 运行时…"}</p></main>;
+    return <main className="loading"><span /><p>{error ?? connectingLabel}</p></main>;
   }
   return (
     <main className="dashboard-shell">

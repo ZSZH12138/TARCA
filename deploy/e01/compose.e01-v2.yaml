@@ -1,0 +1,36 @@
+services:
+  e01-v2:
+    image: tarca-e01-v2:local
+    build:
+      context: ../..
+      dockerfile: deploy/e01/Dockerfile.v2
+    entrypoint:
+      - /opt/tarca/deploy/e01/entrypoint-v2.sh
+    command:
+      - status
+      - --empty-ok
+    init: true
+    read_only: true
+    shm_size: "16gb"
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      TARCA_EXECUTION_KIND: e01-v2
+      TARCA_E01_V2_CONFIG: /opt/tarca/configs/e01/e01_v2.yaml
+      TARCA_E01_V2_ARTIFACT_ROOT: /opt/tarca/artifacts/e01-v2
+      TARCA_RUNTIME_DATABASE: /opt/tarca/artifacts/e01-v2/runtime/execution.sqlite3
+      TARCA_RUNTIME_STATIC_ROOT: /opt/tarca/frontend/stage1b-monitor/dist
+      TARCA_MONITOR_BIND_HOST: 0.0.0.0
+    tmpfs:
+      - /tmp:size=4g,mode=1777
+    volumes:
+      - type: bind
+        source: ${TARCA_E01_V2_ARTIFACT_DIR:-../../artifacts/e01-v2-server}
+        target: /opt/tarca/artifacts/e01-v2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

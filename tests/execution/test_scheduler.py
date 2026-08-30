@@ -69,8 +69,18 @@ def _capacity() -> ResourceCapacity:
 class _FakeProcess:
     pid = 321
 
+    def __init__(self) -> None:
+        self.terminated = False
+        self.killed = False
+
     def poll(self) -> int | None:
-        return None
+        return -15 if self.terminated or self.killed else None
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
 
 
 class _RecordingBackend:
@@ -281,6 +291,25 @@ def test_local_backend_launches_tuple_without_shell_and_sets_resource_environmen
     assert environment["OMP_NUM_THREADS"] == "2"
     assert environment["MKL_NUM_THREADS"] == "2"
     assert environment["TARCA_CPU_AFFINITY"]
+
+
+def test_local_backend_terminates_every_active_worker(tmp_path: Path) -> None:
+    store = ExecutionStateStore(tmp_path / "state.sqlite", artifact_verifier=lambda ref: True)
+    store.create_run("run-a", "graph-a")
+    store.enqueue_task("run-a", _task(1), "test.execute")
+    recorder = _PopenRecorder()
+    backend = LocalMultiProcessBackend(
+        repository_root=tmp_path,
+        popen_factory=recorder,
+        python_executable="python",
+        cpu_ids=tuple(range(24)),
+    )
+    Scheduler(store, backend, _capacity()).tick("run-a")
+
+    terminated = backend.terminate_all(timeout_seconds=0.01)
+
+    assert terminated == ("task-1-attempt-1",)
+    assert recorder.options
 
 
 def test_psutil_process_probe_reads_worker_identity_from_argv() -> None:

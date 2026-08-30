@@ -134,6 +134,36 @@ def test_zero_progress_keeps_eta_calibrating(tmp_path: Path) -> None:
     assert snapshot.run.eta_status == "CALIBRATING"
 
 
+@pytest.mark.parametrize(
+    ("completed_key", "total_key"),
+    (
+        ("completed_conditions", "total_conditions"),
+        ("completed_base_groups", "total_base_groups"),
+        ("completed_seed_worlds", "total_seed_worlds"),
+    ),
+)
+def test_e01_progress_pairs_provide_running_eta(
+    tmp_path: Path,
+    completed_key: str,
+    total_key: str,
+) -> None:
+    path = _running_database(tmp_path)
+    store = ExecutionStateStore(path, artifact_verifier=lambda _: True)
+    attempt_id = store.running_attempts("run-a")[0].attempt_id
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM progress_events WHERE attempt_id = ?", (attempt_id,))
+    store.record_progress(
+        attempt_id,
+        {completed_key: 20, total_key: 100},
+        now=SAMPLED_AT,
+    )
+
+    snapshot = MonitoringRepository(path, now=lambda: SAMPLED_AT).snapshot()
+
+    assert snapshot.jobs[0].eta_seconds == 80.0
+    assert snapshot.run.eta_status == "AVAILABLE"
+
+
 def test_run_eta_uses_phase_and_resource_history_for_unseen_tail_tasks(
     tmp_path: Path,
 ) -> None:

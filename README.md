@@ -1,5 +1,32 @@
 # TARCA
 
+## E01 SCM 真值验证：`PASS / v2`
+
+E01 已完成并统一冻结为 `v2`。最终判定由两部分组成：v2 正式运行的解析环境 E01-A，以及
+v1 中已经通过并经原字节哈希复核的 Lorenz-96 E01-B。v1 的失败运行链已经移除，仅保留一份
+可校验历史记录；v1 的失败事实没有被改写成成功。
+
+活动指针和正式收据位于：
+
+```text
+artifacts/e01/active.json
+artifacts/e01/frozen/v2/qualification_receipt.json
+artifacts/e01/history/e01_v1_history_record.json
+```
+
+重新生成确定性 v2 服务器包：
+
+```powershell
+$env:PYTHONPATH = 'deploy/e01/py310;src'
+& 'D:\software\MyAnaconda\envs\tarca-stage1b-runtime-py310\python.exe' `
+  scripts/prepare_e01_v2_server_bundle.py --repository-root .
+```
+
+服务器包、整包 SHA-256 和密封 receipt 只保存在本地 `artifacts/e01/bundle/`，不上传 GitHub。
+科学规则见 `docs/research/e01_execution_spec_v2.md`；服务器安全流程见
+`docs/research/e01_server_handoff_v2.md`；权威结果与下一任务入口见
+`docs/auth/TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`。
+
 TARCA（Temporal Abstraction and Robust Causal Alignment）是一个面向非平稳多变量时间序列的研究项目，目标是在冻结的概率预测模型中定位、验证并比较具有时间语义的内部机制。
 
 项目关注三个彼此关联的问题：神经网络内部位置是否与预先定义的高层因果变量保持干预一致性；forecast horizon 与 causal lag 能否被独立定位；已经识别的机制能否在未见状态变化下保持 zero-refit 的解释有效性。金融序列只作为后期高难度压力测试，不构成方法新颖性来源。
@@ -39,19 +66,22 @@ src/tarca/artifacts/    Stage 1A 类型化原子制品仓库与冻结目录
 src/tarca/data/         registry 驱动的既有物理窗口读取边界
 src/tarca/stage0/       Stage 0 冻结与核验逻辑
 src/tarca/stage1b/      官方世界、生成器真值、模型适配、资格 Gate 与单一 v2 冻结
+src/tarca/e01/          E01-v2 解析真值、证据验证、任务图与可恢复运行时
 src/tarca/execution/    不可变任务、双 GPU 调度、恢复和资源遥测
 src/tarca/monitoring/   只读监控 API
 frontend/stage1b-monitor/ Stage1B 中文运行监控前端
 deploy/stage1b/         Python 3.10/CUDA 12.1 容器与 Compose 入口
+deploy/e01/             E01-v2 服务器入口与资源监督脚本
 scripts/                环境、来源、Stage 0 与 Stage 1A 检查入口
 tests/stage0/           Stage 0 自动化验证
 tests/stage1a/          Stage 1A 高风险边界和最小闭环验证
+tests/e01/              E01-v2 科学、证据、运行时和服务器包验证
 third_party_manifest/   第三方论文、仓库、版本和许可证边界
 ```
 
 Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage1B 当前状态为 `FROZEN_V2`：
 `lorenz96_twoscale_v2 + ITransformerReference` 已在独立确认种子上通过 h1–6 资格门禁，并以
-内容哈希绑定为唯一活动 `v2`；E01/E02 仍未运行。Stage 1A 范围见
+内容哈希绑定为唯一活动 `v2`；E01 已以 `v2/PASS` 完成，E02 尚未运行。Stage 1A 范围见
 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)，Stage1B 当前权威交接见
 [`TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md`](docs/auth/TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md)。
 

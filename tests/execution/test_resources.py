@@ -93,6 +93,18 @@ def test_resource_plan_starts_one_independent_task_per_gpu() -> None:
     assert all(allocation.cpu_threads == 4 for allocation in allocations)
 
 
+def test_resource_policy_accepts_probe_selected_e01_v2_capacity() -> None:
+    policy = HostAdmissionPolicy(
+        scheduler_monitor_cores=1,
+        system_io_reserved_cores=1,
+        maximum_data_cores=12,
+        initial_loader_workers_per_gpu_job=1,
+    )
+
+    assert policy.maximum_data_cores == 12
+    assert policy.initial_loader_workers_per_gpu_job == 1
+
+
 def test_resource_plan_subtracts_active_cpu_memory_and_gpu_allocations() -> None:
     capacity = ResourceCapacity(
         logical_cpu_count=28,

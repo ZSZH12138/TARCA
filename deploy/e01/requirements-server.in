@@ -1,0 +1,2 @@
+# E01 deliberately shares the hash-locked Python 3.10 runtime with Stage1B.
+-r ../stage1b/requirements-server.in

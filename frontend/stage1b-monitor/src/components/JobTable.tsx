@@ -1,4 +1,4 @@
-import { formatBytes, formatDecimal, shortId } from "../format";
+import { formatBytes, formatDecimal, formatTimestamp, shortId } from "../format";
 import type { JobStatus } from "../types";
 
 function processStatus(job: JobStatus): string {
@@ -20,7 +20,7 @@ export function JobTable({ jobs }: { jobs: JobStatus[] }) {
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>任务</th><th>世界 / 模型</th><th>状态</th><th>GPU</th><th>CPU（实际 / 预留）</th><th>内存 / 显存</th><th>进度</th></tr></thead>
+          <thead><tr><th>任务</th><th>世界 / 模型</th><th>状态</th><th>GPU</th><th>CPU（实际 / 预留）</th><th>内存 / 显存</th><th>最近心跳 / 告警</th><th>进度</th></tr></thead>
           <tbody>
             {jobs.map((job) => (
               <tr key={job.task_id}>
@@ -30,6 +30,7 @@ export function JobTable({ jobs }: { jobs: JobStatus[] }) {
                 <td>{job.gpu_ids.length ? job.gpu_ids.join(", ") : "CPU"}</td>
                 <td>{formatDecimal(job.actual_effective_busy_cores)} / {job.expected_cpu_cores}</td>
                 <td><span>{formatBytes(job.actual_rss_bytes)}</span><small>{job.gpu_ids.length ? `${formatBytes(job.actual_vram_bytes)} VRAM` : "—"}</small></td>
+                <td><span>{formatTimestamp(job.heartbeat_at_utc)}</span><small>{job.error_category ?? "无告警"}</small></td>
                 <td>{job.epoch === null ? "等待" : `Epoch ${job.epoch}`}<small>{job.batch === null ? "" : `Batch ${job.batch}`}</small></td>
               </tr>
             ))}
