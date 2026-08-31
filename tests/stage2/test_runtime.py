@@ -39,7 +39,7 @@ def test_stage2_full_local_runtime_lifecycle_without_scientific_execution(
     )["prepared_receipt_sha256"] == prepared["receipt_sha256"]
     evidence = tmp_path / "preflight.json"
     evidence.write_text(
-        """{"amp_finite":true,"checkpoint_roundtrip_passed":true,"estimated_remaining_seconds":3600,"formal_tasks_executed":0,"fp32_finite":true,"remaining_rental_hours":24,"source_hashes_verified":true,"status":"PREFLIGHT_PASS"}\n""",
+        """{"amp_finite":true,"checkpoint_roundtrip_passed":true,"estimated_remaining_seconds":3600,"eta_gate_passed":true,"formal_tasks_executed":0,"fp32_finite":true,"probe_contract":"stage2-v1-two-exact-neural-concurrent-max-epochs","remaining_rental_hours":24,"reset_margin_hours":1,"source_hashes_verified":true,"status":"PREFLIGHT_PASS"}\n""",
         encoding="utf-8",
     )
     dispatch_stage2_runtime_command(
@@ -52,7 +52,8 @@ def test_stage2_full_local_runtime_lifecycle_without_scientific_execution(
         "tarca.stage2.runtime.LocalMultiProcessBackend", lambda *args, **kwargs: object()
     )
 
-    def fake_run(*args, **kwargs):
+    def fake_run(*args: object, **kwargs: object) -> Stage2RunResult:
+        del args, kwargs
         return Stage2RunResult(
             run_id="run-" + "a" * 64,
             graph_id=graph.graph_id,
@@ -97,6 +98,20 @@ def test_stage2_preflight_rejects_status_only_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "preflight.json"
     evidence.write_text('{"status":"PREFLIGHT_PASS"}\n', encoding="utf-8")
     with pytest.raises(Stage2RuntimeAuthorizationError, match="evidence is incomplete"):
+        dispatch_stage2_runtime_command(
+            "preflight", ROOT, CONFIG, artifact_root, evidence_path=evidence
+        )
+
+
+def test_stage2_preflight_rejects_noncanonical_probe_contract(tmp_path: Path) -> None:
+    artifact_root = tmp_path / "artifacts/stage2"
+    dispatch_stage2_runtime_command("prepare", ROOT, CONFIG, artifact_root)
+    evidence = tmp_path / "preflight.json"
+    evidence.write_text(
+        """{"amp_finite":true,"checkpoint_roundtrip_passed":true,"estimated_remaining_seconds":3600,"eta_gate_passed":true,"formal_tasks_executed":0,"fp32_finite":true,"probe_contract":"ad-hoc-probe","remaining_rental_hours":24,"reset_margin_hours":1,"source_hashes_verified":true,"status":"PREFLIGHT_PASS"}\n""",
+        encoding="utf-8",
+    )
+    with pytest.raises(Stage2RuntimeAuthorizationError, match="failed boundary"):
         dispatch_stage2_runtime_command(
             "preflight", ROOT, CONFIG, artifact_root, evidence_path=evidence
         )

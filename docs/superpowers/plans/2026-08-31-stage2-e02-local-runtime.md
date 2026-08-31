@@ -615,7 +615,7 @@ git commit -m "feat: add e02 decision and receipt"
 - Produces: `e02_executor_registry(repository_root) -> ExecutorRegistry`
 - Produces: `run_e02_formal(...) -> E02RunResult`
 
-- [ ] **Step 1: Write failing graph-count, dependency, resource, and no-formal-access tests**
+- [x] **Step 1: Write failing graph-count, dependency, resource, and no-formal-access tests**
 
 ```python
 def test_stage2_graph_has_six_independent_large_gpu_training_tasks() -> None:
@@ -631,21 +631,21 @@ def test_e02_graph_requires_frozen_stage2_and_grant() -> None:
         compile_e02_graph(E02_CONFIG, unfrozen_stage2_fixture())
 ```
 
-- [ ] **Step 2: Run graph/runner tests and verify the RED state**
+- [x] **Step 2: Run graph/runner tests and verify the RED state**
 
 Run the four Task 9 test files.
 
-- [ ] **Step 3: Implement immutable artifact-driven DAGs**
+- [x] **Step 3: Implement immutable artifact-driven DAGs**
 
 Stage 2 phases are source verification, development data, baseline fits, six neural trainings, checkpoint validation, validation prediction, selection, freeze candidate, and receipt. E02 phases are grant verification, formal data generation/open, prediction for the fixed linear baseline and all three iTransformer initializations, per-trajectory scoring, bootstrap, decision, and final receipt. Every input is an `ArtifactRef`; no job locates “latest” files.
 
 Use `completed_task_policy="NEVER_RERUN"`. Bind executors by exact phase names in allowlisted registries. Keep formal metrics out of progress events.
 
-- [ ] **Step 4: Run scheduler integration, retry-history, and placement-invariance tests**
+- [x] **Step 4: Run scheduler integration, retry-history, and placement-invariance tests**
 
 Expected: all dependencies execute once, completed artifacts are reused, attempts remain in SQLite, and swapping GPU assignment preserves science hashes.
 
-- [ ] **Step 5: Commit Task 9**
+- [x] **Step 5: Commit Task 9**
 
 ```powershell
 git add src/tarca/stage2/tasks.py src/tarca/stage2/jobs.py src/tarca/stage2/runner.py src/tarca/e02/tasks.py src/tarca/e02/jobs.py src/tarca/e02/runner.py tests/stage2/test_tasks.py tests/stage2/test_runner.py tests/e02/test_tasks.py tests/e02/test_runner.py
@@ -669,7 +669,7 @@ git commit -m "feat: add stage2 and e02 execution graphs"
 - Produces: `InferenceBundleController.observe(...) -> GpuPackingDecision`
 - Existing `select_ddp_mode` retains the exact 30% threshold
 
-- [ ] **Step 1: Write failing tests for exact 28/224/2×24 admission and useful saturation**
+- [x] **Step 1: Write failing tests for exact 28/224/2×24 admission and useful saturation**
 
 ```python
 def test_stage2_admits_target_server_and_reserves_four_cores() -> None:
@@ -687,19 +687,19 @@ def test_two_active_gpu_tasks_leave_sixteen_cpu_cores_for_backfill() -> None:
     assert {item.gpu_ids for item in allocations if item.gpu_ids} == {(0,), (1,)}
 ```
 
-- [ ] **Step 2: Run resource and scheduler tests to verify the missing behavior**
+- [x] **Step 2: Run resource and scheduler tests to verify the missing behavior**
 
 Run Task 10 tests plus existing execution resource/scheduler tests.
 
-- [ ] **Step 3: Implement bounded policy wrappers and exclusive GPU ownership**
+- [x] **Step 3: Implement bounded policy wrappers and exclusive GPU ownership**
 
 Keep one active OS training task per GPU. Admit two 4-core/32GiB GPU tasks, then fill remaining cores with dependency-ready CPU tasks without exceeding 24 cores or 200GiB. Set the Stage 2 storage floor to 200GiB. Place 2–3 small inference bundles inside one GPU worker using existing 180-second/70%/8GiB and 80%/18GiB rules. Back off on over-20GiB, OOM, throttle, data wait, or throughput loss. Select AMP only when finite, within configured maximum absolute error, and faster than FP32.
 
-- [ ] **Step 4: Run fake-NVML wave, OOM backoff, DDP 29.9/30.0%, and ETA-margin tests**
+- [x] **Step 4: Run fake-NVML wave, OOM backoff, DDP 29.9/30.0%, and ETA-margin tests**
 
 Expected: 29.9% keeps task parallel; 30.0% selects DDP; ETA plus one hour equal to the rental boundary refuses launch.
 
-- [ ] **Step 5: Commit Task 10**
+- [x] **Step 5: Commit Task 10**
 
 ```powershell
 git add src/tarca/stage2/resources.py src/tarca/execution/resources.py src/tarca/execution/scheduler.py tests/stage2/test_resources.py tests/execution/test_resources.py tests/execution/test_scheduler.py
@@ -726,7 +726,7 @@ git commit -m "feat: schedule stage2 across two gpus"
 - Produces: `create_e02_grant(...) -> SealedAccessGrant`
 - Produces exact CLI commands from the approved spec
 
-- [ ] **Step 1: Write failing authorization and side-effect-boundary tests**
+- [x] **Step 1: Write failing authorization and side-effect-boundary tests**
 
 ```python
 def test_stage2_launch_requires_exact_acknowledgement(tmp_path: Path) -> None:
@@ -739,21 +739,21 @@ def test_e02_prepare_does_not_open_formal_data(monkeypatch: pytest.MonkeyPatch) 
     prepare_e02(REPOSITORY_ROOT, E02_CONFIG_PATH, ARTIFACT_ROOT)
 ```
 
-- [ ] **Step 2: Run runtime/CLI tests and observe missing entrypoints**
+- [x] **Step 2: Run runtime/CLI tests and observe missing entrypoints**
 
 Run the five Task 11 test files.
 
-- [ ] **Step 3: Implement atomic receipts and exact acknowledgements**
+- [x] **Step 3: Implement atomic receipts and exact acknowledgements**
 
 Stage 2 launch accepts only `I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN`; E02 launch accepts only `I_ACKNOWLEDGE_E02_V1_FORMAL_RUN`. `prepare`, `dry-run`, `status`, bundle creation, and Stage 2 preflight never create a formal grant. `recover` snapshots the latest consistent checkpoints, execution DB, manifests, and log index into a hash-addressed capsule. `resume` uses the same run ID and preserves all attempts.
 
 Expose the exact command sets `prepare`, `dry-run`, `preflight`, `launch`, `resume`, `status`, `freeze/finalize`, and `recover` through argparse and sorted JSON stdout.
 
-- [ ] **Step 4: Run all lifecycle transitions, corrupted-receipt, wrong-token, and resume tests**
+- [x] **Step 4: Run all lifecycle transitions, corrupted-receipt, wrong-token, and resume tests**
 
 Expected: wrong token and missing preflight fail before state mutation; formal open occurs only after a valid grant; recovery/reload preserves run identity.
 
-- [ ] **Step 5: Commit Task 11**
+- [x] **Step 5: Commit Task 11**
 
 ```powershell
 git add src/tarca/stage2/runtime.py src/tarca/e02/grant.py src/tarca/e02/runtime.py scripts/run_stage2_v1.py scripts/run_e02_v1.py tests/stage2/test_runtime.py tests/stage2/test_cli.py tests/e02/test_grant.py tests/e02/test_runtime.py tests/e02/test_cli.py
@@ -774,7 +774,7 @@ git commit -m "feat: add stage2 and e02 runtime lifecycle"
 - Produces: Stage 2/E02 runtime labels and resource-only snapshots
 - Preserves: no control endpoint and no partial science score fields
 
-- [ ] **Step 1: Write failing API schema and static-bundle tests**
+- [x] **Step 1: Write failing API schema and static-bundle tests**
 
 ```python
 FORBIDDEN_KEYS = {"crps", "nll", "mae", "coverage", "ranking", "best_seed", "skill"}
@@ -786,17 +786,17 @@ def test_running_e02_api_never_exposes_partial_science(client: TestClient) -> No
     assert not any(key in serialized for key in FORBIDDEN_KEYS)
 ```
 
-- [ ] **Step 2: Run monitor contract tests and capture the RED label/schema gaps**
+- [x] **Step 2: Run monitor contract tests and capture the RED label/schema gaps**
 
-- [ ] **Step 3: Add allowlisted runtime labels and resource-only serializers**
+- [x] **Step 3: Add allowlisted runtime labels and resource-only serializers**
 
 Support `stage2-v1` and `e02-v1` execution kinds. Serialize task phase, attempt, heartbeat, progress units, ETA, CPU/RAM/GPU/I/O, and alerts only. Do not add POST/PUT/PATCH/DELETE routes. Build labels from compile-time environment variables without embedding local paths.
 
-- [ ] **Step 4: Run monitor tests and existing frontend/API tests**
+- [x] **Step 4: Run monitor tests and existing frontend/API tests**
 
 Expected: Stage1B/E01 labels remain valid; Stage 2/E02 labels render; forbidden science keys never appear during running state.
 
-- [ ] **Step 5: Commit Task 12**
+- [x] **Step 5: Commit Task 12**
 
 ```powershell
 git add src/tarca/monitoring frontend/stage1b-monitor/src/App.tsx tests/stage2/test_monitor_contract.py tests/e02/test_monitor_contract.py
@@ -822,7 +822,7 @@ git commit -m "feat: monitor stage2 without science leakage"
 - Produces: `bash deploy/stage2/bootstrap.sh --mode preflight --remaining-rental-hours N`
 - Produces: supervisor launch/resume for Stage 2 and E02 with exact tokens supplied by user
 
-- [ ] **Step 1: Write failing static container/security tests**
+- [x] **Step 1: Write failing static container/security tests**
 
 ```python
 def test_dockerfile_preserves_base_cuda_torch() -> None:
@@ -833,17 +833,17 @@ def test_dockerfile_preserves_base_cuda_torch() -> None:
     assert "USER tarca" in text
 ```
 
-- [ ] **Step 2: Run container contract tests and verify missing files**
+- [x] **Step 2: Run container contract tests and verify missing files**
 
-- [ ] **Step 3: Implement non-root, read-only, offline-compatible deployment**
+- [x] **Step 3: Implement non-root, read-only, offline-compatible deployment**
 
 Use a Node build stage only for static monitoring assets. Runtime uses `PYTHONPATH` instead of installing the Python-3.11-declared project package. Install only hash-locked non-torch dependencies. Compose binds monitor port to `127.0.0.1`, mounts only the artifact directory writable, uses `read_only: true`, `tmpfs /tmp`, `shm_size: 16gb`, and requests all NVIDIA GPUs. Bootstrap runs environment validation, source/import hashes, two-card CUDA/AMP/checkpoint probes, bounded throughput/ETA/storage admission, and stops before training.
 
-- [ ] **Step 4: Run Bash syntax checks, static security tests, and Docker config validation when Docker is available**
+- [x] **Step 4: Run Bash syntax checks, static security tests, and Docker config validation when Docker is available**
 
 Run `bash -n` through the available Git Bash/WSL executable for all scripts. If Docker is unavailable, record `NOT_RUN_LOCAL_NO_DOCKER` in the implementation report and keep `docker compose config` as a mandatory server preflight step.
 
-- [ ] **Step 5: Commit Task 13**
+- [x] **Step 5: Commit Task 13**
 
 ```powershell
 git add deploy/stage2 tests/stage2/test_container_contract.py tests/stage2/test_server_scripts.py
@@ -862,7 +862,7 @@ git commit -m "feat: add stage2 cuda server deployment"
 - Produces: deterministic `tar.gz`, `.sha256`, and receipt JSON
 - Bundle contains no secret, absolute user path, formal result, or mutable source checkout
 
-- [ ] **Step 1: Write failing deterministic, tamper, secret, and contents tests**
+- [x] **Step 1: Write failing deterministic, tamper, secret, and contents tests**
 
 ```python
 def test_stage2_bundle_is_byte_deterministic(tmp_path: Path) -> None:
@@ -872,17 +872,17 @@ def test_stage2_bundle_is_byte_deterministic(tmp_path: Path) -> None:
     assert first["formal_tasks_executed"] == 0
 ```
 
-- [ ] **Step 2: Run bundle tests and verify the missing builder**
+- [x] **Step 2: Run bundle tests and verify the missing builder**
 
-- [ ] **Step 3: Implement canonical archive and pre-bundle evidence checks**
+- [x] **Step 3: Implement canonical archive and pre-bundle evidence checks**
 
 Reuse E01 canonical tar metadata: mtime/uid/gid fixed to zero, sorted POSIX names, mode 0644/0755, gzip mtime zero. Include source capsules for DLinear, PatchTST, iTransformer, and Lorenz-96; frozen upstream artifacts; configs; `src`; scripts; deploy; prebuilt frontend; tests/smoke; authority documents; approved design; and implementation report. Verify upstream hashes and Stage 2/E02 config hashes before archive creation. Reject private-key markers, `C:\Users\DELL`, credential-like environment assignments, unexpected symlinks, and artifact paths containing formal predictions or scores.
 
-- [ ] **Step 4: Run bundle twice, extract to two temporary directories, and compare manifests**
+- [x] **Step 4: Run bundle twice, extract to two temporary directories, and compare manifests**
 
 Expected: byte-identical hash, complete `SHA256SUMS.json`, correct executable modes, zero formal task count, and no local absolute paths.
 
-- [ ] **Step 5: Commit Task 14**
+- [x] **Step 5: Commit Task 14**
 
 ```powershell
 git add scripts/prepare_stage2_v1_server_bundle.py tests/stage2/test_bundle.py .gitignore
@@ -901,7 +901,7 @@ git commit -m "feat: package deterministic stage2 server bundle"
 - Consumes: test outputs, config hashes, bundle receipt, local hardware facts
 - Produces: exact local/server boundary, first-open commands, expected artifacts, recovery procedure
 
-- [ ] **Step 1: Write a failing documentation contract test**
+- [x] **Step 1: Write a failing documentation contract test**
 
 ```python
 def test_handoff_contains_exact_first_open_boundary() -> None:
@@ -912,17 +912,17 @@ def test_handoff_contains_exact_first_open_boundary() -> None:
     assert "尚未执行完整 Stage 2/E02" in text
 ```
 
-- [ ] **Step 2: Run the documentation test and verify the missing reports**
+- [x] **Step 2: Run the documentation test and verify the missing reports**
 
-- [ ] **Step 3: Write evidence-backed reports without claiming unavailable GPU/Docker validation**
+- [x] **Step 3: Write evidence-backed reports without claiming unavailable GPU/Docker validation**
 
 Document local interpreter, CPU-only torch, all test commands and results, exact config/science/bundle hashes, source commits, files produced, local limitations, server minimum/recommended resources, preflight command, launch authorization separation, monitoring URL, recovery commands, 24-hour reset behavior, and the fact that complete training/formal E02 were not run locally.
 
-- [ ] **Step 4: Run documentation test and link checks**
+- [x] **Step 4: Run documentation test and link checks**
 
 Expected: paths exist, commands match implemented CLI help, hashes match receipts, and no report claims remote success.
 
-- [ ] **Step 5: Commit Task 15**
+- [x] **Step 5: Commit Task 15**
 
 ```powershell
 git add docs/research/stage2_e02_local_implementation_report_v1.md docs/research/stage2_e02_server_handoff_v1.md tests/stage2/test_documentation_contract.py README.md

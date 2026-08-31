@@ -26,3 +26,13 @@ def test_server_lock_contains_no_torch_reinstallation() -> None:
     lock = (DEPLOY / "requirements-server.lock").read_text(encoding="utf-8")
     assert "torch==" not in lock
     assert all("--hash=sha256:" in line for line in lock.splitlines() if line.strip())
+
+
+def test_server_lock_excludes_audited_vulnerable_runtime_versions() -> None:
+    lock = (DEPLOY / "requirements-server.lock").read_text(encoding="utf-8")
+    assert "fastapi==0.141.1" in lock
+    assert "starlette==1.6.0" in lock
+    assert "pyarrow==25.0.1" in lock
+    assert "annotated-doc==0.0.5" in lock
+    assert "starlette==0.47.3" not in lock
+    assert "pyarrow==20.0.0" not in lock

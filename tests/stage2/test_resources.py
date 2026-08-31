@@ -1,6 +1,10 @@
 from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
+import torch
 
 from tarca.execution import (
     DdpMode,
@@ -19,7 +23,11 @@ from tarca.stage2.resources import (
     stage2_reset_time_gate,
     stage2_resource_capacity,
 )
-from tarca.stage2.server_probe import estimate_stage2_critical_path_seconds
+from tarca.stage2.server_probe import (
+    _probe_neural_worker,
+    estimate_stage2_critical_path_seconds,
+    run_stage2_server_probe,
+)
 
 GIB = 1024**3
 TARGET = Stage2ServerInventory(
@@ -137,3 +145,109 @@ def test_server_probe_projects_all_six_neural_runs_with_conservative_overhead() 
     )
     itransformer = 30_600 * 3 * 100 / (8.0 * 32) + 3 * 3.0
     assert estimate == pytest.approx(itransformer * 1.35 + 4 * 3600)
+
+
+def test_server_probe_orchestrates_two_models_and_enforces_eta_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    submitted: list[tuple[str, int]] = []
+
+    class ImmediateFuture:
+        def __init__(self, value: dict[str, Any]) -> None:
+            self.value = value
+
+        def result(self) -> dict[str, Any]:
+            return self.value
+
+    class ImmediateExecutor:
+        def __init__(self, *, max_workers: int, mp_context: object) -> None:
+            assert max_workers == 2
+            assert mp_context is marker
+
+        def __enter__(self) -> "ImmediateExecutor":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def submit(self, function: object, *args: object) -> ImmediateFuture:
+            del function
+            model_id = str(args[-2])
+            assert isinstance(args[-1], int)
+            gpu_id = args[-1]
+            submitted.append((model_id, gpu_id))
+            batch_size = 64 if model_id == "PATCHTST" else 32
+            return ImmediateFuture(
+                {
+                    "model_id": model_id,
+                    "gpu_id": gpu_id,
+                    "batch_size": batch_size,
+                    "batches_per_second": 100.0,
+                    "checkpoint_seconds": 1.0,
+                    "checkpoint_reload_finite": True,
+                }
+            )
+
+    marker = object()
+    monkeypatch.setattr("tarca.stage2.server_probe.multiprocessing.get_context", lambda _: marker)
+    monkeypatch.setattr("tarca.stage2.server_probe.ProcessPoolExecutor", ImmediateExecutor)
+    monkeypatch.setattr("tarca.stage2.server_probe._linear_probe_seconds", lambda: 0.25)
+    observation = run_stage2_server_probe(
+        Path.cwd(),
+        Path("configs/stage2/stage2_v1.yaml"),
+        tmp_path / "runtime",
+        remaining_rental_hours=24,
+    )
+    assert submitted == [("PATCHTST", 0), ("ITRANSFORMER", 1)]
+    assert observation["probe_contract"].startswith("stage2-v1")
+    assert observation["train_window_count"] == 30_600
+    assert observation["linear_probe_seconds"] == 0.25
+    assert observation["eta_gate_passed"] is True
+
+
+def test_exact_neural_probe_worker_runs_forward_backward_and_checkpoint_on_device_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeProbabilisticPredictor(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.location = torch.nn.Parameter(torch.tensor(0.0))
+
+        def forward_distribution(self, histories: torch.Tensor) -> SimpleNamespace:
+            shape = (histories.shape[0], 24, 8)
+            mean = self.location * torch.ones(shape, device=histories.device)
+            return SimpleNamespace(mean=mean, scale=torch.ones_like(mean))
+
+        def to(self, *args: object, **kwargs: object) -> "FakeProbabilisticPredictor":
+            del args, kwargs
+            return self
+
+    original_randn = torch.randn
+    original_load = torch.load
+    monkeypatch.setattr("tarca.stage2.server_probe.torch.cuda.set_device", lambda _: None)
+    monkeypatch.setattr("tarca.stage2.server_probe.torch.cuda.synchronize", lambda _: None)
+    monkeypatch.setattr(
+        "tarca.stage2.server_probe.torch.randn",
+        lambda *shape, **kwargs: original_randn(*shape),
+    )
+    monkeypatch.setattr(
+        "tarca.stage2.server_probe.torch.load",
+        lambda path, **kwargs: original_load(path, map_location="cpu"),
+    )
+    monkeypatch.setattr(
+        "tarca.stage2.server_probe._new_neural",
+        lambda *args, **kwargs: FakeProbabilisticPredictor(),
+    )
+    result = _probe_neural_worker(
+        str(Path.cwd()),
+        str(Path("configs/stage2/stage2_v1.yaml").resolve()),
+        str(tmp_path),
+        "ITRANSFORMER",
+        1,
+    )
+    assert result["model_id"] == "ITRANSFORMER"
+    assert result["gpu_id"] == 1
+    assert isinstance(result["batches_per_second"], float)
+    assert result["batches_per_second"] > 0
+    assert result["checkpoint_reload_finite"] is True
+    assert not tuple(tmp_path.glob("probe-*.pt"))

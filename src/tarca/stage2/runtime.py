@@ -117,22 +117,32 @@ def record_stage2_preflight(
         "amp_finite",
         "checkpoint_roundtrip_passed",
         "estimated_remaining_seconds",
+        "eta_gate_passed",
         "formal_tasks_executed",
         "fp32_finite",
+        "probe_contract",
         "remaining_rental_hours",
+        "reset_margin_hours",
         "source_hashes_verified",
     }
     if not required.issubset(evidence):
         raise Stage2RuntimeAuthorizationError("preflight evidence is incomplete")
-    if not all(
-        evidence.get(name) is True
-        for name in (
-            "amp_finite",
-            "checkpoint_roundtrip_passed",
-            "fp32_finite",
-            "source_hashes_verified",
+    exact_probe = "stage2-v1-two-exact-neural-concurrent-max-epochs"
+    if (
+        evidence.get("probe_contract") != exact_probe
+        or evidence.get("eta_gate_passed") is not True
+        or evidence.get("reset_margin_hours") != 1
+        or not all(
+            evidence.get(name) is True
+            for name in (
+                "amp_finite",
+                "checkpoint_roundtrip_passed",
+                "fp32_finite",
+                "source_hashes_verified",
+            )
         )
-    ) or evidence.get("formal_tasks_executed") != 0:
+        or evidence.get("formal_tasks_executed") != 0
+    ):
         raise Stage2RuntimeAuthorizationError("preflight evidence contains a failed boundary")
     try:
         stage2_reset_time_gate(

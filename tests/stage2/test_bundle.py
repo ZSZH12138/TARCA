@@ -24,10 +24,10 @@ def test_stage2_bundle_has_offline_inputs_and_no_local_path_or_secret(tmp_path: 
         assert "SHA256SUMS.json" in names
         pyarrow_wheel = (
             "deploy/stage2/wheelhouse/"
-            "pyarrow-20.0.0-cp310-cp310-manylinux_2_17_x86_64."
-            "manylinux2014_x86_64.whl"
+            "pyarrow-25.0.1-cp310-cp310-manylinux_2_28_x86_64.whl"
         )
         assert pyarrow_wheel in names
+        assert not any("pyarrow-20.0.0" in name for name in names)
         assert "artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz" in names
         assert "docs/research/stage2_e02_local_implementation_report_v1.md" in names
         assert "docs/research/stage2_e02_server_handoff_v1.md" in names

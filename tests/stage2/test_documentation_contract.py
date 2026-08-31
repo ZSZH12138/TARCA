@@ -20,7 +20,7 @@ def test_local_report_records_evidence_without_claiming_remote_success() -> None
     text = REPORT.read_text(encoding="utf-8")
     assert "Python 3.11.15" in text
     assert "2.13.0+cpu" in text
-    assert "80.55%" in text
+    assert "80.68%" in text
     assert "NOT_RUN_FULL_STAGE2_E02" in text
     assert "REMOTE_SERVER_NOT_CONNECTED" in text
     assert "9027fcb9d40e89e66cd047c247b5dd5fc10a548916e9b97ffad45ddf262b310c" in text
