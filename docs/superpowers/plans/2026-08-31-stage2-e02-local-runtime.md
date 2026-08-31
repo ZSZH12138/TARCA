@@ -499,7 +499,7 @@ git commit -m "feat: freeze stage2 model selection"
 - Produces: `summarize_scores(scores, baseline_scores) -> ScoreSummary`
 - Produces: `paired_stratified_bootstrap(neural, baseline, config) -> BootstrapInterval`
 
-- [ ] **Step 1: Write failing analytical Gaussian metric and whole-trajectory bootstrap tests**
+- [x] **Step 1: Write failing analytical Gaussian metric and whole-trajectory bootstrap tests**
 
 ```python
 def test_bootstrap_resamples_twelve_trajectories_inside_each_stratum() -> None:
@@ -514,11 +514,11 @@ def test_coverage_error_uses_four_nominal_levels() -> None:
     assert summary.coverage_levels == (0.50, 0.80, 0.90, 0.95)
 ```
 
-- [ ] **Step 2: Run metric/bootstrap tests and verify the RED state**
+- [x] **Step 2: Run metric/bootstrap tests and verify the RED state**
 
 Run `pytest tests/e02/test_scoring.py tests/e02/test_bootstrap.py -q`.
 
-- [ ] **Step 3: Implement stable Gaussian scoring and deterministic paired resampling**
+- [x] **Step 3: Implement stable Gaussian scoring and deterministic paired resampling**
 
 Compute trajectory means after averaging equally over origins, variables, and the requested horizons. Use Stage1B Gaussian CRPS/NLL primitives after shape validation. For each of 5000 replicates, use `torch.Generator().manual_seed(172657089)`, sample 12 trajectory indices with replacement inside each formal-seed × regime stratum, retain neural/baseline pairing, combine exactly 120 units, and compute skill. Return 5th/95th percentile bounds.
 
@@ -527,11 +527,11 @@ skill = 1.0 - neural_crps / baseline_crps
 coverage_error = statistics.fmean(abs(observed[level] - level) for level in LEVELS)
 ```
 
-- [ ] **Step 4: Run deterministic repeat, ordering-invariance, and malformed-lineage tests**
+- [x] **Step 4: Run deterministic repeat, ordering-invariance, and malformed-lineage tests**
 
 Expected: identical results under score input reordering; duplicate/missing trajectory IDs, 119 units, wrong strata, or window-level lineage fail closed.
 
-- [ ] **Step 5: Commit Task 7**
+- [x] **Step 5: Commit Task 7**
 
 ```powershell
 git add src/tarca/e02/__init__.py src/tarca/e02/scoring.py src/tarca/e02/bootstrap.py tests/e02/test_scoring.py tests/e02/test_bootstrap.py
