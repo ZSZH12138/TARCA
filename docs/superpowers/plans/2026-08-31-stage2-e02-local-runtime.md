@@ -439,7 +439,7 @@ git commit -m "feat: add reproducible stage2 neural training"
 - Produces: `freeze_stage2_suite(artifact_root, evidence) -> Stage2FreezeReceipt`
 - Produces: `verify_frozen_stage2_suite(artifact_root) -> Stage2FreezeReceipt`
 
-- [ ] **Step 1: Write failing tests for validation-only selection and placement-independent hashes**
+- [x] **Step 1: Write failing tests for validation-only selection and placement-independent hashes**
 
 ```python
 def test_strongest_linear_uses_only_validation_crps() -> None:
@@ -453,11 +453,11 @@ def test_science_hash_ignores_worker_placement(stage2_inputs: Stage2CompilationI
     assert first.scientific_sha256 == second.scientific_sha256
 ```
 
-- [ ] **Step 2: Run selection/manifest/freeze tests and verify missing modules**
+- [x] **Step 2: Run selection/manifest/freeze tests and verify missing modules**
 
 Run the three Task 6 test files.
 
-- [ ] **Step 3: Implement deterministic tie-breaking and evidence validation**
+- [x] **Step 3: Implement deterministic tie-breaking and evidence validation**
 
 Break linear ties by fixed order `DLINEAR`, then `VAR`; break initialization ties by the configured seed order. Every selection receipt contains only VALIDATION artifact refs. Freeze requires six predictor identities, three checkpoints for each neural architecture, the selected linear model, selected primary iTransformer seed, source receipt, normalizer, data manifest, precision receipt, runtime failure list, and zero formal-access events.
 
@@ -472,11 +472,11 @@ class Stage2FreezeReceipt(StrictContractModel):
     receipt_sha256: Sha256Hash
 ```
 
-- [ ] **Step 4: Run tamper, overwrite, reserved-seed, and reload tests**
+- [x] **Step 4: Run tamper, overwrite, reserved-seed, and reload tests**
 
 Expected: first freeze succeeds on complete fixture; second unapproved freeze refuses overwrite; any hash drift or formal event rejects.
 
-- [ ] **Step 5: Commit Task 6**
+- [x] **Step 5: Commit Task 6**
 
 ```powershell
 git add src/tarca/stage2/selection.py src/tarca/stage2/manifest.py src/tarca/stage2/freeze.py tests/stage2/test_selection.py tests/stage2/test_manifest.py tests/stage2/test_freeze.py
