@@ -1,0 +1,21 @@
+services:
+  tarca-stage2:
+    build:
+      context: ../..
+      dockerfile: deploy/stage2/Dockerfile
+    image: tarca-stage2:v1
+    read_only: true
+    init: true
+    gpus: all
+    shm_size: 16gb
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=8g
+    volumes:
+      - ../../artifacts:/opt/tarca/artifacts:rw
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      TARCA_RUNTIME_DATABASE: /opt/tarca/artifacts/stage2/runtime/execution.sqlite3
+      TARCA_EXECUTION_KIND: stage2-v1
+    command: ["monitor"]
+    restart: "no"
