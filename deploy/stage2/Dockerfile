@@ -23,7 +23,13 @@ COPY src/ /opt/tarca/src/
 COPY configs/ /opt/tarca/configs/
 COPY scripts/ /opt/tarca/scripts/
 COPY deploy/stage2/ /opt/tarca/deploy/stage2/
-COPY third_party/stage2/ /opt/tarca/third_party/stage2/
+COPY artifacts/stage2/source-capsules/ /opt/tarca/artifacts/stage2/source-capsules/
+RUN git --version \
+    && python /opt/tarca/scripts/import_stage2_source_capsule.py \
+      --config /opt/tarca/configs/stage2/stage2_v1.yaml \
+      --cache-root /opt/tarca/third_party/stage2 \
+      --capsule /opt/tarca/artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz \
+      --receipt /opt/tarca/artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz.receipt.json
 COPY --from=ui-build /ui/dist/ /opt/tarca/frontend/stage1b-monitor/dist/
 RUN mkdir -p /opt/tarca/artifacts /opt/tarca/logs \
     && chown -R tarca:tarca /opt/tarca/artifacts /opt/tarca/logs \

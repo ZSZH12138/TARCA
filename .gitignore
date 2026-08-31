@@ -27,6 +27,7 @@ checkpoints/
 /third_party/stage2/
 /artifacts/stage2/source-capsules/
 /deploy/stage2/wheelhouse/
+/artifacts/stage2/server-bundles/
 artifacts/**/runtime/
 /artifacts/test-tmp-*/
 
