@@ -1,6 +1,6 @@
 # Stage 2 概率预测器、E02 正式验收与双 RTX 4090 服务器运行设计
 
-> 状态：`USER_APPROVED_SCIENTIFIC_RULES_PENDING_WRITTEN_SPEC_REVIEW`
+> 状态：`APPROVED_FOR_IMPLEMENTATION`
 > 日期：2026-08-31
 > 方案：`B`
 > Stage 2 科学身份：`stage2_probabilistic_forecasting_v1`
