@@ -26,6 +26,7 @@ from tarca.execution import ExecutionContext, ExecutorRegistry, ProgressSink, Ta
 from tarca.stage1b.config import load_world_suite
 from tarca.stage1b.metrics import gaussian_crps
 from tarca.stage1b.modeling import OfficialITransformerPredictor, OfficialPatchTSTPredictor
+from tarca.stage1b.sources import SourceAcquisitionMode
 from tarca.stage1b.worlds import build_world
 from tarca.stage2.baselines import LastValueGaussian, SeasonalNaiveGaussian, Stage2VARGaussian
 from tarca.stage2.config import Stage2Config, load_stage2_config
@@ -410,7 +411,7 @@ def fit_baseline_job(
 
 def _new_neural(root: Path, config: Stage2Config, model_id: str, dimension: int) -> Any:
     os.environ["TARCA_STAGE1B_SOURCE_CACHE_ROOT"] = "third_party/stage2"
-    os.environ["TARCA_STAGE1B_SOURCE_MODE"] = "OFFLINE_CAPSULE"
+    os.environ["TARCA_STAGE1B_SOURCE_MODE"] = SourceAcquisitionMode.OFFLINE_CAPSULE.value
     cfg = config.model(cast(Any, model_id))
     del root
     if model_id == "PATCHTST":

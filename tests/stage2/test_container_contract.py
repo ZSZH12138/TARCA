@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,3 +37,19 @@ def test_server_lock_excludes_audited_vulnerable_runtime_versions() -> None:
     assert "annotated-doc==0.0.5" in lock
     assert "starlette==0.47.3" not in lock
     assert "pyarrow==20.0.0" not in lock
+
+
+def test_official_itransformer_dependency_is_locked_for_offline_install() -> None:
+    requested = (DEPLOY / "requirements-server.in").read_text(encoding="utf-8")
+    lock = (DEPLOY / "requirements-server.lock").read_text(encoding="utf-8")
+    wheel = DEPLOY / "wheelhouse/einops-0.8.2-py3-none-any.whl"
+
+    assert "einops==0.8.2" in requested
+    assert (
+        "einops==0.8.2 "
+        "--hash=sha256:54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193"
+    ) in lock
+    assert wheel.is_file()
+    assert hashlib.sha256(wheel.read_bytes()).hexdigest() == (
+        "54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193"
+    )

@@ -6,14 +6,17 @@ DEPLOY = ROOT / "deploy/stage2"
 
 def test_bootstrap_stops_before_training_and_checks_two_cards() -> None:
     text = (DEPLOY / "bootstrap.sh").read_text(encoding="utf-8")
-    assert "torch.cuda.device_count() == 2" in text
-    assert "source_hashes_verified" in text
-    assert "checkpoint_roundtrip_passed" in text
-    assert "run_stage2_server_probe" in text
+    preflight = (ROOT / "src/tarca/stage2/server_preflight.py").read_text(encoding="utf-8")
+    assert "torch.cuda.device_count() == 2" in preflight
+    assert "source_hashes_verified" in preflight
+    assert "checkpoint_roundtrip_passed" in preflight
+    assert "run_stage2_server_probe" in preflight
+    assert "python -m tarca.stage2.server_preflight" in text
+    assert 'python - "$remaining_hours"' not in text
     probe = (ROOT / "src/tarca/stage2/server_probe.py").read_text(encoding="utf-8")
     assert '"estimated_remaining_seconds"' in probe
-    assert '/ source["commit"]' in text
-    assert "props.total_memory >= 23 * 1024**3" in text
+    assert '/ source["commit"]' in preflight
+    assert "properties.total_memory >= 23 * 1024**3" in preflight
     assert "PREFLIGHT_PASS: no training or formal task was started" in text
     assert "I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN" not in text
     assert "I_ACKNOWLEDGE_E02_V1_FORMAL_RUN" not in text

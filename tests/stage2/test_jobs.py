@@ -15,6 +15,7 @@ from tarca.contracts import (
     sha256_file,
 )
 from tarca.execution import ExecutionContext, ResourceRequest, ScientificIdentity, TaskSpec
+from tarca.stage1b.sources import SourceAcquisitionMode, source_acquisition_mode_from_environment
 from tarca.stage2.config import load_stage2_config
 from tarca.stage2.data import Stage2Trajectory, prepare_stage2_bundle
 from tarca.stage2.jobs import (
@@ -22,6 +23,7 @@ from tarca.stage2.jobs import (
     _bundle_payload,
     _load_json,
     _load_torch,
+    _new_neural,
     _publish_json,
     _publish_torch,
     fit_baseline_job,
@@ -37,6 +39,20 @@ from tarca.stage2.jobs import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_new_neural_uses_the_parseable_offline_capsule_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = load_stage2_config(ROOT / "configs/stage2/stage2_v1.yaml")
+    predictor = object()
+    monkeypatch.setattr(
+        "tarca.stage2.jobs.OfficialPatchTSTPredictor",
+        lambda **kwargs: predictor,
+    )
+
+    assert _new_neural(ROOT, config, "PATCHTST", 8) is predictor
+    assert source_acquisition_mode_from_environment() is SourceAcquisitionMode.OFFLINE_CAPSULE
 
 
 class _Progress:
