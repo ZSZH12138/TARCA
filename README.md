@@ -29,6 +29,16 @@ $env:PYTHONPATH = 'deploy/e01/py310;src'
 
 TARCA（Temporal Abstraction and Robust Causal Alignment）是一个面向非平稳多变量时间序列的研究项目，目标是在冻结的概率预测模型中定位、验证并比较具有时间语义的内部机制。
 
+## Stage 2 / E02 当前状态
+
+方案 B 的 Stage 2 与 E02 本地实现已完成并进入 `LOCAL_IMPLEMENTATION_COMPLETE`：科学配置、
+执行图、双 RTX 4090 调度、正式访问隔离、恢复、只读监控和离线服务器包均已落地。当前仍为
+`NOT_RUN_FULL_STAGE2_E02 / REMOTE_SERVER_NOT_CONNECTED`；尚未连接服务器、未执行完整训练，
+也未打开 E02 formal 数据。实现证据见
+[`stage2_e02_local_implementation_report_v1.md`](docs/research/stage2_e02_local_implementation_report_v1.md)，
+开机后固定流程见
+[`stage2_e02_server_handoff_v1.md`](docs/research/stage2_e02_server_handoff_v1.md)。
+
 项目关注三个彼此关联的问题：神经网络内部位置是否与预先定义的高层因果变量保持干预一致性；forecast horizon 与 causal lag 能否被独立定位；已经识别的机制能否在未见状态变化下保持 zero-refit 的解释有效性。金融序列只作为后期高难度压力测试，不构成方法新颖性来源。
 
 ## 研究路线
@@ -67,11 +77,14 @@ src/tarca/data/         registry 驱动的既有物理窗口读取边界
 src/tarca/stage0/       Stage 0 冻结与核验逻辑
 src/tarca/stage1b/      官方世界、生成器真值、模型适配、资格 Gate 与单一 v2 冻结
 src/tarca/e01/          E01-v2 解析真值、证据验证、任务图与可恢复运行时
+src/tarca/stage2/       Stage 2 概率预测、模型选择、冻结和双 GPU 运行时
+src/tarca/e02/          E02 formal 隔离、配对评分、bootstrap、决策与 receipt
 src/tarca/execution/    不可变任务、双 GPU 调度、恢复和资源遥测
 src/tarca/monitoring/   只读监控 API
 frontend/stage1b-monitor/ Stage1B 中文运行监控前端
 deploy/stage1b/         Python 3.10/CUDA 12.1 容器与 Compose 入口
 deploy/e01/             E01-v2 服务器入口与资源监督脚本
+deploy/stage2/          Stage 2/E02 CUDA 12.1 容器、preflight 与 supervisor
 scripts/                环境、来源、Stage 0 与 Stage 1A 检查入口
 tests/stage0/           Stage 0 自动化验证
 tests/stage1a/          Stage 1A 高风险边界和最小闭环验证

@@ -76,9 +76,13 @@ def _selected_files(root: Path) -> tuple[Path, ...]:
         if not base.is_dir():
             raise FileNotFoundError(f"bundle directory is missing: {directory}")
         files.extend(path for path in base.rglob("*") if _is_bundle_file(path))
-    report = root / "docs/research/stage2_e02_local_implementation_report_v1.md"
-    if report.is_file():
-        files.append(report)
+    for relative in (
+        "docs/research/stage2_e02_local_implementation_report_v1.md",
+        "docs/research/stage2_e02_server_handoff_v1.md",
+    ):
+        document = root / relative
+        if document.is_file():
+            files.append(document)
     unique = {path.resolve() for path in files}
     return tuple(sorted(unique, key=lambda path: path.relative_to(root).as_posix()))
 

@@ -29,6 +29,8 @@ def test_stage2_bundle_has_offline_inputs_and_no_local_path_or_secret(tmp_path: 
         )
         assert pyarrow_wheel in names
         assert "artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz" in names
+        assert "docs/research/stage2_e02_local_implementation_report_v1.md" in names
+        assert "docs/research/stage2_e02_server_handoff_v1.md" in names
         assert not any(name.startswith("third_party/") for name in names)
         for member in archive.getmembers():
             if member.isfile():
