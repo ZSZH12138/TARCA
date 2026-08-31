@@ -22,6 +22,7 @@ python scripts/run_stage2_v1.py prepare \
 python - "$remaining_hours" <<'PY'
 import hashlib, json, os, pathlib, shutil, sys, tempfile
 import psutil, torch, yaml
+from tarca.stage2.server_probe import run_stage2_server_probe
 
 hours = float(sys.argv[1])
 assert sys.version_info[:2] == (3, 10)
@@ -52,13 +53,22 @@ torch.save({"probe": x[:16].cpu()}, checkpoint)
 loaded = torch.load(checkpoint, map_location="cpu")
 checkpoint.unlink()
 assert torch.equal(loaded["probe"], x[:16].cpu())
+throughput = run_stage2_server_probe(
+    pathlib.Path("."),
+    pathlib.Path("configs/stage2/stage2_v1.yaml"),
+    pathlib.Path("artifacts/stage2/runtime"),
+    remaining_rental_hours=hours,
+)
 evidence = {
     "status": "PREFLIGHT_PASS",
     "remaining_rental_hours": hours,
     "gpu_count": 2,
     "source_hashes_verified": True,
     "checkpoint_roundtrip_passed": True,
+    "fp32_finite": bool(torch.isfinite(fp32)),
+    "amp_finite": bool(torch.isfinite(amp)),
     "formal_tasks_executed": 0,
+    **throughput,
 }
 pathlib.Path("artifacts/stage2/runtime/bootstrap_evidence.json").write_text(
     json.dumps(evidence, sort_keys=True, separators=(",", ":")) + "\n"

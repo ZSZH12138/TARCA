@@ -12,6 +12,7 @@ from typing import Any
 from tarca.contracts import ArtifactRef, canonical_json_bytes, canonical_json_hash, sha256_file
 from tarca.execution import LocalMultiProcessBackend, ResourceCapacity, RunTerminalStatus
 from tarca.stage2.config import load_stage2_config
+from tarca.stage2.resources import stage2_reset_time_gate
 from tarca.stage2.runner import run_stage2
 from tarca.stage2.tasks import Stage2Graph, Stage2GraphInputs, compile_stage2_graph
 
@@ -112,6 +113,34 @@ def record_stage2_preflight(
     evidence = json.loads(evidence_path.resolve().read_text(encoding="utf-8"))
     if not isinstance(evidence, dict) or evidence.get("status") != "PREFLIGHT_PASS":
         raise Stage2RuntimeAuthorizationError("preflight evidence did not pass")
+    required = {
+        "amp_finite",
+        "checkpoint_roundtrip_passed",
+        "estimated_remaining_seconds",
+        "formal_tasks_executed",
+        "fp32_finite",
+        "remaining_rental_hours",
+        "source_hashes_verified",
+    }
+    if not required.issubset(evidence):
+        raise Stage2RuntimeAuthorizationError("preflight evidence is incomplete")
+    if not all(
+        evidence.get(name) is True
+        for name in (
+            "amp_finite",
+            "checkpoint_roundtrip_passed",
+            "fp32_finite",
+            "source_hashes_verified",
+        )
+    ) or evidence.get("formal_tasks_executed") != 0:
+        raise Stage2RuntimeAuthorizationError("preflight evidence contains a failed boundary")
+    try:
+        stage2_reset_time_gate(
+            estimated_remaining_seconds=float(evidence["estimated_remaining_seconds"]),
+            remaining_rental_hours=float(evidence["remaining_rental_hours"]),
+        )
+    except (TypeError, ValueError, RuntimeError) as error:
+        raise Stage2RuntimeAuthorizationError("preflight ETA gate did not pass") from error
     receipt = _seal(
         {
             "schema_version": "tarca-stage2-preflight-v1",

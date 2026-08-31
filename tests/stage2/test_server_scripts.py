@@ -9,6 +9,9 @@ def test_bootstrap_stops_before_training_and_checks_two_cards() -> None:
     assert "torch.cuda.device_count() == 2" in text
     assert "source_hashes_verified" in text
     assert "checkpoint_roundtrip_passed" in text
+    assert "run_stage2_server_probe" in text
+    probe = (ROOT / "src/tarca/stage2/server_probe.py").read_text(encoding="utf-8")
+    assert '"estimated_remaining_seconds"' in probe
     assert '/ source["commit"]' in text
     assert "props.total_memory >= 23 * 1024**3" in text
     assert "PREFLIGHT_PASS: no training or formal task was started" in text

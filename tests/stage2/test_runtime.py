@@ -38,7 +38,10 @@ def test_stage2_full_local_runtime_lifecycle_without_scientific_execution(
         "dry-run", ROOT, CONFIG, artifact_root
     )["prepared_receipt_sha256"] == prepared["receipt_sha256"]
     evidence = tmp_path / "preflight.json"
-    evidence.write_text('{"status":"PREFLIGHT_PASS"}\n', encoding="utf-8")
+    evidence.write_text(
+        """{"amp_finite":true,"checkpoint_roundtrip_passed":true,"estimated_remaining_seconds":3600,"formal_tasks_executed":0,"fp32_finite":true,"remaining_rental_hours":24,"source_hashes_verified":true,"status":"PREFLIGHT_PASS"}\n""",
+        encoding="utf-8",
+    )
     dispatch_stage2_runtime_command(
         "preflight", ROOT, CONFIG, artifact_root, evidence_path=evidence
     )
@@ -86,3 +89,14 @@ def test_stage2_full_local_runtime_lifecycle_without_scientific_execution(
     ] == "FREEZE_REQUIRES_COMPLETED_MANIFEST"
     with pytest.raises(ValueError, match="allowlisted"):
         dispatch_stage2_runtime_command("unknown", ROOT, CONFIG, artifact_root)
+
+
+def test_stage2_preflight_rejects_status_only_evidence(tmp_path: Path) -> None:
+    artifact_root = tmp_path / "artifacts/stage2"
+    dispatch_stage2_runtime_command("prepare", ROOT, CONFIG, artifact_root)
+    evidence = tmp_path / "preflight.json"
+    evidence.write_text('{"status":"PREFLIGHT_PASS"}\n', encoding="utf-8")
+    with pytest.raises(Stage2RuntimeAuthorizationError, match="evidence is incomplete"):
+        dispatch_stage2_runtime_command(
+            "preflight", ROOT, CONFIG, artifact_root, evidence_path=evidence
+        )

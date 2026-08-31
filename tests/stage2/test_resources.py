@@ -19,6 +19,7 @@ from tarca.stage2.resources import (
     stage2_reset_time_gate,
     stage2_resource_capacity,
 )
+from tarca.stage2.server_probe import estimate_stage2_critical_path_seconds
 
 GIB = 1024**3
 TARGET = Stage2ServerInventory(
@@ -121,3 +122,18 @@ def test_ddp_boundary_is_exactly_thirty_percent() -> None:
 def test_eta_plus_one_hour_equal_to_rental_boundary_refuses_launch() -> None:
     with pytest.raises(RuntimeError, match="reset boundary"):
         stage2_reset_time_gate(estimated_remaining_seconds=23 * 3600, remaining_rental_hours=24)
+
+
+def test_server_probe_projects_all_six_neural_runs_with_conservative_overhead() -> None:
+    estimate = estimate_stage2_critical_path_seconds(
+        train_window_count=30_600,
+        initialization_count=3,
+        maximum_epochs={"PATCHTST": 100, "ITRANSFORMER": 100},
+        batches_per_second={"PATCHTST": 10.0, "ITRANSFORMER": 8.0},
+        batch_sizes={"PATCHTST": 64, "ITRANSFORMER": 32},
+        checkpoint_seconds={"PATCHTST": 2.0, "ITRANSFORMER": 3.0},
+        fixed_overhead_seconds=4 * 3600,
+        safety_multiplier=1.35,
+    )
+    itransformer = 30_600 * 3 * 100 / (8.0 * 32) + 3 * 3.0
+    assert estimate == pytest.approx(itransformer * 1.35 + 4 * 3600)
