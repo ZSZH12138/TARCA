@@ -373,7 +373,7 @@ git commit -m "feat: integrate official dlinear predictor"
 - Produces: `train_stage2_neural(model, train, validation, policy, seed, progress_sink) -> Stage2TrainingResult`
 - Produces: one best-validation-NLL checkpoint per initialization and a reload verifier
 
-- [ ] **Step 1: Write failing tests for optimizer identity, NLL early stopping, deterministic resume, and probability validity**
+- [x] **Step 1: Write failing tests for optimizer identity, NLL early stopping, deterministic resume, and probability validity**
 
 ```python
 def test_stage2_training_policy_is_exact(tmp_path: Path) -> None:
@@ -390,11 +390,11 @@ def test_resume_preserves_model_optimizer_scaler_and_rng(tmp_path: Path) -> None
     assert resumed.checkpoint_sha256 == uninterrupted.checkpoint_sha256
 ```
 
-- [ ] **Step 2: Run Stage 2 and existing Stage1B training tests to capture the RED state**
+- [x] **Step 2: Run Stage 2 and existing Stage1B training tests to capture the RED state**
 
 Run `tests/stage2/test_neural_training.py` and `tests/stage1b/test_training_reproducibility.py`.
 
-- [ ] **Step 3: Extend checkpoint policy without changing Stage1B defaults**
+- [x] **Step 3: Extend checkpoint policy without changing Stage1B defaults**
 
 Add optional exact optimizer fields to a new Stage 2 policy rather than changing legacy behavior. Save optimizer hyperparameters, gradient clip, deterministic flags, DataLoader generator state, best validation NLL, model state, optimizer state, scaler state, Python/Torch/CUDA RNG, data hash, source hash, and precision hash. Use:
 
@@ -410,11 +410,11 @@ optimizer = torch.optim.AdamW(
 
 Early stop and the retained epoch use validation NLL only. After reload, validate finite mean/scale, scale `>0`, output shape, state hash, and an identical fixed-batch forecast.
 
-- [ ] **Step 4: Run new and legacy training suites**
+- [x] **Step 4: Run new and legacy training suites**
 
 Expected: Stage 2 deterministic/resume tests PASS; all Stage1B training tests PASS unchanged.
 
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
 
 ```powershell
 git add src/tarca/stage2/training.py src/tarca/stage1b/training.py src/tarca/stage1b/training_checkpoints.py tests/stage2/test_neural_training.py

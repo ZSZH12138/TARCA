@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import random
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -48,6 +49,33 @@ class CheckpointPolicy(Protocol):
     @property
     def checkpoint_every_epochs(self) -> int: ...
 
+    @property
+    def optimizer(self) -> str: ...
+
+    @property
+    def betas(self) -> tuple[float, float]: ...
+
+    @property
+    def epsilon(self) -> float: ...
+
+    @property
+    def weight_decay(self) -> float: ...
+
+    @property
+    def gradient_clip_norm(self) -> float: ...
+
+    @property
+    def scheduler(self) -> str: ...
+
+    @property
+    def deterministic_algorithms(self) -> bool: ...
+
+    @property
+    def cudnn_deterministic(self) -> bool: ...
+
+    @property
+    def cudnn_benchmark(self) -> bool: ...
+
 
 def _tensor_digest(name: str, tensor: Tensor, digest: Any) -> None:
     contiguous = tensor.detach().cpu().contiguous()
@@ -75,6 +103,15 @@ def policy_hash(policy: CheckpointPolicy) -> str:
             "learning_rate": policy.learning_rate,
             "dataloader_workers": policy.dataloader_workers,
             "checkpoint_every_epochs": policy.checkpoint_every_epochs,
+            "optimizer": policy.optimizer,
+            "betas": policy.betas,
+            "epsilon": policy.epsilon,
+            "weight_decay": policy.weight_decay,
+            "gradient_clip_norm": policy.gradient_clip_norm,
+            "scheduler": policy.scheduler,
+            "deterministic_algorithms": policy.deterministic_algorithms,
+            "cudnn_deterministic": policy.cudnn_deterministic,
+            "cudnn_benchmark": policy.cudnn_benchmark,
         }
     )
 
@@ -157,6 +194,7 @@ def checkpoint_payload(
         "optimizer_state": _cpu_snapshot(optimizer.state_dict()),
         "scaler_state": _cpu_snapshot(scaler.state_dict()),
         "shuffle_generator_state": shuffle_generator.get_state().clone(),
+        "python_rng_state": random.getstate(),
         "torch_cpu_rng_state": torch.get_rng_state().clone(),
         "torch_cuda_rng_states": _cpu_snapshot(cuda_rng),
         "best_loss": best_loss,
@@ -198,10 +236,16 @@ def restore_checkpoint(
     optimizer.load_state_dict(optimizer_state)
     scaler.load_state_dict(scaler_state)
     shuffle_state = payload.get("shuffle_generator_state")
+    python_rng_state = payload.get("python_rng_state")
     cpu_rng_state = payload.get("torch_cpu_rng_state")
-    if not isinstance(shuffle_state, Tensor) or not isinstance(cpu_rng_state, Tensor):
+    if (
+        not isinstance(shuffle_state, Tensor)
+        or not isinstance(python_rng_state, tuple)
+        or not isinstance(cpu_rng_state, Tensor)
+    ):
         raise ValueError("resume checkpoint is missing deterministic RNG state")
     shuffle_generator.set_state(shuffle_state)
+    random.setstate(python_rng_state)
     torch.set_rng_state(cpu_rng_state)
     cuda_states = payload.get("torch_cuda_rng_states")
     if use_cuda:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import random
 import re
 import time
 from dataclasses import dataclass
@@ -55,6 +56,15 @@ class TrainingPolicy:
     dataloader_workers: int
     checkpoint_root: Path
     checkpoint_every_epochs: int = 1
+    optimizer: Literal["ADAMW"] = "ADAMW"
+    betas: tuple[float, float] = (0.9, 0.999)
+    epsilon: float = 1e-8
+    weight_decay: float = 0.01
+    gradient_clip_norm: float = 1.0
+    scheduler: Literal["NONE"] = "NONE"
+    deterministic_algorithms: bool = True
+    cudnn_deterministic: bool = True
+    cudnn_benchmark: bool = False
 
     def __post_init__(self) -> None:
         if re.fullmatch(r"(?:cpu|cuda(?::[0-9]+)?)", self.device) is None:
@@ -71,6 +81,29 @@ class TrainingPolicy:
             raise ValueError("dataloader_workers must be non-negative")
         if self.checkpoint_every_epochs <= 0:
             raise ValueError("checkpoint interval must be positive")
+        if self.optimizer != "ADAMW" or self.scheduler != "NONE":
+            raise ValueError("training supports only AdamW without a scheduler")
+        if (
+            len(self.betas) != 2
+            or not all(math.isfinite(value) and 0.0 <= value < 1.0 for value in self.betas)
+            or self.betas[0] >= self.betas[1]
+        ):
+            raise ValueError("training AdamW betas are invalid")
+        if not math.isfinite(self.epsilon) or self.epsilon <= 0:
+            raise ValueError("training AdamW epsilon must be finite and positive")
+        if not math.isfinite(self.weight_decay) or self.weight_decay < 0:
+            raise ValueError("training weight decay must be finite and nonnegative")
+        if not math.isfinite(self.gradient_clip_norm) or self.gradient_clip_norm <= 0:
+            raise ValueError("training gradient clip norm must be finite and positive")
+        if any(
+            type(value) is not bool
+            for value in (
+                self.deterministic_algorithms,
+                self.cudnn_deterministic,
+                self.cudnn_benchmark,
+            )
+        ):
+            raise ValueError("training deterministic flags must be boolean")
         object.__setattr__(self, "checkpoint_root", self.checkpoint_root.resolve())
 
 
@@ -241,10 +274,11 @@ def train_candidate(
     previous_determinism = torch.are_deterministic_algorithms_enabled()
     previous_benchmark = torch.backends.cudnn.benchmark
     previous_cudnn_deterministic = torch.backends.cudnn.deterministic
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(resolved_policy.deterministic_algorithms)
+    torch.backends.cudnn.benchmark = resolved_policy.cudnn_benchmark
+    torch.backends.cudnn.deterministic = resolved_policy.cudnn_deterministic
     try:
+        random.seed(seed)
         torch.manual_seed(seed)
         if use_cuda:
             os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -275,7 +309,13 @@ def train_candidate(
         model.to(device)
         for parameter in model.parameters():
             parameter.requires_grad_(True)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=resolved_policy.learning_rate)
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=resolved_policy.learning_rate,
+            betas=resolved_policy.betas,
+            eps=resolved_policy.epsilon,
+            weight_decay=resolved_policy.weight_decay,
+        )
         amp_enabled = resolved_policy.precision == "AMP_FP16"
         scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
         shuffle_generator = torch.Generator().manual_seed(seed)
@@ -345,7 +385,9 @@ def train_candidate(
                     loss = _gaussian_nll(distribution.mean, distribution.scale, batch_y)
                 scaler.scale(loss).backward()  # type: ignore[no-untyped-call]
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_norm=resolved_policy.gradient_clip_norm
+                )
                 scaler.step(optimizer)
                 scaler.update()
                 completed_steps += 1
