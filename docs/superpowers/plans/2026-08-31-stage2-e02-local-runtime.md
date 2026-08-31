@@ -235,7 +235,7 @@ git commit -m "feat: add stage2 data and sealed formal boundary"
 - Produces: `LastValueGaussian.fit(...)`, `SeasonalNaiveGaussian.fit(...)`, `Stage2VARGaussian.fit(...)`
 - All predictor classes satisfy `ForecastPredictor.predict_distribution(batch) -> ForecastDistribution`
 
-- [ ] **Step 1: Write failing tests that distinguish TRAIN-only from validation leakage**
+- [x] **Step 1: Write failing tests that distinguish TRAIN-only from validation leakage**
 
 ```python
 def test_last_value_scale_ignores_validation_targets() -> None:
@@ -252,7 +252,7 @@ def test_seasonal_lag_uses_validation_but_scale_uses_train() -> None:
     assert model.scale_source == "TRAIN_ONLY"
 ```
 
-- [ ] **Step 2: Run focused tests and verify missing predictor failures**
+- [x] **Step 2: Run focused tests and verify missing predictor failures**
 
 Run:
 
@@ -260,7 +260,7 @@ Run:
 & 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2/test_distributions.py tests/stage2/test_baselines.py -q
 ```
 
-- [ ] **Step 3: Implement exact diagonal Gaussian behavior**
+- [x] **Step 3: Implement exact diagonal Gaussian behavior**
 
 For Last and Seasonal, compute per-horizon/per-variable TRAIN residual RMS and clamp it to `[1e-4, max(10, 10 × train_target_std)]`. Seasonal chooses the lag only by validation h1-6 Gaussian CRPS. Refactor Stage1B VAR into a Stage 2 wrapper that selects lag/ridge by validation CRPS but estimates residual innovation/covariance from TRAIN only; never reuse the current Stage1B `tune_y` residual scale.
 
@@ -271,13 +271,13 @@ scale = torch.minimum(torch.maximum(scale, floor_tensor), ceiling)
 
 Generate quantiles for levels `(0.025, 0.05, 0.10, 0.25, 0.75, 0.90, 0.95, 0.975)` through `torch.distributions.Normal.icdf` and pass the result through `validate_forecast_distribution`.
 
-- [ ] **Step 4: Run tests and existing Stage1B VAR regression tests**
+- [x] **Step 4: Run tests and existing Stage1B VAR regression tests**
 
 Run Task 3 tests plus `tests/stage1b/test_var_predictor.py`.
 
 Expected: new tests PASS and frozen Stage1B behavior is unchanged.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```powershell
 git add src/tarca/stage2/distributions.py src/tarca/stage2/baselines.py tests/stage2/test_distributions.py tests/stage2/test_baselines.py
