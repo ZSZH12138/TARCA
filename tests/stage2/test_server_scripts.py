@@ -9,6 +9,8 @@ def test_bootstrap_stops_before_training_and_checks_two_cards() -> None:
     assert "torch.cuda.device_count() == 2" in text
     assert "source_hashes_verified" in text
     assert "checkpoint_roundtrip_passed" in text
+    assert '/ source["commit"]' in text
+    assert "props.total_memory >= 23 * 1024**3" in text
     assert "PREFLIGHT_PASS: no training or formal task was started" in text
     assert "I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN" not in text
     assert "I_ACKNOWLEDGE_E02_V1_FORMAL_RUN" not in text

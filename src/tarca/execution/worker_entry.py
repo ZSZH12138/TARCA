@@ -36,6 +36,18 @@ def main() -> int:
         verifier = e01_v2_artifact_store(repository_root).verify_artifact
         registry = e01_v2_executor_registry(repository_root)
         runtime_identity = "e01-v2-py310-cuda121"
+    elif execution_kind == "stage2-v1":
+        from tarca.stage2.jobs import stage2_artifact_store, stage2_executor_registry
+
+        verifier = stage2_artifact_store(repository_root).verify_artifact
+        registry = stage2_executor_registry(repository_root)
+        runtime_identity = "stage2-v1-py310-cuda121"
+    elif execution_kind == "e02-v1":
+        from tarca.e02.jobs import e02_artifact_store, e02_executor_registry
+
+        verifier = e02_artifact_store(repository_root).verify_artifact
+        registry = e02_executor_registry(repository_root)
+        runtime_identity = "e02-v1-py310-cuda121"
     elif execution_kind == "stage1b":
         verifier = stage1b_artifact_store(repository_root).verify_artifact
         registry = stage1b_executor_registry(repository_root)

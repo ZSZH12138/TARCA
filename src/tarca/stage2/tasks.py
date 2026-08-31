@@ -46,7 +46,7 @@ def _resource(phase: str) -> ResourceRequest:
     values = {
         "SOURCE_VERIFY": (2, 0, 0.0, 4.0),
         "UPSTREAM_VERIFY": (2, 0, 0.0, 4.0),
-        "DEV_DATA": (16, 0, 0.0, 96.0),
+        "DEV_DATA": (24, 0, 0.0, 96.0),
         "BASELINE_FIT": (4, 0, 0.0, 24.0),
         "NEURAL_TRAIN": (4, 1, 20.0, 32.0),
         "CHECKPOINT_VALIDATE": (2, 1, 8.0, 16.0),
@@ -225,6 +225,11 @@ def compile_stage2_graph(config: Stage2Config, inputs: Stage2GraphInputs) -> Sta
         "SUITE",
         config.upstream.world_id,
         deps=(
+            data,
+            *tuple(
+                predictor[(model_id, 0)]
+                for model_id in ("LAST_VALUE", "SEASONAL_NAIVE", "VAR", "DLINEAR")
+            ),
             *tuple(predictions.values()),
             *tuple(checkpoints),
             linear,

@@ -34,10 +34,10 @@ assert shutil.disk_usage("artifacts").free >= 200 * 1024**3
 assert hours > 1.0
 for index in range(2):
     props = torch.cuda.get_device_properties(index)
-    assert "4090" in props.name and props.total_memory >= 24 * 1024**3
+    assert "4090" in props.name and props.total_memory >= 23 * 1024**3
 config = yaml.safe_load(pathlib.Path("configs/stage2/stage2_v1.yaml").read_text())
 for source in config["sources"]:
-    root = pathlib.Path("third_party/stage2") / source["source_id"]
+    root = pathlib.Path("third_party/stage2") / source["source_id"] / source["commit"]
     for asset in source["assets"]:
         path = root / asset["relative_path"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == asset["sha256"]

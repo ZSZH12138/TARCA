@@ -34,6 +34,8 @@ def test_stage2_graph_has_six_independent_large_gpu_training_tasks() -> None:
     assert len(gpu_train) == 6
     assert all(node.resource_request.gpu_count == 1 for node in gpu_train)
     assert all(node.resource_request.cpu_threads == 4 for node in gpu_train)
+    data = next(node for node in graph.nodes if node.phase == "DEV_DATA")
+    assert data.resource_request.cpu_threads == 24
     assert len({node.identity.seed for node in gpu_train}) == 3
 
 

@@ -123,11 +123,13 @@ class LocalMultiProcessBackend:
         *,
         python_executable: str | None = None,
         cpu_ids: tuple[int, ...] | None = None,
+        environment_overrides: dict[str, str] | None = None,
         popen_factory: Any = subprocess.Popen,
     ) -> None:
         self.repository_root = repository_root.resolve()
         self.python_executable = python_executable or sys.executable
         self.cpu_ids = cpu_ids or tuple(psutil.Process().cpu_affinity())
+        self.environment_overrides = dict(environment_overrides or {})
         self._popen_factory = popen_factory
         self._handles: list[WorkerHandle] = []
         self._next_cpu = 0
@@ -161,6 +163,7 @@ class LocalMultiProcessBackend:
             task.allocation.worker_id,
         )
         environment = dict(os.environ)
+        environment.update(self.environment_overrides)
         environment.update(
             {
                 "CUDA_VISIBLE_DEVICES": ",".join(str(item) for item in task.allocation.gpu_ids),

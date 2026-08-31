@@ -83,7 +83,7 @@ def run_e02_formal(
             state.enqueue_task(
                 run_id, task, node.executor_key, dependency_task_ids=node.dependency_ids
             )
-        if not manifest.tasks:
+        if not manifest.tasks and not state.running_attempts(run_id):
             return E02RunResult(
                 run_id, graph.graph_id, RunTerminalStatus.FAILED, tuple(sorted(completed.items()))
             )

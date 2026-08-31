@@ -280,6 +280,7 @@ def test_local_backend_launches_tuple_without_shell_and_sets_resource_environmen
         popen_factory=recorder,
         python_executable="python",
         cpu_ids=tuple(range(24)),
+        environment_overrides={"TARCA_EXECUTION_KIND": "stage2-v1"},
     )
 
     Scheduler(store, backend, _capacity()).tick("run-a")
@@ -291,6 +292,7 @@ def test_local_backend_launches_tuple_without_shell_and_sets_resource_environmen
     assert environment["OMP_NUM_THREADS"] == "2"
     assert environment["MKL_NUM_THREADS"] == "2"
     assert environment["TARCA_CPU_AFFINITY"]
+    assert environment["TARCA_EXECUTION_KIND"] == "stage2-v1"
 
 
 def test_local_backend_terminates_every_active_worker(tmp_path: Path) -> None:

@@ -6,6 +6,7 @@ kind="${1:?stage2 or e02 required}"
 shift
 case "$kind" in
   stage2)
+    export TARCA_EXECUTION_KIND=stage2-v1
     exec python /opt/tarca/scripts/run_stage2_v1.py "$@"
     ;;
   e02)

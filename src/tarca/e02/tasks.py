@@ -37,11 +37,11 @@ class E02Graph:
     nodes: tuple[E02TaskNode, ...]
 
 
-def _resource(phase: str) -> ResourceRequest:
+def _resource(phase: str, model_id: str) -> ResourceRequest:
     values = {
         "GRANT_VERIFY": (1, 0, 0.0, 2.0),
         "STAGE2_VERIFY": (2, 0, 0.0, 4.0),
-        "FORMAL_OPEN": (16, 0, 0.0, 96.0),
+        "FORMAL_OPEN": (24, 0, 0.0, 96.0),
         "FORMAL_PREDICT": (4, 1, 20.0, 32.0),
         "TRAJECTORY_SCORE": (4, 0, 0.0, 24.0),
         "PAIRED_BOOTSTRAP": (8, 0, 0.0, 48.0),
@@ -49,6 +49,8 @@ def _resource(phase: str) -> ResourceRequest:
         "E02_RECEIPT": (2, 0, 0.0, 8.0),
     }
     cpu, gpu, vram, ram = values[phase]
+    if phase == "FORMAL_PREDICT" and model_id == "STRONGEST_LINEAR":
+        cpu, gpu, vram, ram = (8, 0, 0.0, 32.0)
     return ResourceRequest(cpu_threads=cpu, gpu_count=gpu, gpu_memory_gib=vram, host_memory_gib=ram)
 
 
@@ -94,7 +96,7 @@ def compile_e02_graph(config: E02Config, frozen_stage2: FrozenStage2Input) -> E0
             tuple(item.node_id for item in deps),
             external,
             output,
-            _resource(phase),
+            _resource(phase, model),
             executor,
         )
         nodes.append(node)

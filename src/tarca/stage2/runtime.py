@@ -9,8 +9,11 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from tarca.contracts import canonical_json_bytes, canonical_json_hash, sha256_file
+from tarca.contracts import ArtifactRef, canonical_json_bytes, canonical_json_hash, sha256_file
+from tarca.execution import LocalMultiProcessBackend, ResourceCapacity, RunTerminalStatus
 from tarca.stage2.config import load_stage2_config
+from tarca.stage2.runner import run_stage2
+from tarca.stage2.tasks import Stage2Graph, Stage2GraphInputs, compile_stage2_graph
 
 STAGE2_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN"
 
@@ -128,6 +131,75 @@ def _authorize(value: str) -> None:
         raise Stage2RuntimeAuthorizationError("exact Stage 2 training acknowledgement required")
 
 
+def _file_ref(
+    root: Path,
+    relative: str,
+    artifact_id: str,
+    artifact_type: str,
+    *,
+    logical_hash: str | None = None,
+) -> ArtifactRef:
+    path = root / relative
+    if not path.is_file():
+        raise Stage2RuntimeAuthorizationError(f"required Stage 2 input is missing: {relative}")
+    return ArtifactRef(
+        artifact_id=artifact_id,
+        artifact_type=artifact_type,
+        content_hash=logical_hash or sha256_file(path),
+        schema_version="1.0.0",
+        relative_path=relative,
+    )
+
+
+def _compiled_graph(root: Path, config_path: Path) -> Stage2Graph:
+    config = load_stage2_config(config_path.resolve())
+    graph = compile_stage2_graph(
+        config,
+        Stage2GraphInputs(
+            stage1b_manifest=_file_ref(
+                root,
+                "artifacts/stage1b/frozen/v2/manifest.json",
+                "stage1b-v2-manifest",
+                "STAGE1B_MANIFEST",
+            ),
+            e01_receipt=_file_ref(
+                root,
+                "artifacts/e01/frozen/v2/qualification_receipt.json",
+                "e01-v2-receipt",
+                "E01_RECEIPT",
+                logical_hash=config.upstream.e01_receipt_sha256,
+            ),
+            source_capsule=_file_ref(
+                root,
+                "artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz",
+                "stage2-v1-source-capsule",
+                "STAGE2_SOURCE_CAPSULE",
+            ),
+            formal_access_event_count=0,
+        ),
+    )
+    return graph
+
+
+def _runtime_capacity(artifact_root: Path) -> ResourceCapacity:
+    import psutil
+    import torch
+
+    physical = psutil.cpu_count(logical=False) or 0
+    logical = psutil.cpu_count(logical=True) or 0
+    return ResourceCapacity(
+        logical_cpu_count=logical,
+        physical_cpu_count=physical,
+        available_memory_bytes=psutil.virtual_memory().available,
+        gpu_memory_bytes=tuple(
+            int(torch.cuda.get_device_properties(index).total_memory)
+            for index in range(torch.cuda.device_count())
+        ),
+        local_storage_available=True,
+        local_storage_free_bytes=shutil.disk_usage(artifact_root.resolve()).free,
+    )
+
+
 def launch_stage2(
     repository_root: Path,
     config_path: Path,
@@ -135,8 +207,8 @@ def launch_stage2(
     *,
     acknowledgement: str,
 ) -> dict[str, Any]:
-    del repository_root, config_path
     _authorize(acknowledgement)
+    root = repository_root.resolve()
     runtime = artifact_root.resolve() / "runtime"
     prepared = _read_receipt(runtime / "prepared_receipt.json", "prepared receipt")
     preflight = _read_receipt(runtime / "preflight_receipt.json", "preflight receipt")
@@ -145,29 +217,64 @@ def launch_stage2(
     database = runtime / "execution.sqlite3"
     if database.exists():
         raise Stage2RuntimeAuthorizationError("execution database exists; use resume")
+    graph = _compiled_graph(root, config_path)
+    graph_run_id = f"run-{graph.graph_id.removeprefix('stage2-graph-')}"
     receipt = _seal(
         {
             "schema_version": "tarca-stage2-launch-v1",
             "status": "AUTHORIZED",
             "prepared_receipt_sha256": prepared["receipt_sha256"],
             "preflight_receipt_sha256": preflight["receipt_sha256"],
-            "run_id": f"stage2-run-{prepared['scientific_config_sha256']}",
+            "run_id": graph_run_id,
+            "graph_id": graph.graph_id,
         }
     )
     _atomic_json(runtime / "launch_authorization_receipt.json", receipt)
-    return receipt
+    result = run_stage2(
+        graph,
+        _runtime_capacity(artifact_root),
+        repository_root=root,
+        database_path=database,
+        backend=LocalMultiProcessBackend(
+            root, environment_overrides={"TARCA_EXECUTION_KIND": "stage2-v1"}
+        ),
+        maximum_wait_seconds=2.0,
+    )
+    if result.status is not RunTerminalStatus.COMPLETED:
+        raise RuntimeError(f"Stage 2 execution stopped with {result.status.value}")
+    return {
+        **receipt,
+        "status": "COMPLETED",
+        "graph_id": graph.graph_id,
+        "completed_tasks": len(result.completed),
+    }
 
 
 def resume_stage2(
     repository_root: Path, config_path: Path, artifact_root: Path, *, acknowledgement: str
 ) -> dict[str, Any]:
-    del repository_root, config_path
     _authorize(acknowledgement)
+    root = repository_root.resolve()
     runtime = artifact_root.resolve() / "runtime"
     if not (runtime / "execution.sqlite3").is_file():
         raise Stage2RuntimeAuthorizationError("execution database is required before resume")
     launch = _read_receipt(runtime / "launch_authorization_receipt.json", "launch receipt")
-    return {"status": "RESUME_AUTHORIZED", "run_id": launch["run_id"]}
+    graph = _compiled_graph(root, config_path)
+    result = run_stage2(
+        graph,
+        _runtime_capacity(artifact_root),
+        repository_root=root,
+        database_path=runtime / "execution.sqlite3",
+        backend=LocalMultiProcessBackend(
+            root, environment_overrides={"TARCA_EXECUTION_KIND": "stage2-v1"}
+        ),
+        maximum_wait_seconds=2.0,
+    )
+    return {
+        "status": result.status.value,
+        "run_id": launch["run_id"],
+        "completed_tasks": len(result.completed),
+    }
 
 
 def status_stage2(artifact_root: Path) -> dict[str, Any]:

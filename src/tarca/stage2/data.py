@@ -152,6 +152,20 @@ class _DevelopmentTrajectoryWork:
     config_sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class _FormalTrajectoryWork:
+    world: PublishedWorldAdapter
+    formal_seed: int
+    partition: DatasetWindowPartition
+    qualification_partition: QualificationPartition
+    index: int
+    regime_id: str
+    length: int
+    warmup_steps: int
+    source_commit: str
+    config_sha256: str
+
+
 def _development_trajectory_seed(work: _DevelopmentTrajectoryWork) -> int:
     payload = (
         f"{work.world.config.world_id}|stage2|{work.data_seed}|"
@@ -183,6 +197,37 @@ def _generate_development_trajectory(work: _DevelopmentTrajectoryWork) -> Stage2
         regime_id=work.regime_id,
         partition=work.partition,
         data_seed=work.data_seed,
+        trajectory_seed=trajectory_seed,
+        source_commit=work.source_commit,
+        config_sha256=work.config_sha256,
+        values=generated.values.clone(),
+    )
+
+
+def _generate_formal_trajectory(work: _FormalTrajectoryWork) -> Stage2Trajectory:
+    seed_payload = (
+        f"{work.world.config.world_id}|e02|{work.formal_seed}|"
+        f"{work.partition.value}|{work.index}"
+    ).encode()
+    trajectory_seed = (
+        int.from_bytes(hashlib.sha256(seed_payload).digest()[:8], "big") % (2**32 - 1) + 1
+    )
+    generated = work.world.simulate(
+        SimulationRequest(
+            seed=trajectory_seed,
+            partition=work.qualification_partition,
+            regime_id=work.regime_id,
+            length=work.length,
+            warmup_steps=work.warmup_steps,
+        )
+    )
+    identity = hashlib.sha256(seed_payload + b"|trajectory").hexdigest()[:24]
+    return Stage2Trajectory(
+        trajectory_id=f"{work.world.config.world_id}-e02-{identity}",
+        world_id=work.world.config.world_id,
+        regime_id=work.regime_id,
+        partition=work.partition,
+        data_seed=work.formal_seed,
         trajectory_seed=trajectory_seed,
         source_commit=work.source_commit,
         config_sha256=work.config_sha256,
@@ -427,6 +472,68 @@ def _read_formal_storage() -> tuple[Stage2Trajectory, ...]:
     raise FileNotFoundError("formal E02 storage has not been configured")
 
 
+def _generate_formal_records(
+    stage2_config: Stage2Config,
+    e02_config: E02Config,
+    world: PublishedWorldAdapter,
+    *,
+    worker_count: int,
+) -> tuple[Stage2Trajectory, ...]:
+    if type(worker_count) is not int or not (
+        1 <= worker_count <= stage2_config.runtime_profile.maximum_work_cores
+    ):
+        raise ValueError("formal generation worker count must be between 1 and 24")
+    regimes = {
+        RegimeSplitRole.SEEN: tuple(
+            item for item in world.config.regimes if item.split_role is RegimeSplitRole.SEEN
+        ),
+        RegimeSplitRole.UNSEEN: tuple(
+            item for item in world.config.regimes if item.split_role is RegimeSplitRole.UNSEEN
+        ),
+    }
+    if any(not values for values in regimes.values()):
+        raise ValueError("formal E02 generation requires seen and unseen regimes")
+    design = (
+        (
+            DatasetWindowPartition.TEST_SEEN_REGIME,
+            QualificationPartition.QUAL_SEEN,
+            RegimeSplitRole.SEEN,
+            e02_config.trajectories_seen_per_seed,
+        ),
+        (
+            DatasetWindowPartition.TEST_UNSEEN_REGIME,
+            QualificationPartition.QUAL_UNSEEN,
+            RegimeSplitRole.UNSEEN,
+            e02_config.trajectories_unseen_per_seed,
+        ),
+    )
+    work_items = tuple(
+        _FormalTrajectoryWork(
+            world=world,
+            formal_seed=formal_seed,
+            partition=partition,
+            qualification_partition=qualification,
+            index=index,
+            regime_id=regimes[role][index % len(regimes[role])].regime_id,
+            length=stage2_config.data.trajectory_length,
+            warmup_steps=stage2_config.data.warmup_steps,
+            source_commit=stage2_config.source("scoring_rules_l96").commit,
+            config_sha256=stage2_config.scientific_hash(),
+        )
+        for formal_seed in e02_config.formal_seeds
+        for partition, qualification, role, count in design
+        for index in range(count)
+    )
+    resolved_workers = min(worker_count, len(work_items))
+    if resolved_workers == 1:
+        return tuple(_generate_formal_trajectory(item) for item in work_items)
+    with ProcessPoolExecutor(
+        max_workers=resolved_workers,
+        initializer=_limit_generation_worker_threads,
+    ) as executor:
+        return tuple(executor.map(_generate_formal_trajectory, work_items, chunksize=1))
+
+
 def _validate_formal_counts(records: tuple[Stage2Trajectory, ...], config: E02Config) -> None:
     allowed = {
         DatasetWindowPartition.TEST_SEEN_REGIME: config.trajectories_seen_per_seed,
@@ -452,6 +559,8 @@ def open_formal_bundle(
     *,
     accessed_at: datetime,
     normalizer: Stage2NormalizationStatistics | None = None,
+    world: PublishedWorldAdapter | None = None,
+    worker_count: int = 1,
 ) -> Stage2DataBundle:
     if stage2_config.upstream.world_id != _DATASET.name:
         raise ValueError("Stage 2 world identity does not match the E02 dataset")
@@ -462,7 +571,16 @@ def open_formal_bundle(
         validate_sealed_access(_DATASET, partition, _FORMAL_SCOPE, grant, accessed_at)
     if normalizer is None:
         raise ValueError("formal E02 access requires the frozen Stage 2 TRAIN normalizer")
-    records = _read_formal_storage()
+    records = (
+        _generate_formal_records(
+            stage2_config,
+            e02_config,
+            world,
+            worker_count=worker_count,
+        )
+        if world is not None
+        else _read_formal_storage()
+    )
     _validate_formal_counts(records, e02_config)
     return prepare_stage2_bundle(
         records,

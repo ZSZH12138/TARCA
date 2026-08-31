@@ -50,3 +50,10 @@ def test_e02_graph_contains_fixed_four_predictors_and_no_selection_task() -> Non
         "ITRANSFORMER_INIT_2",
     }
     assert all(node.phase != "MODEL_SELECT" for node in graph.nodes)
+    linear = next(node for node in predictions if node.identity.model_id == "STRONGEST_LINEAR")
+    neural = tuple(node for node in predictions if node is not linear)
+    assert linear.resource_request.gpu_count == 0
+    assert linear.resource_request.cpu_threads == 8
+    assert all(node.resource_request.gpu_count == 1 for node in neural)
+    formal = next(node for node in graph.nodes if node.phase == "FORMAL_OPEN")
+    assert formal.resource_request.cpu_threads == 24
