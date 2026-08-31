@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Run every local Python command with `D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe`; do not modify that environment.
+- Run every local Python command with `D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe`; do not modify that environment. Set process-local `PYTHONPATH` to the repository `src` directory before tests.
 - Use `apply_patch` for every repository file edit.
 - Preserve the frozen Stage1B manifest SHA-256 `d1b4d09260bcc41b3b94a020474ee0b5e9f9dd5f0f498bb96510228141f44b25`.
 - Preserve the E01-v2 receipt SHA-256 `16de7fc103b8f1589eec07deaebfb66fbf7ea603046020e4778bb52458c3ae14`.
@@ -113,7 +113,7 @@ def test_repository_e02_config_has_frozen_gate() -> None:
 Run:
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m pytest tests/stage2/test_config.py tests/stage2/test_seeds.py tests/e02/test_config.py -q
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2/test_config.py tests/stage2/test_seeds.py tests/e02/test_config.py -q
 ```
 
 Expected: FAIL because the Stage 2/E02 modules and YAML files do not exist.
@@ -191,7 +191,7 @@ def test_formal_bundle_refuses_read_without_grant(stage2_config: Stage2Config, e
 Run:
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m pytest tests/stage2/test_data.py tests/e02/test_formal_boundary.py -q
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2/test_data.py tests/e02/test_formal_boundary.py -q
 ```
 
 Expected: FAIL on missing `tarca.stage2.data` symbols.
@@ -257,7 +257,7 @@ def test_seasonal_lag_uses_validation_but_scale_uses_train() -> None:
 Run:
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m pytest tests/stage2/test_distributions.py tests/stage2/test_baselines.py -q
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2/test_distributions.py tests/stage2/test_baselines.py -q
 ```
 
 - [ ] **Step 3: Implement exact diagonal Gaussian behavior**
@@ -941,7 +941,7 @@ git commit -m "docs: hand off stage2 server runtime"
 - [ ] **Step 1: Run focused Stage 2/E02 coverage**
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m pytest tests/stage2 tests/e02 --cov=tarca.stage2 --cov=tarca.e02 --cov-branch --cov-report=term-missing --cov-fail-under=80
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2 tests/e02 --cov=tarca.stage2 --cov=tarca.e02 --cov-branch --cov-report=term-missing --cov-fail-under=80
 ```
 
 Expected: PASS with branch coverage at least 80%.
@@ -949,7 +949,7 @@ Expected: PASS with branch coverage at least 80%.
 - [ ] **Step 2: Run the complete regression suite**
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m pytest -q
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest -q
 ```
 
 Expected: all tests PASS; no Stage1B/E01 regression.
@@ -957,8 +957,8 @@ Expected: all tests PASS; no Stage1B/E01 regression.
 - [ ] **Step 3: Run static and security verification**
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m ruff check src tests scripts
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' -m mypy src/tarca
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m ruff check src tests scripts
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m mypy src/tarca
 git diff --check
 git grep -n -E 'BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|DEEPSEEK_API_KEY=|token=[A-Za-z0-9_-]{16,}' -- . ':(exclude)docs/superpowers/plans/*'
 ```
@@ -968,11 +968,11 @@ Expected: Ruff/mypy/diff PASS and secret scan returns no match.
 - [ ] **Step 4: Build and verify the final local bundle without running formal science**
 
 ```powershell
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' scripts/prepare_stage2_v1_server_bundle.py --output artifacts/stage2/server_bundle/tarca-stage2-v1.tar.gz
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' scripts/run_stage2_v1.py prepare
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' scripts/run_stage2_v1.py dry-run
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' scripts/run_e02_v1.py prepare
-& 'D:\software\MyAnaconda\envs\tarca-stage1b-py311\python.exe' scripts/run_e02_v1.py dry-run
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' scripts/prepare_stage2_v1_server_bundle.py --output artifacts/stage2/server_bundle/tarca-stage2-v1.tar.gz
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' scripts/run_stage2_v1.py prepare
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' scripts/run_stage2_v1.py dry-run
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' scripts/run_e02_v1.py prepare
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' scripts/run_e02_v1.py dry-run
 ```
 
 Expected: bundle receipt reports `formal_tasks_executed: 0`; commands do not create formal data or predictions.
