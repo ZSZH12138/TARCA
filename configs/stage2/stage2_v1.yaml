@@ -1,0 +1,248 @@
+schema_version: 1.0.0
+protocol_id: TARCA-E2E-STAGE-PROTOCOL-2.0
+experiment_id: stage2_probabilistic_forecasting_v1
+upstream:
+  world_id: lorenz96_twoscale_v2
+  stage1b_manifest_sha256: d1b4d09260bcc41b3b94a020474ee0b5e9f9dd5f0f498bb96510228141f44b25
+  e01_receipt_sha256: 16de7fc103b8f1589eec07deaebfb66fbf7ea603046020e4778bb52458c3ae14
+data:
+  development_namespaces:
+    - tarca/stage2_probabilistic_forecasting_v1/dev-data/0
+    - tarca/stage2_probabilistic_forecasting_v1/dev-data/1
+    - tarca/stage2_probabilistic_forecasting_v1/dev-data/2
+  development_seeds: [669591429, 1840764098, 1185077341]
+  excluded_upstream_seeds:
+    - 104729
+    - 130363
+    - 155921
+    - 1729
+    - 2718
+    - 3141
+    - 5772
+    - 8111
+    - 1086771206
+    - 1103339353
+    - 80619160
+    - 1380772527
+    - 13312951
+    - 537575855
+    - 372497700
+    - 791318830
+    - 66372252
+    - 1476602807
+    - 1062201801
+    - 212554233
+    - 636809669
+    - 1248826710
+    - 852580908
+    - 1928894217
+    - 337480683
+    - 1478073554
+    - 1728293160
+    - 862010234
+    - 523081183
+    - 1191924823
+    - 356683957
+    - 939792675
+    - 999120863
+    - 1988187342
+    - 1137428173
+    - 120284920
+    - 486358471
+    - 468600836
+    - 1327459023
+    - 605078936
+    - 1821551265
+    - 1910844491
+    - 876673784
+    - 1261176843
+    - 1335113091
+    - 1934830881
+    - 747760900
+    - 961869440
+    - 794637728
+    - 1636434809
+    - 1335234188
+    - 682703989
+    - 1974802598
+    - 1012903854
+    - 165870444
+    - 1408950023
+    - 788019110
+    - 255492128
+  history: 64
+  horizon: 24
+  trajectory_length: 512
+  warmup_steps: 0
+  train_trajectories_per_seed: 24
+  validation_trajectories_per_seed: 8
+  primary_horizons: [1, 6]
+  secondary_horizons: [[7, 12], [13, 24]]
+sources:
+  - source_id: dlinear
+    title: Are Transformers Effective for Time Series Forecasting
+    repository_url: https://github.com/cure-lab/LTSF-Linear.git
+    paper_url: https://doi.org/10.1609/aaai.v37i9.26317
+    commit: 0c113668a3b88c4c4ee586b8c5ec3e539c4de5a6
+    license_id: APACHE-2.0
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-dlinear-apache-2.0
+    assets:
+      - asset_id: dlinear_model
+        relative_path: models/DLinear.py
+        sha256: 0893b53cb6473d6bdca7aeca514cb3ee12efa6df227c29c4469571c9711451cc
+        required_for: [MODEL]
+    evidence_files:
+      - url: https://raw.githubusercontent.com/cure-lab/LTSF-Linear/0c113668a3b88c4c4ee586b8c5ec3e539c4de5a6/models/DLinear.py
+        sha256: 0893b53cb6473d6bdca7aeca514cb3ee12efa6df227c29c4469571c9711451cc
+  - source_id: itransformer
+    title: iTransformer Inverted Transformers Are Effective for Time Series Forecasting
+    repository_url: https://github.com/thuml/Time-Series-Library.git
+    paper_url: https://openreview.net/forum?id=JePfAI8fah
+    commit: 4e938a1767106324dd753b2a44832bf870a0252e
+    license_id: MIT
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-itransformer-mit
+    assets:
+      - asset_id: itransformer_model
+        relative_path: models/iTransformer.py
+        sha256: 7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e
+        required_for: [MODEL]
+    evidence_files:
+      - url: https://raw.githubusercontent.com/thuml/Time-Series-Library/4e938a1767106324dd753b2a44832bf870a0252e/models/iTransformer.py
+        sha256: 7fdc721d041b0f8f63be8fa794ecd68422fd958c7c8d449026320fd9f368788e
+  - source_id: patchtst
+    title: A Time Series is Worth 64 Words
+    repository_url: https://github.com/yuqinie98/PatchTST.git
+    paper_url: https://openreview.net/forum?id=Jbdc0vTOcol
+    commit: 204c21efe0b39603ad6e2ca640ef5896646ab1a9
+    license_id: APACHE-2.0
+    code_usage: DIRECT_OFFICIAL_CODE
+    authorization_policy: LICENSED
+    authorization_id: upstream-license-patchtst-apache-2.0
+    assets:
+      - asset_id: patchtst_backbone
+        relative_path: PatchTST_supervised/layers/PatchTST_backbone.py
+        sha256: df67173153787c2356bdfb6491159cd754332ef7382986efe879e1fbea8ebf26
+        required_for: [MODEL]
+    evidence_files:
+      - url: https://raw.githubusercontent.com/yuqinie98/PatchTST/204c21efe0b39603ad6e2ca640ef5896646ab1a9/PatchTST_supervised/layers/PatchTST_backbone.py
+        sha256: df67173153787c2356bdfb6491159cd754332ef7382986efe879e1fbea8ebf26
+  - source_id: scoring_rules_l96
+    title: Generative Neural Networks for Probabilistic Forecasting in Lorenz-96
+    repository_url: https://github.com/LoryPack/GenerativeNetworksScoringRulesProbabilisticForecasting.git
+    paper_url: https://jmlr.org/papers/v25/23-0038.html
+    commit: 6f28942f6a703c2b52501d01258ca2708539f209
+    license_id: UNDECLARED
+    code_usage: DIRECT_OFFICIAL_CODE_AND_DATA
+    authorization_policy: USER_AUTHORIZED_NO_LICENSE_BLOCK
+    authorization_id: stage1b-v2-user-direct-official-use-2026-08-26
+    assets:
+      - asset_id: two_scale_model_source
+        relative_path: src/models.py
+        sha256: 75aea46171f2ac33ddab3728dbfb0ee8fa32ebcdf635a9955e145b7ad36cc3ca
+        required_for: [ORACLE]
+    evidence_files:
+      - url: https://raw.githubusercontent.com/LoryPack/GenerativeNetworksScoringRulesProbabilisticForecasting/6f28942f6a703c2b52501d01258ca2708539f209/src/models.py
+        sha256: 75aea46171f2ac33ddab3728dbfb0ee8fa32ebcdf635a9955e145b7ad36cc3ca
+models:
+  - model_id: LAST_VALUE
+    adapter: LAST_VALUE_GAUSSIAN
+    parameters: {}
+  - model_id: SEASONAL_NAIVE
+    adapter: SEASONAL_NAIVE_GAUSSIAN
+    parameters: {candidate_lags: [8, 16, 32]}
+  - model_id: VAR
+    adapter: STAGE2_VAR_GAUSSIAN
+    parameters: {lag_orders: [1, 2, 4, 8, 16], ridge: [0.000001, 0.001, 0.1]}
+  - model_id: DLINEAR
+    adapter: OFFICIAL_DLINEAR_GAUSSIAN
+    parameters:
+      individual: false
+      moving_average_kernel: 25
+      batch_size: 64
+      max_epochs: 100
+      patience: 20
+      learning_rate: 0.001
+      mean_loss: MSE
+  - model_id: PATCHTST
+    adapter: OFFICIAL_PATCHTST_GAUSSIAN
+    parameters:
+      d_model: 128
+      n_layers: 3
+      n_heads: 16
+      d_ff: 256
+      dropout: 0.1
+      patch_length: 16
+      patch_stride: 8
+      revin: true
+      batch_size: 64
+      max_epochs: 100
+      patience: 20
+      learning_rate: 0.0001
+  - model_id: ITRANSFORMER
+    adapter: OFFICIAL_ITRANSFORMER_GAUSSIAN
+    parameters:
+      d_model: 512
+      n_layers: 3
+      n_heads: 8
+      d_ff: 512
+      dropout: 0.1
+      revin: true
+      batch_size: 32
+      max_epochs: 100
+      patience: 20
+      learning_rate: 0.0001
+training:
+  initialization_namespaces:
+    - tarca/stage2_probabilistic_forecasting_v1/model-init/0
+    - tarca/stage2_probabilistic_forecasting_v1/model-init/1
+    - tarca/stage2_probabilistic_forecasting_v1/model-init/2
+  initialization_seeds: [1797287582, 883082243, 1933050005]
+  dlinear_fold_namespaces:
+    - tarca/stage2_probabilistic_forecasting_v1/dlinear-fold/0
+    - tarca/stage2_probabilistic_forecasting_v1/dlinear-fold/1
+    - tarca/stage2_probabilistic_forecasting_v1/dlinear-fold/2
+    - tarca/stage2_probabilistic_forecasting_v1/dlinear-fold/3
+    - tarca/stage2_probabilistic_forecasting_v1/dlinear-fold/4
+  dlinear_fold_seeds: [374158318, 2032114884, 152378261, 341781751, 1071263255]
+  optimizer: ADAMW
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  neural_weight_decay: 0.01
+  dlinear_weight_decay: 0.0
+  gradient_clip_norm: 1.0
+  scheduler: NONE
+  deterministic_algorithms: true
+  cudnn_deterministic: true
+  cudnn_benchmark: false
+  precision_candidates: [FP32, AMP_FP16]
+  amp_dtype: FLOAT16
+  scale_floor: 0.0001
+  scale_ceiling_multiplier: 10.0
+  scale_absolute_ceiling: 10.0
+runtime_profile:
+  profile_id: stage2-v1-two-rtx4090
+  base_image: pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04
+  expected_physical_cpu_cores: 28
+  scheduler_monitor_cores: 1
+  system_io_reserved_cores: 3
+  maximum_work_cores: 24
+  expected_ram_gib: 224
+  host_memory_ceiling_gib: 200
+  expected_gpu_count: 2
+  expected_gpu_name_substring: RTX 4090
+  expected_gpu_vram_gib: 24
+  gpu_task_cpu_threads: 4
+  gpu_task_host_memory_gib: 32
+  gpu_task_vram_ceiling_gib: 20
+  dataloader_workers_per_gpu_job: 3
+  minimum_free_storage_gib: 200
+  recommended_free_storage_gib: 300
+  reset_limit_hours: 24
+  reset_margin_hours: 1
+  monitor_bind_host: 127.0.0.1
+  monitor_port: 8765
+  training_acknowledgement: I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN

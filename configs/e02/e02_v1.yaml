@@ -1,0 +1,48 @@
+schema_version: 1.0.0
+protocol_id: TARCA-E2E-STAGE-PROTOCOL-2.0
+experiment_id: e02_predictor_validity_v1
+expected_stage2_experiment_id: stage2_probabilistic_forecasting_v1
+formal_partition: TEST
+formal_seeds: [1729, 2718, 3141, 5772, 8111]
+trajectories_seen_per_seed: 12
+trajectories_unseen_per_seed: 12
+bootstrap:
+  method: PAIRED_STRATIFIED_TRAJECTORY_PERCENTILE
+  replicates: 5000
+  confidence: 0.90
+  seed_namespace: tarca/stage2_probabilistic_forecasting_v1/bootstrap/0
+  seed: 172657089
+  strata: [FORMAL_SEED, REGIME]
+  unit: COMPLETE_TRAJECTORY
+gate:
+  primary_model_id: ITRANSFORMER
+  baseline_selection: VALIDATION_STRONGEST_OF_VAR_DLINEAR
+  primary_horizons: [1, 6]
+  minimum_crps_skill: 0.02
+  ci_lower_strictly_above: 0.0
+  minimum_positive_data_seeds: 3
+  data_seed_count: 5
+  minimum_positive_initializations: 2
+  initialization_count: 3
+  require_better_than_last_value: true
+  require_better_than_seasonal_naive: true
+  seen_skill_strictly_above: 0.0
+  unseen_skill_floor: -0.05
+  relative_nll_tolerance: 0.05
+  relative_mae_tolerance: 0.05
+  coverage_levels: [0.50, 0.80, 0.90, 0.95]
+  overall_coverage_error_max: 0.05
+  regime_coverage_error_max: 0.10
+  secondary_horizon_groups: [[7, 12], [13, 24]]
+  secondary_horizon_skill_floor: -0.10
+  require_finite: true
+  require_positive_scale: true
+  require_non_crossing_quantiles: true
+  required_completed_trajectories: 120
+  allowed_failed_trajectories: 0
+runtime_profile:
+  profile_id: e02-v1-two-rtx4090
+  monitor_bind_host: 127.0.0.1
+  monitor_port: 8765
+  formal_acknowledgement: I_ACKNOWLEDGE_E02_V1_FORMAL_RUN
+  reset_margin_hours: 1

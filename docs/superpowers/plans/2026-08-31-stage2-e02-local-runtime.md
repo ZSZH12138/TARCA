@@ -86,7 +86,7 @@
 - Produces: `Stage2Config.scientific_hash() -> str`, `Stage2Config.runtime_hash() -> str`
 - Produces: `E02Config.scientific_hash() -> str`, `E02Config.runtime_hash() -> str`
 
-- [ ] **Step 1: Write failing exact-identity and mutation-rejection tests**
+- [x] **Step 1: Write failing exact-identity and mutation-rejection tests**
 
 ```python
 def test_repository_stage2_config_has_frozen_identity() -> None:
@@ -108,7 +108,7 @@ def test_repository_e02_config_has_frozen_gate() -> None:
     assert config.gate.minimum_positive_initializations == 2
 ```
 
-- [ ] **Step 2: Run the tests and verify import/config failures**
+- [x] **Step 2: Run the tests and verify import/config failures**
 
 Run:
 
@@ -118,7 +118,7 @@ Run:
 
 Expected: FAIL because the Stage 2/E02 modules and YAML files do not exist.
 
-- [ ] **Step 3: Implement strict immutable models and exact YAML values**
+- [x] **Step 3: Implement strict immutable models and exact YAML values**
 
 Use `StrictContractModel`, `Literal`, tuple-converting validators, and model validators. `Stage2Config.scientific_payload()` excludes only `runtime_profile`; `E02Config.scientific_payload()` excludes only runtime placement and monitor fields. Add the DLinear source with:
 
@@ -143,13 +143,13 @@ def derive_namespaced_seed(namespace: str) -> int:
 
 Validators must compare all configured derived seeds with recalculated values and reject any overlap with Stage1B qualification seeds, E01 seeds, or formal seeds.
 
-- [ ] **Step 4: Run focused tests and hash-stability checks**
+- [x] **Step 4: Run focused tests and hash-stability checks**
 
 Run the Task 1 test command twice and assert the two printed scientific hashes are identical.
 
 Expected: all Task 1 tests PASS; changing a runtime CPU value changes only `runtime_hash()`.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```powershell
 git add configs/stage2 configs/e02 src/tarca/stage2 src/tarca/e02/__init__.py src/tarca/e02/config.py tests/stage2 tests/e02/test_config.py
