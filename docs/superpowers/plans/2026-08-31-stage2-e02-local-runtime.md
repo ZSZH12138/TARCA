@@ -552,7 +552,7 @@ git commit -m "feat: add e02 trajectory scoring and bootstrap"
 - Produces: `evaluate_e02(evidence: E02Evidence, config: E02Config) -> E02Decision`
 - Produces: `build_e02_receipt(decision, evidence) -> E02Receipt`
 
-- [ ] **Step 1: Write a table-driven failing test for every equality boundary and precedence rule**
+- [x] **Step 1: Write a table-driven failing test for every equality boundary and precedence rule**
 
 ```python
 @pytest.mark.parametrize(
@@ -565,11 +565,11 @@ def test_primary_gate_boundaries(skill: float, ci_lower: float, expected: str) -
     assert evaluate_e02(evidence, E02_CONFIG).outcome == expected
 ```
 
-- [ ] **Step 2: Run decision/receipt tests and observe missing state machine**
+- [x] **Step 2: Run decision/receipt tests and observe missing state machine**
 
 Run Task 8 tests.
 
-- [ ] **Step 3: Implement explicit precedence**
+- [x] **Step 3: Implement explicit precedence**
 
 Order checks as: integrity violation or scientific guardrail breach → `FAIL`; incomplete operational run without integrity breach → `NOT_EVALUABLE`; all PASS conditions → `PASS`; remaining nonnegative primary skill → `INCONCLUSIVE`; negative primary skill → `FAIL`. Record every condition as a named immutable `GateResult` so receipt review does not infer reasons from free text.
 
@@ -581,11 +581,11 @@ class GateResult(StrictContractModel):
     required: float | int | str
 ```
 
-- [ ] **Step 4: Run all PASS/FAIL/INCONCLUSIVE/NOT_EVALUABLE and receipt-tamper tests**
+- [x] **Step 4: Run all PASS/FAIL/INCONCLUSIVE/NOT_EVALUABLE and receipt-tamper tests**
 
 Expected: all exact thresholds and precedence cases PASS; receipt hash changes when any evidence changes.
 
-- [ ] **Step 5: Commit Task 8**
+- [x] **Step 5: Commit Task 8**
 
 ```powershell
 git add src/tarca/e02/decision.py src/tarca/e02/receipt.py tests/e02/test_decision.py tests/e02/test_receipt.py
