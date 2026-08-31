@@ -938,7 +938,7 @@ git commit -m "docs: hand off stage2 server runtime"
 **Interfaces:**
 - Produces: clean worktree, passing verification, deterministic bundle receipt, no formal access, server-ready handoff
 
-- [ ] **Step 1: Run focused Stage 2/E02 coverage**
+- [x] **Step 1: Run focused Stage 2/E02 coverage**
 
 ```powershell
 & 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2 tests/e02 --cov=tarca.stage2 --cov=tarca.e02 --cov-branch --cov-report=term-missing --cov-fail-under=80
@@ -946,7 +946,7 @@ git commit -m "docs: hand off stage2 server runtime"
 
 Expected: PASS with branch coverage at least 80%.
 
-- [ ] **Step 2: Run the complete regression suite**
+- [x] **Step 2: Run the complete regression suite**
 
 ```powershell
 & 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest -q
@@ -954,7 +954,7 @@ Expected: PASS with branch coverage at least 80%.
 
 Expected: all tests PASS; no Stage1B/E01 regression.
 
-- [ ] **Step 3: Run static and security verification**
+- [x] **Step 3: Run static and security verification**
 
 ```powershell
 & 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m ruff check src tests scripts
@@ -965,7 +965,7 @@ git grep -n -E 'BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|DEEPSEEK_API_KEY=|token=[A
 
 Expected: Ruff/mypy/diff PASS and secret scan returns no match.
 
-- [ ] **Step 4: Build and verify the final local bundle without running formal science**
+- [x] **Step 4: Build and verify the final local bundle without running formal science**
 
 ```powershell
 & 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' scripts/prepare_stage2_v1_server_bundle.py --output artifacts/stage2/server_bundle/tarca-stage2-v1.tar.gz
@@ -977,7 +977,7 @@ Expected: Ruff/mypy/diff PASS and secret scan returns no match.
 
 Expected: bundle receipt reports `formal_tasks_executed: 0`; commands do not create formal data or predictions.
 
-- [ ] **Step 5: Review exact spec-to-code coverage and commit final evidence**
+- [x] **Step 5: Review exact spec-to-code coverage and commit final evidence**
 
 Check every section of the approved design against code/tests/report. Confirm `git status --short`, inspect every diff, and commit only final report corrections:
 
