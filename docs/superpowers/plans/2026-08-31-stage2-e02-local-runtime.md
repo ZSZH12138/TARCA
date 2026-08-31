@@ -171,7 +171,7 @@ git commit -m "feat: freeze stage2 and e02 configuration"
 - Produces: `open_formal_bundle(config, e02_config, grant, *, accessed_at) -> Stage2DataBundle`
 - Produces: `stack_partition(bundle, partition) -> tuple[Tensor, Tensor, tuple[str, ...]]`
 
-- [ ] **Step 1: Write failing tests for counts, lineage, TRAIN-only normalization, and sealed refusal**
+- [x] **Step 1: Write failing tests for counts, lineage, TRAIN-only normalization, and sealed refusal**
 
 ```python
 def test_development_bundle_has_exact_trajectory_counts(stage2_config: Stage2Config) -> None:
@@ -186,7 +186,7 @@ def test_formal_bundle_refuses_read_without_grant(stage2_config: Stage2Config, e
         open_formal_bundle(stage2_config, e02_config, None, accessed_at=UTC_NOW)
 ```
 
-- [ ] **Step 2: Run focused tests and observe missing data interfaces**
+- [x] **Step 2: Run focused tests and observe missing data interfaces**
 
 Run:
 
@@ -196,7 +196,7 @@ Run:
 
 Expected: FAIL on missing `tarca.stage2.data` symbols.
 
-- [ ] **Step 3: Implement immutable trajectory grouping and access-before-read validation**
+- [x] **Step 3: Implement immutable trajectory grouping and access-before-read validation**
 
 Map development partitions to standard `TRAIN` and `VALIDATION`; map E02 to `TEST_SEEN_REGIME` and `TEST_UNSEEN_REGIME`. Reuse Stage1B world generation and bridge logic, but create fresh manifests with the Stage 2/E02 seeds. Call `validate_sealed_access(...)` before resolving any formal physical path. Store trajectory ID and regime in each window lineage; forbid windows spanning trajectory or partition boundaries.
 
@@ -210,11 +210,11 @@ class Stage2DataBundle:
     manifest_sha256: str
 ```
 
-- [ ] **Step 4: Run focused tests including a monkeypatch proving no formal reader call occurs**
+- [x] **Step 4: Run focused tests including a monkeypatch proving no formal reader call occurs**
 
 Expected: counts, lineage, normalization, deterministic replay, collision rejection, and pre-read denial PASS.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```powershell
 git add src/tarca/stage2/data.py src/tarca/stage2/__init__.py tests/stage2/test_data.py tests/e02/test_formal_boundary.py
