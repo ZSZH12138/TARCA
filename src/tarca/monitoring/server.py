@@ -19,4 +19,5 @@ def create_app_from_environment() -> FastAPI:
         os.environ.get("TARCA_RUNTIME_STATIC_ROOT")
         or os.environ.get("TARCA_STAGE1B_STATIC_ROOT", "/opt/tarca/frontend/stage1b-monitor/dist")
     )
-    return create_monitoring_app(database, static_root)
+    execution_kind = os.environ.get("TARCA_EXECUTION_KIND", "stage1b-v2")
+    return create_monitoring_app(database, static_root, execution_kind)

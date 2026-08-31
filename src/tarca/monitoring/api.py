@@ -15,15 +15,36 @@ from tarca.monitoring.schemas import (
     RunSummaryView,
 )
 
+_RUNTIME_LABELS = {
+    "stage1b-v2": "Stage1B v2",
+    "e01-v2": "E01 v2",
+    "stage2-v1": "Stage 2 v1",
+    "e02-v1": "E02 v1",
+}
 
-def create_monitoring_app(database_path: Path, static_root: Path) -> FastAPI:
+
+def create_monitoring_app(
+    database_path: Path,
+    static_root: Path,
+    execution_kind: str = "stage1b-v2",
+) -> FastAPI:
+    if execution_kind not in _RUNTIME_LABELS:
+        raise ValueError("monitoring execution kind is not allowlisted")
     repository = MonitoringRepository(database_path)
     app = FastAPI(
-        title="TARCA Stage1B Runtime Monitor",
+        title=f"TARCA {_RUNTIME_LABELS[execution_kind]} Runtime Monitor",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
     )
+
+    @app.get("/api/v1/runtime")
+    def get_runtime() -> dict[str, str]:
+        return {
+            "execution_kind": execution_kind,
+            "display_label": _RUNTIME_LABELS[execution_kind],
+            "access_mode": "READ_ONLY",
+        }
 
     @app.get("/api/v1/run", response_model=RunSummaryView)
     def get_run() -> RunSummaryView:
