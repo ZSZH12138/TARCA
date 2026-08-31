@@ -305,7 +305,7 @@ git commit -m "feat: add stage2 probabilistic baselines"
 - Produces: `build_stage2_source_capsule(config, cache_root, output) -> SourceCapsuleReceipt`
 - Produces: offline source materialization/import CLIs for all four fixed sources
 
-- [ ] **Step 1: Write failing official-source hash, shape, and scale-isolation tests**
+- [x] **Step 1: Write failing official-source hash, shape, and scale-isolation tests**
 
 ```python
 def test_official_dlinear_asset_hash_is_required(tmp_path: Path) -> None:
@@ -328,11 +328,11 @@ def test_stage2_capsule_contains_exact_four_sources(capsule_receipt: SourceCapsu
     )
 ```
 
-- [ ] **Step 2: Run the DLinear test and observe missing adapter failures**
+- [x] **Step 2: Run the DLinear test and observe missing adapter failures**
 
 Run `pytest tests/stage2/test_dlinear.py tests/stage2/test_sources.py tests/stage2/test_source_capsule.py -q` with the project interpreter.
 
-- [ ] **Step 3: Implement verified dynamic loading and deterministic five-fold cross-fitting**
+- [x] **Step 3: Implement verified dynamic loading and deterministic five-fold cross-fitting**
 
 Verify `models/DLinear.py` SHA-256 before `importlib.util.spec_from_file_location`. Construct the official `Model` with `seq_len=64`, `pred_len=24`, `enc_in=dimension`, and `individual=False`. Assign folds by `int(SHA256(trajectory_id), 16) % 5`; use exact fold seeds from the spec; train fold models only on four TRAIN folds and calculate held-out TRAIN residuals. Train the final mean model on all TRAIN with validation MSE early stopping and seed `1797287582`.
 
@@ -348,11 +348,11 @@ class DLinearTrainingResult:
     best_validation_mse: float
 ```
 
-- [ ] **Step 4: Run official DLinear, checkpoint/reload, and deterministic repeat tests**
+- [x] **Step 4: Run official DLinear, checkpoint/reload, and deterministic repeat tests**
 
 Expected: same inputs and seed produce identical hashes; tampering fails closed; no validation target enters scale estimation.
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 
 ```powershell
 git add src/tarca/stage2/dlinear.py src/tarca/stage2/distributions.py src/tarca/stage2/sources.py scripts/materialize_stage2_sources.py scripts/package_stage2_source_capsule.py scripts/import_stage2_source_capsule.py tests/stage2/test_dlinear.py tests/stage2/test_sources.py tests/stage2/test_source_capsule.py

@@ -12,6 +12,27 @@ from tarca.contracts import ForecastDistribution, validate_forecast_distribution
 DEFAULT_GAUSSIAN_QUANTILES = (0.025, 0.05, 0.10, 0.25, 0.75, 0.90, 0.95, 0.975)
 
 
+def scale_ceiling(
+    train_targets: Tensor,
+    *,
+    multiplier: float,
+    absolute_ceiling: float,
+) -> Tensor:
+    if train_targets.ndim != 3 or not train_targets.is_floating_point():
+        raise ValueError("TRAIN targets must be a floating rank-three tensor")
+    if not bool(torch.isfinite(train_targets).all()):
+        raise ValueError("TRAIN targets must be finite")
+    if not math.isfinite(multiplier) or multiplier <= 0:
+        raise ValueError("scale ceiling multiplier must be finite and positive")
+    if not math.isfinite(absolute_ceiling) or absolute_ceiling <= 0:
+        raise ValueError("absolute scale ceiling must be finite and positive")
+    target_std = train_targets.to(torch.float64).std(dim=0, unbiased=False)
+    return torch.maximum(
+        target_std * multiplier,
+        torch.full_like(target_std, absolute_ceiling),
+    )
+
+
 def residual_scale(residuals: Tensor, *, floor: float, ceiling: Tensor) -> Tensor:
     if residuals.ndim != 3 or not residuals.is_floating_point():
         raise ValueError("residuals must be a floating rank-three tensor")

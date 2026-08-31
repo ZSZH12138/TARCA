@@ -10,7 +10,7 @@ from torch import Tensor
 
 from tarca.contracts import ForecastDistribution, WindowBatch, validate_window_batch
 from tarca.stage1b.metrics import gaussian_crps
-from tarca.stage2.distributions import gaussian_forecast, residual_scale
+from tarca.stage2.distributions import gaussian_forecast, residual_scale, scale_ceiling
 
 
 def _tensor_bytes(tensor: Tensor) -> bytes:
@@ -68,23 +68,6 @@ def _validate_fit_tensors(
             raise ValueError("validation tensors must match the TRAIN feature dimension")
         if validation_y.shape[1] != train_y.shape[1]:
             raise ValueError("TRAIN and validation horizons must match")
-
-
-def _scale_ceiling(
-    train_y: Tensor,
-    *,
-    multiplier: float,
-    absolute_ceiling: float,
-) -> Tensor:
-    if not math.isfinite(multiplier) or multiplier <= 0:
-        raise ValueError("scale ceiling multiplier must be finite and positive")
-    if not math.isfinite(absolute_ceiling) or absolute_ceiling <= 0:
-        raise ValueError("absolute scale ceiling must be finite and positive")
-    target_std = train_y.to(torch.float64).std(dim=0, unbiased=False)
-    return torch.maximum(
-        target_std * multiplier,
-        torch.full_like(target_std, absolute_ceiling),
-    )
 
 
 def _horizon(batch: WindowBatch) -> int:
@@ -171,7 +154,7 @@ class LastValueGaussian:
         scale = residual_scale(
             train_y.to(torch.float64) - train_mean,
             floor=floor,
-            ceiling=_scale_ceiling(
+            ceiling=scale_ceiling(
                 train_y,
                 multiplier=ceiling_multiplier,
                 absolute_ceiling=absolute_ceiling,
@@ -240,7 +223,7 @@ class SeasonalNaiveGaussian:
         candidates = tuple(sorted(set(lags)))
         if not candidates or any(lag <= 0 or lag > train_x.shape[1] for lag in candidates):
             raise ValueError("seasonal lags must be unique positive values within the history")
-        ceiling = _scale_ceiling(
+        ceiling = scale_ceiling(
             train_y,
             multiplier=ceiling_multiplier,
             absolute_ceiling=absolute_ceiling,
@@ -388,7 +371,7 @@ class Stage2VARGaussian:
             raise ValueError("VAR lags must be unique positive values within the history")
         if not ridges or any(not math.isfinite(ridge) or ridge < 0 for ridge in ridges):
             raise ValueError("VAR ridge values must be unique finite nonnegative values")
-        ceiling = _scale_ceiling(
+        ceiling = scale_ceiling(
             train_y,
             multiplier=ceiling_multiplier,
             absolute_ceiling=absolute_ceiling,
