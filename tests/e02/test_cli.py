@@ -25,3 +25,4 @@ def test_e02_cli_help_lists_exact_commands() -> None:
         "recover",
     ):
         assert command in result.stdout
+    assert "--evidence" in result.stdout

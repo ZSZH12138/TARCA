@@ -65,6 +65,7 @@ def _selected_files(root: Path) -> tuple[Path, ...]:
         root / "scripts/materialize_stage2_sources.py",
         root / "scripts/package_stage2_source_capsule.py",
         root / "docs/superpowers/specs/2026-08-31-stage2-e02-local-runtime-design.md",
+        root / "docs/superpowers/plans/2026-09-01-e02-fresh-server-readiness.md",
         root / "artifacts/stage1b/frozen/v2/manifest.json",
         root / "artifacts/stage1b/frozen/v2/manifest.sha256",
         root / "artifacts/stage1b/frozen/v2/qualification_receipt.json",
@@ -81,6 +82,7 @@ def _selected_files(root: Path) -> tuple[Path, ...]:
         "docs/research/stage2_e02_local_implementation_report_v1.md",
         "docs/research/stage2_e02_server_handoff_v1.md",
         "docs/research/stage2_device_mismatch_recovery_v1.md",
+        "docs/research/e02_fresh_server_handoff_v1.md",
     ):
         document = root / relative
         if document.is_file():

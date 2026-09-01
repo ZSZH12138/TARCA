@@ -893,7 +893,7 @@ test_unseen_regime: 后 10%，保留的状态参数或状态组合
 0.0001294253（门槛 0.005）；Lorenz-96 E01-B 使用 v1 中已通过的 5/5 证据，经原字节 SHA-256
 复核后并入 v2。活动收据与完整交接分别见 `artifacts/e01/frozen/v2/qualification_receipt.json`
 和 `docs/auth/TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`。E01 通过只解除 oracle 稳定性阻塞，
-下一步仍须完成 Stage 2 和 E02，不得直接进入 Stage 3/4。
+Stage 2 与 E02 已按各自冻结契约完成；下一步只能进入 Stage 3 的机制植入与 E03，仍不得直接进入 Stage 4。
 
 ---
 
@@ -1023,9 +1023,9 @@ axes:
 
 实施同步（2026-09-01）：Stage 2 v1 已沿用固定 run 完成同运行恢复，最新图状态为
 `37/37 COMPLETED`，并发布状态为 `FROZEN` 的 receipt；strongest linear 固定为 `VAR`，
-primary iTransformer seed 固定为 `1797287582`，formal access event count 为 0。
-E02 仍为 `NOT_RUN_E02_FORMAL`，不得把 Stage 2 授权延伸为 E02 formal 授权。完整运行身份、
-事故留痕、本地归档和下一步边界见 `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。
+primary iTransformer seed 固定为 `1797287582`。E02 已完成 `COMPLETED/PASS`：120/120 条正式轨迹
+完成、24/24 个预注册 Gate 通过，最终 receipt 已独立重算验证。完整运行身份、E02 指标、证据回收
+边界与下一阶段限制见 `TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`。
 
 ---
 
@@ -2915,7 +2915,7 @@ src/tarca/metrics/
 |---|---|---|---|---|
 | E00 | 环境 smoke | 阶段0 | 环境、CI | 无 |
 | E01 | SCM oracle | 阶段1 | 真值效应、延迟 | E01-v2 PASS（已完成） |
-| E02 | 预测基线 | 阶段2 | NLL/CRPS | 无 |
+| E02 | 预测基线 | 阶段2 | NLL/CRPS | PASS（已完成；24/24 Gate） |
 | E03 | 植入机制 | 阶段3 | oracle site 效应 | 无 |
 | E04 | 固定交换+负对照 | 阶段4–5 | IIC/Cause/Isolation | Gate A |
 | E05 | 层×时间 PLOT | 阶段6 | layer/patch/lag | Gate 1 前 |
@@ -3024,8 +3024,8 @@ docs/stage1_unified_data_contract.md
 
 若答案为否，不进入基础预测器，更不能进入内部干预或 OT。
 
-当前答案为“是”：E01-v2 已通过并冻结，Stage 2 v1 也已完成并冻结。后续从 E02 的
-prepare、dry-run 和 preflight 开始；只有再次获得独立书面授权后，才允许打开 E02 formal 数据。
+当前答案为“是”：E01-v2 已通过并冻结，Stage 2 v1 已完成并冻结，E02 已通过正式 Gate。
+后续从 Stage 3 的机制植入与 E03 开始；在 E03 通过前，仍不得进入 Stage 4、OT、DAS 或 DRO。
 
 ---
 

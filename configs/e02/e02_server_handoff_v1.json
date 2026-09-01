@@ -1,0 +1,14 @@
+{
+  "schema_version": "tarca-e02-server-handoff-v1",
+  "complete_archive_filename": "tarca-stage2-v1-complete-20260901T011423Z.tar.gz",
+  "complete_archive_sha256": "7d77ca6bd7d09b3fd9abd7814ef169f11814e774ec479a04d6f1a1c751fe966a",
+  "stage2_freeze_receipt_sha256": "37a3a5c45a8bf4b4a703f40b7ab2e82b8d8b9bf0554a6b13f470ee7e5017e166",
+  "stage2_freeze_receipt_file_sha256": "5ec77ab844ef0bc793bf8543db57f01856ab603718a21fd1a19c42bf0947d8e5",
+  "stage2_manifest_file_sha256": "6d9ef496956a714e956c57800f0c1cf479a042624f757f54f4882a99f8d132d4",
+  "e02_scientific_config_sha256": "9027fcb9d40e89e66cd047c247b5dd5fc10a548916e9b97ffad45ddf262b310c",
+  "required_members": [
+    "artifacts/stage2/frozen/v1/stage2_manifest.json",
+    "artifacts/stage2/frozen/v1/stage2_freeze_receipt.json",
+    "artifacts/stage2/runtime/execution.sqlite3"
+  ]
+}

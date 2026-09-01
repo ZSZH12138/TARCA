@@ -3,11 +3,10 @@
 日期：2026-08-31
 
 > 2026-09-01 后续状态：本文记录的本地恢复实现随后已在新服务器上按固定契约执行；同一 run
-> 的 Stage 2 最新状态为 `37/37 COMPLETED / FROZEN`，完整归档已回收并独立校验。E02 仍为
-> `NOT_RUN_E02_FORMAL`。正文中的 `LOCAL_RECOVERY_IMPLEMENTATION_COMPLETE` 和
-> `NOT_RUN_RECOVERY_ON_NEW_SERVER` 是恢复点火前的历史边界，不是当前项目状态。当前事实见
-> `docs/research/stage2_server_run_report_v1.md` 和
-> `docs/auth/TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。
+> 的 Stage 2 最新状态为 `37/37 COMPLETED / FROZEN`，完整归档已回收并独立校验。E02 已完成
+> `COMPLETED / PASS`。正文中的 `LOCAL_RECOVERY_IMPLEMENTATION_COMPLETE` 和
+> `NOT_RUN_RECOVERY_ON_NEW_SERVER` 是恢复点火前的历史边界，不是当前项目状态。当前正式事实见
+> `docs/auth/TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`。
 
 ## 1. 结论与状态边界
 

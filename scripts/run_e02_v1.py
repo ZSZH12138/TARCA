@@ -25,11 +25,16 @@ def main() -> int:
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     parser.add_argument("--config", type=Path, default=Path("configs/e02/e02_v1.yaml"))
     parser.add_argument("--artifact-root", type=Path, default=Path("artifacts/e02"))
+    parser.add_argument("--evidence", type=Path)
     parser.add_argument("--acknowledgement", default="")
     args = parser.parse_args()
-    keyword = (
-        {"acknowledgement": args.acknowledgement} if args.command in {"launch", "resume"} else {}
-    )
+    keyword = {}
+    if args.command in {"launch", "resume"}:
+        keyword["acknowledgement"] = args.acknowledgement
+    elif args.command == "preflight":
+        keyword["evidence_path"] = args.evidence or (
+            args.artifact_root / "runtime/bootstrap_evidence.json"
+        )
     result = dispatch_e02_runtime_command(
         args.command, args.repository_root, args.config, args.artifact_root, **keyword
     )

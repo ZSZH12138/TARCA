@@ -1,5 +1,9 @@
 # TARCA Stage 2 v1 服务器运行报告
 
+> 后续状态（2026-09-01）：本报告只记录 Stage 2 服务器恢复。其后 E02 已完成
+> `COMPLETED / PASS`；正式结果、收据身份和下一步限制见
+> `docs/auth/TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`。
+
 ## 1. 运行结论
 
 2026-09-01，Stage 2 v1 在用户授权的双 RTX 4090 服务器上完成。恢复沿用原运行

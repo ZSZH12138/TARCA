@@ -5,7 +5,8 @@
 > 固定运行：`run-acff24d96653a25d4aac54b9389c605d8c35293cc930f9fa8a560947306401fb`
 > 固定图：`stage2-graph-acff24d96653a25d4aac54b9389c605d8c35293cc930f9fa8a560947306401fb`
 > 最新任务状态：`37/37 COMPLETED`
-> 下一实验：E02，当前为 `NOT_RUN_E02_FORMAL`
+> 后续状态（2026-09-01）：E02 已完成 `COMPLETED / PASS`；其正式结论、完整 Gate 明细和后续边界见
+> `TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`。本文其余内容保留为 Stage 2 冻结时快照。
 > 服务器运行事实：`docs/research/stage2_server_run_report_v1.md`
 
 ## 1. 功能层结论

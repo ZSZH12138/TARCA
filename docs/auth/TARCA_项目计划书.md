@@ -5,7 +5,7 @@
 > **契约修订核对日期**：2026-08-20
 > **契约优先级**：Stage 0 应冻结 `preregistration_v0.md`、`assumption_ledger.md`、`novelty_claims.md`、`terminology.md`；Stage 1+ 必须服从这些研究契约。没有明确、可追溯的上位修订时，不得静默改写其 Gate、证据等级或创新边界。
 > **目标**：形成一个以通用时间序列方法为主体、金融序列为高难度验证场景。
-> **当前实施事实入口**：实施进度不改写本计划的研究规则；Stage 2 完成身份与 E02 交接边界见 `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。
+> **当前实施事实入口**：实施进度不改写本计划的研究规则；E02 的正式结论、身份与后续边界见 `TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`，Stage 2 冻结身份见 `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。
 
 ---
 
@@ -856,8 +856,9 @@ $$
 - 使用相同未来噪声验证事实与反事实效应；
 - 完成 synthetic easy 和 E01 工程真值 smoke。
 
-> 实施状态不改写本计划的研究边界；E01 的当前冻结结论为 `v2/PASS`，证据与后续任务入口见
-> `TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`。
+> 实施状态不改写本计划的研究边界；E01 的当前冻结结论为 `v2/PASS`，E02 的正式结论为
+> `COMPLETED/PASS`。两者的证据、身份与下游边界分别见
+> `TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md` 和 `TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`。
 
 第 5–6 周（Stage 2）：
 

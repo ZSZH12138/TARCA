@@ -45,8 +45,15 @@ def test_stage2_bundle_has_offline_inputs_and_no_local_path_or_secret(tmp_path: 
         assert "docs/research/stage2_e02_local_implementation_report_v1.md" in names
         assert "docs/research/stage2_e02_server_handoff_v1.md" in names
         assert "docs/research/stage2_device_mismatch_recovery_v1.md" in names
+        assert "docs/research/e02_fresh_server_handoff_v1.md" in names
         assert "configs/stage2/stage2_device_mismatch_recovery_v1.json" in names
+        assert "configs/e02/e02_server_handoff_v1.json" in names
         assert "src/tarca/stage2/recovery_archive.py" in names
+        assert "src/tarca/e02/server_handoff.py" in names
+        assert "src/tarca/e02/server_probe.py" in names
+        assert "src/tarca/e02/server_preflight.py" in names
+        assert "deploy/stage2/e02_bootstrap.sh" in names
+        assert "deploy/stage2/e02_bootstrap_direct.sh" in names
         assert not any(name.startswith("third_party/") for name in names)
         for member in archive.getmembers():
             if member.isfile():

@@ -9,6 +9,7 @@ from tarca.e02.tasks import E02Graph, compile_e02_ready
 from tarca.execution import (
     ExecutionStateStore,
     ExecutorRegistry,
+    HostAdmissionPolicy,
     ResourceCapacity,
     RunPlanNode,
     RunTerminalStatus,
@@ -32,6 +33,17 @@ class E02RunResult:
     completed: tuple[tuple[str, ArtifactRef], ...]
 
 
+def e02_host_admission_policy() -> HostAdmissionPolicy:
+    return HostAdmissionPolicy(
+        scheduler_monitor_cores=1,
+        system_io_reserved_cores=3,
+        maximum_data_cores=24,
+        maximum_host_memory_bytes=200 * 1024**3,
+        minimum_local_storage_free_bytes=200 * 1024**3,
+        initial_loader_workers_per_gpu_job=3,
+    )
+
+
 def e02_scientific_plan_hash(graph: E02Graph, gpu_order: tuple[int, int]) -> str:
     if tuple(sorted(gpu_order)) != (0, 1):
         raise ValueError("GPU order must contain devices zero and one")
@@ -47,6 +59,7 @@ def run_e02_formal(
     registry: ExecutorRegistry | None = None,
     backend: WorkerBackend | None = None,
     telemetry_probe: TelemetryProbe | None = None,
+    policy: HostAdmissionPolicy | None = None,
     maximum_wait_seconds: float = 1.0,
 ) -> E02RunResult:
     root = repository_root.resolve()
@@ -73,6 +86,7 @@ def run_e02_formal(
         state,
         backend or SynchronousTestBackend(state, resolved_registry),
         capacity,
+        policy=policy or e02_host_admission_policy(),
         poll_interval_seconds=0.001,
         supervisor=RuntimeSupervisor(
             state,

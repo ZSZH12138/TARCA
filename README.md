@@ -33,8 +33,10 @@ TARCA（Temporal Abstraction and Robust Causal Alignment）是一个面向非平
 
 Stage 2 v1 已在双 RTX 4090 服务器上完成并冻结为 `FROZEN`。固定 run 的最新任务状态为
 `37/37 COMPLETED`；六个 attempt-1 `WORKER_ERROR` 作为事故历史保留，六个同 run attempt-2
-均已完成。E02 为 `NOT_RUN_E02_FORMAL`，没有打开 formal 数据，也没有 E02 PASS/FAIL 结论。
-权威完成身份与下一任务入口见
+均已完成。E02 已完成 `COMPLETED / PASS`：120/120 条正式轨迹完成，24/24 个预注册 Gate 通过。
+E02 正式结论、证据回收边界与下一任务入口见
+[`TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`](docs/auth/TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md)，
+Stage 2 冻结身份见
 [`TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`](docs/auth/TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md)，
 服务器完成事实与本地回收校验见
 [`stage2_server_run_report_v1.md`](docs/research/stage2_server_run_report_v1.md)。
@@ -94,7 +96,8 @@ third_party_manifest/   第三方论文、仓库、版本和许可证边界
 
 Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage1B 当前状态为 `FROZEN_V2`：
 `lorenz96_twoscale_v2 + ITransformerReference` 已在独立确认种子上通过 h1–6 资格门禁，并以
-内容哈希绑定为唯一活动 `v2`；E01 已以 `v2/PASS` 完成，Stage 2 已冻结，E02 尚未运行。
+内容哈希绑定为唯一活动 `v2`；E01 已以 `v2/PASS` 完成，Stage 2 已冻结，E02 已以
+`COMPLETED/PASS` 完成。
 Stage 1A 范围见
 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)，Stage1B 当前权威交接见
 [`TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md`](docs/auth/TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md)。

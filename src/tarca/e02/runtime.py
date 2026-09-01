@@ -13,10 +13,16 @@ from typing import Any, cast
 from tarca.contracts import ArtifactRef, canonical_json_bytes, canonical_json_hash, sha256_file
 from tarca.e02.config import load_e02_config
 from tarca.e02.grant import create_e02_grant
-from tarca.e02.runner import run_e02_formal
+from tarca.e02.runner import e02_host_admission_policy, run_e02_formal
+from tarca.e02.server_handoff import (
+    load_e02_server_handoff,
+    load_server_bundle_verification_receipt,
+    load_stage2_restore_receipt,
+)
 from tarca.e02.tasks import E02Graph, FrozenStage2Input, compile_e02_graph
 from tarca.execution import LocalMultiProcessBackend, ResourceCapacity, RunTerminalStatus
 from tarca.stage2.freeze import verify_frozen_stage2_suite
+from tarca.stage2.resources import stage2_reset_time_gate
 
 E02_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_E02_V1_FORMAL_RUN"
 
@@ -96,17 +102,101 @@ def dry_run_e02(repository_root: Path, config_path: Path, artifact_root: Path) -
     }
 
 
-def preflight_e02(repository_root: Path, config_path: Path, artifact_root: Path) -> dict[str, Any]:
-    del config_path
+def _server_evidence(
+    repository_root: Path,
+    config_path: Path,
+    artifact_root: Path,
+    evidence_path: Path,
+) -> tuple[dict[str, Any], dict[str, object]]:
+    root = repository_root.resolve()
+    artifacts = artifact_root.resolve()
+    expected_path = artifacts / "runtime/bootstrap_evidence.json"
+    if evidence_path.resolve() != expected_path or not expected_path.is_file():
+        raise E02RuntimeAuthorizationError("exact E02 server preflight evidence is missing")
+    try:
+        evidence = json.loads(expected_path.read_text(encoding="utf-8"))
+    except Exception as error:
+        raise E02RuntimeAuthorizationError("E02 server preflight evidence is invalid") from error
+    if not isinstance(evidence, dict):
+        raise E02RuntimeAuthorizationError("E02 server preflight evidence is invalid")
+    handoff = load_e02_server_handoff(root / "configs/e02/e02_server_handoff_v1.json")
+    restore = load_stage2_restore_receipt(
+        artifacts / "runtime/stage2_restore_receipt.json", handoff
+    )
+    bundle = load_server_bundle_verification_receipt(
+        artifacts / "runtime/server_bundle_verification_receipt.json"
+    )
+    freeze = verify_frozen_stage2_suite(root / "artifacts/stage2")
+    config = load_e02_config(config_path.resolve())
+    required = (
+        evidence.get("schema_version") == "tarca-e02-server-preflight-evidence-v1",
+        evidence.get("status") == "PREFLIGHT_PASS",
+        evidence.get("complete_archive_sha256") == handoff.complete_archive_sha256,
+        evidence.get("stage2_restore_receipt_sha256") == restore.get("receipt_sha256"),
+        evidence.get("server_bundle_sha256") == bundle.get("server_bundle_sha256"),
+        evidence.get("server_bundle_verification_receipt_sha256")
+        == bundle.get("receipt_sha256"),
+        evidence.get("stage2_freeze_receipt_sha256") == freeze.receipt_sha256,
+        evidence.get("e02_scientific_config_sha256") == config.scientific_hash(),
+        evidence.get("source_hashes_verified") is True,
+        evidence.get("gpu_count") == 2,
+        evidence.get("work_cpu_cores") == 24,
+        evidence.get("scheduler_monitor_cores") == 1,
+        evidence.get("system_io_cores") == 3,
+        evidence.get("host_memory_ceiling_gib") == 200,
+        evidence.get("storage_floor_gib") == 200,
+        evidence.get("probe_contract")
+        == "e02-v1-three-frozen-checkpoints-two-gpu-waves",
+        evidence.get("eta_gate_passed") is True,
+        evidence.get("formal_tasks_executed") == 0,
+        evidence.get("scientific_results_visible") is False,
+    )
+    if not all(required):
+        raise E02RuntimeAuthorizationError("E02 server preflight evidence is incomplete")
+    try:
+        estimated = float(evidence["estimated_remaining_seconds"])
+        margin = float(evidence["reset_margin_hours"])
+        reset_at = datetime.fromisoformat(str(evidence["rental_reset_at_utc"]))
+        if reset_at.tzinfo is None or reset_at.utcoffset() != UTC.utcoffset(reset_at):
+            raise ValueError("reset time must use UTC")
+        remaining_hours = (reset_at - datetime.now(UTC)).total_seconds() / 3600.0
+        stage2_reset_time_gate(
+            estimated_remaining_seconds=estimated,
+            remaining_rental_hours=remaining_hours,
+            margin_hours=margin,
+        )
+    except (KeyError, TypeError, ValueError, RuntimeError) as error:
+        raise E02RuntimeAuthorizationError(
+            "E02 server preflight ETA evidence is invalid"
+        ) from error
+    return cast(dict[str, Any], evidence), restore
+
+
+def preflight_e02(
+    repository_root: Path,
+    config_path: Path,
+    artifact_root: Path,
+    *,
+    evidence_path: Path,
+) -> dict[str, Any]:
     prepared = _read(artifact_root.resolve() / "runtime/prepared_receipt.json", "prepared receipt")
     freeze = verify_frozen_stage2_suite(repository_root.resolve() / "artifacts/stage2")
+    evidence, restore = _server_evidence(
+        repository_root, config_path, artifact_root, evidence_path
+    )
     receipt = _seal(
         {
             "schema_version": "tarca-e02-preflight-v1",
             "status": "PREFLIGHT_PASS",
             "prepared_receipt_sha256": prepared["receipt_sha256"],
             "stage2_freeze_receipt_sha256": freeze.receipt_sha256,
+            "stage2_restore_receipt_sha256": restore["receipt_sha256"],
+            "evidence_sha256": sha256_file(evidence_path.resolve()),
+            "probe_contract": evidence["probe_contract"],
+            "estimated_remaining_seconds": evidence["estimated_remaining_seconds"],
+            "rental_reset_at_utc": evidence["rental_reset_at_utc"],
             "formal_tasks_executed": 0,
+            "scientific_results_visible": False,
         }
     )
     _atomic(artifact_root.resolve() / "runtime/preflight_receipt.json", receipt)
@@ -170,6 +260,15 @@ def _runtime_capacity(artifact_root: Path) -> ResourceCapacity:
     )
 
 
+def _worker_cpu_ids() -> tuple[int, ...]:
+    import psutil
+
+    available = tuple(int(cpu) for cpu in psutil.Process().cpu_affinity())
+    if len(available) < 28:
+        raise E02RuntimeAuthorizationError("E02 requires 28 affinity-visible CPU cores")
+    return available[4:28]
+
+
 def launch_e02(
     repository_root: Path, config_path: Path, artifact_root: Path, *, acknowledgement: str
 ) -> dict[str, Any]:
@@ -184,6 +283,12 @@ def launch_e02(
     freeze = verify_frozen_stage2_suite(root / "artifacts/stage2")
     if preflight.get("stage2_freeze_receipt_sha256") != freeze.receipt_sha256:
         raise E02RuntimeAuthorizationError("preflight does not bind the frozen Stage 2 suite")
+    evidence_path = runtime / "bootstrap_evidence.json"
+    if not evidence_path.is_file() or preflight.get("evidence_sha256") != sha256_file(
+        evidence_path
+    ):
+        raise E02RuntimeAuthorizationError("E02 server evidence hash drifted after preflight")
+    _server_evidence(root, config_path, artifact_root, evidence_path)
     database = runtime / "execution.sqlite3"
     if database.exists():
         raise E02RuntimeAuthorizationError("E02 execution database exists; use resume")
@@ -223,8 +328,11 @@ def launch_e02(
         repository_root=root,
         database_path=database,
         backend=LocalMultiProcessBackend(
-            root, environment_overrides={"TARCA_EXECUTION_KIND": "e02-v1"}
+            root,
+            cpu_ids=_worker_cpu_ids(),
+            environment_overrides={"TARCA_EXECUTION_KIND": "e02-v1"},
         ),
+        policy=e02_host_admission_policy(),
         maximum_wait_seconds=2.0,
     )
     if result.status is not RunTerminalStatus.COMPLETED:
@@ -252,6 +360,13 @@ def resume_e02(
     root = repository_root.resolve()
     runtime = artifact_root.resolve() / "runtime"
     launch = _read(runtime / "launch_receipt.json", "launch receipt")
+    preflight = _read(runtime / "preflight_receipt.json", "preflight receipt")
+    evidence_path = runtime / "bootstrap_evidence.json"
+    if not evidence_path.is_file() or preflight.get("evidence_sha256") != sha256_file(
+        evidence_path
+    ):
+        raise E02RuntimeAuthorizationError("E02 server evidence hash drifted before resume")
+    _server_evidence(root, config_path, artifact_root, evidence_path)
     if not (runtime / "execution.sqlite3").is_file():
         raise E02RuntimeAuthorizationError("execution database is required before resume")
     graph = _compiled_graph(root, config_path)
@@ -263,8 +378,11 @@ def resume_e02(
         repository_root=root,
         database_path=runtime / "execution.sqlite3",
         backend=LocalMultiProcessBackend(
-            root, environment_overrides={"TARCA_EXECUTION_KIND": "e02-v1"}
+            root,
+            cpu_ids=_worker_cpu_ids(),
+            environment_overrides={"TARCA_EXECUTION_KIND": "e02-v1"},
         ),
+        policy=e02_host_admission_policy(),
         maximum_wait_seconds=2.0,
     )
     return {

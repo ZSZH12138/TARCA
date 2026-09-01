@@ -1,8 +1,8 @@
 # TARCA Stage 2 / E02 服务器交接 v1
 
 > 2026-09-01 状态更新：本文件描述的同运行恢复已经完成，Stage 2 为 `37/37 COMPLETED`，
-> freeze receipt 与本地完整归档均已独立校验，E02 仍未打开。当前事实与回收位置见
-> `docs/research/stage2_server_run_report_v1.md`；下文恢复步骤保留为事故审计记录，不再是待执行任务。
+> freeze receipt 与本地完整归档均已独立校验；E02 已完成 `COMPLETED / PASS`。当前正式结论与
+> 后续边界见 `docs/auth/TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`；下文恢复步骤保留为事故审计记录，不再是待执行任务。
 
 ## 1. 当前边界
 
@@ -149,17 +149,22 @@ docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 stage2 recove
 
 ## 6. E02 是第二次独立授权
 
-只有 Stage 2 已产生并通过核验的
-`artifacts/stage2/frozen/v1/stage2_freeze_receipt.json` 后，才可执行不打开 formal 数据的准备：
+Stage 2 现已 37/37 完成并冻结。全新服务器不得再使用本手册前半部分的旧事故恢复入口来准备
+E02；应以完整 Stage 2 归档运行新的 fail-closed 准备脚本。完整命令、固定哈希和两种服务器
+落点见 `docs/research/e02_fresh_server_handoff_v1.md`。
+
+Docker 宿主机的一条准备命令为：
 
 ```bash
-docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 e02 prepare
-docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 e02 dry-run
-docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 e02 preflight
+bash deploy/stage2/e02_bootstrap.sh \
+  --stage2-archive /path/to/tarca-stage2-v1-complete-20260901T011423Z.tar.gz \
+  --server-bundle /path/to/tarca-stage2-v1-server.tar.gz \
+  --remaining-rental-hours N
 ```
 
-重新检查剩余租期和资源；必要时应在新服务器完整租期开始后再做 E02。必须由用户单独明确
-授权 E02 后，才可使用确认串 `I_ACKNOWLEDGE_E02_V1_FORMAL_RUN`：
+只有脚本输出 `E02_READY_FOR_USER_LAUNCH`，且用户审阅绑定归档、bundle、双卡吞吐、ETA 与租期
+截止时间的 preflight receipt 后，才进入等待授权状态。必须由用户单独明确授权 E02，才可使用
+确认串 `I_ACKNOWLEDGE_E02_V1_FORMAL_RUN`：
 
 ```bash
 docker compose -f deploy/stage2/compose.yaml run -d \

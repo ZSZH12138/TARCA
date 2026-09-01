@@ -1,7 +1,7 @@
 # TARCA E01 完成情况与任务交接快照
 
-> 2026-09-01 后续状态：Stage 2 已完成并冻结；E02 尚未运行。当前交接入口见
-> `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。本文其余内容继续作为 E01 完成时快照保留。
+> 2026-09-01 后续状态：Stage 2 已完成并冻结；E02 已完成 `COMPLETED / PASS`。当前交接入口见
+> `TARCA_E02_HANDOFF_SNAPSHOT_2026-09-01.md`。本文其余内容继续作为 E01 完成时快照保留。
 
 > 快照日期：2026-08-30
 > 阶段状态：`COMPLETED / PASS`

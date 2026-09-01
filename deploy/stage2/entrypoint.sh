@@ -11,6 +11,10 @@ case "${1:-monitor}" in
     shift
     exec bash /opt/tarca/deploy/stage2/bootstrap.sh "$@"
     ;;
+  e02-bootstrap)
+    shift
+    exec bash /opt/tarca/deploy/stage2/e02_bootstrap_direct.sh "$@"
+    ;;
   stage2|e02)
     exec bash /opt/tarca/deploy/stage2/supervisor.sh "$@"
     ;;

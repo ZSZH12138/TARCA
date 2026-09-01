@@ -3,8 +3,12 @@ from pathlib import Path
 from tarca.contracts import canonical_json_bytes
 from tarca.e02.config import load_e02_config
 from tarca.e02.jobs import e02_artifact_store, e02_executor_registry
-from tarca.e02.runner import e02_scientific_plan_hash, run_e02_formal
-from tarca.e02.tasks import FrozenStage2Input, compile_e02_graph
+from tarca.e02.runner import (
+    e02_host_admission_policy,
+    e02_scientific_plan_hash,
+    run_e02_formal,
+)
+from tarca.e02.tasks import FrozenStage2Input, compile_e02_graph, compile_e02_ready
 from tarca.execution import (
     ExecutionStateStore,
     ExecutorRegistry,
@@ -12,6 +16,7 @@ from tarca.execution import (
     HostTelemetry,
     ResourceCapacity,
     RunTerminalStatus,
+    plan_resources,
 )
 from tests.e02.test_tasks import ROOT, _ref
 
@@ -37,6 +42,45 @@ def test_every_e02_executor_is_exactly_allowlisted() -> None:
 def test_e02_science_hash_is_gpu_placement_invariant() -> None:
     graph = _graph()
     assert e02_scientific_plan_hash(graph, (0, 1)) == e02_scientific_plan_hash(graph, (1, 0))
+
+
+def test_e02_capacity_policy_reserves_four_cores_and_requires_200_gib_storage() -> None:
+    policy = e02_host_admission_policy()
+
+    assert policy.maximum_data_cores == 24
+    assert policy.scheduler_monitor_cores == 1
+    assert policy.system_io_reserved_cores == 3
+    assert policy.maximum_host_memory_bytes == 200 * 1024**3
+    assert policy.minimum_local_storage_free_bytes == 200 * 1024**3
+
+
+def test_e02_prediction_wave_fills_both_gpus_and_backfills_linear_cpu_work() -> None:
+    graph = _graph()
+    completed = {
+        node.node_id: _ref(node.node_id, node.output_artifact_type)
+        for node in graph.nodes
+        if node.phase in {"GRANT_VERIFY", "STAGE2_VERIFY", "FORMAL_OPEN"}
+    }
+    ready = compile_e02_ready(graph, completed)
+    predictions = tuple(task for task in ready.tasks if task.phase == "FORMAL_PREDICT")
+    ordered = tuple(sorted(predictions, key=lambda task: task.resource_request.gpu_count == 0))
+    capacity = ResourceCapacity(
+        logical_cpu_count=28,
+        physical_cpu_count=28,
+        available_memory_bytes=224 * 1024**3,
+        gpu_memory_bytes=(24 * 1024**3, 24 * 1024**3),
+        local_storage_available=True,
+        local_storage_free_bytes=300 * 1024**3,
+    )
+
+    allocations = plan_resources(ordered, capacity, e02_host_admission_policy())
+    launched = tuple((ordered[int(item.worker_id.rsplit("-", 1)[1])], item) for item in allocations)
+
+    assert len(launched) == 3
+    assert {item.gpu_ids for _, item in launched if item.gpu_ids} == {(0,), (1,)}
+    assert any(task.identity.model_id == "STRONGEST_LINEAR" for task, _ in launched)
+    assert sum(item.cpu_threads for _, item in launched) == 16
+    assert sum(item.host_memory_gib_limit for _, item in launched) == 96.0
 
 
 def test_e02_runner_executes_complete_graph_once(tmp_path: Path, monkeypatch) -> None:
