@@ -9,17 +9,17 @@ import { useRuntimeSnapshot } from "./useRuntimeSnapshot";
 
 export function App({ api = browserMonitoringApi }: { api?: MonitoringApi }) {
   const { snapshot, error } = useRuntimeSnapshot(api);
-  const connectingLabel = import.meta.env.VITE_TARCA_CONNECTING_LABEL ?? "正在连接 Stage1B 运行时…";
-  const runtimeLabel = import.meta.env.VITE_TARCA_RUNTIME_LABEL ?? "Stage1B v2";
+  const connectingLabel = "正在连接 TARCA 运行时…";
 
   if (snapshot === null) {
     return <main className="loading"><span /><p>{error ?? connectingLabel}</p></main>;
   }
+  const runtimeLabel = snapshot.runtime.display_label;
   return (
     <main className="dashboard-shell">
       <header><div className="brand-mark">T</div><div><strong>TARCA</strong><span>{runtimeLabel} 运行监督台</span></div><p>只读模式</p></header>
       {error ? <div className="connection-alert" role="alert">{error}</div> : null}
-      <RunSummary summary={snapshot.run} />
+      <RunSummary summary={snapshot.run} runtime={snapshot.runtime} />
       <ResourceGrid resources={snapshot.resources} />
       <div className="insight-grid"><TelemetryCharts resources={snapshot.resources} /><AlertPanel alerts={snapshot.alerts} /></div>
       <JobTable jobs={snapshot.jobs} />

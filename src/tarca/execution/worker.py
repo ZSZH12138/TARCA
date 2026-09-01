@@ -7,6 +7,7 @@ import torch
 
 from tarca.contracts import ArtifactRef
 from tarca.execution.contracts import ExecutionContext, TaskResult, TaskState
+from tarca.execution.errors import DeviceContractError
 from tarca.execution.registry import ExecutorRegistry, ProgressSink
 from tarca.execution.state import ExecutionStateStore, StateTransitionConflict
 
@@ -24,6 +25,8 @@ class _StateProgressSink:
 
 def _failure_category(error: Exception) -> str:
     message = str(error).lower()
+    if isinstance(error, DeviceContractError):
+        return "DEVICE_MISMATCH"
     if isinstance(error, torch.cuda.OutOfMemoryError) or "out of memory" in message:
         return "CUDA_OOM"
     if isinstance(error, OSError):

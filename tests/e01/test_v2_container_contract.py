@@ -75,8 +75,8 @@ def test_v2_scripts_use_python310_compatible_fallback() -> None:
         assert '"${tarca_python}"' in script
 
 
-def test_prebuilt_direct_mode_frontend_has_e01_v2_identity() -> None:
+def test_prebuilt_direct_mode_frontend_loads_runtime_identity_from_api() -> None:
     javascript = tuple((FRONTEND_DIST / "assets").glob("*.js"))
 
     assert javascript
-    assert any(b"E01-v2 SCM" in path.read_bytes() for path in javascript)
+    assert any(b"/api/v1/runtime" in path.read_bytes() for path in javascript)

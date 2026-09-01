@@ -10,10 +10,17 @@ describe("browser monitoring API", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads the four read-only REST views", async () => {
+  it("loads the five read-only REST views", async () => {
+    const runtimeIdentity = {
+      execution_kind: "stage2-v1",
+      display_label: "Stage 2 v1",
+      access_mode: "READ_ONLY",
+    };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const path = String(input);
-      const value = path.endsWith("/run")
+      const value = path.endsWith("/runtime")
+        ? runtimeIdentity
+        : path.endsWith("/run")
         ? twoGpuSnapshot.run
         : path.endsWith("/jobs")
           ? twoGpuSnapshot.jobs
@@ -26,8 +33,9 @@ describe("browser monitoring API", () => {
 
     const snapshot = await createBrowserMonitoringApi().loadSnapshot();
 
+    expect("runtime" in (snapshot as object)).toBe(true);
     expect(snapshot.run.run_id).toBe("run-a");
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(fetchMock.mock.calls.every((call) => call[1]?.method === "GET")).toBe(true);
   });
 
@@ -82,7 +90,8 @@ describe("browser monitoring API", () => {
     vi.stubGlobal("WebSocket", SocketStub);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      const value = path.endsWith("/run") ? twoGpuSnapshot.run
+      const value = path.endsWith("/runtime") ? twoGpuSnapshot.runtime
+        : path.endsWith("/run") ? twoGpuSnapshot.run
         : path.endsWith("/jobs") ? twoGpuSnapshot.jobs
           : path.endsWith("/resources") ? twoGpuSnapshot.resources
             : twoGpuSnapshot.alerts;

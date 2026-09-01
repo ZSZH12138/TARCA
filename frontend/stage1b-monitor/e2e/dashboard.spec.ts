@@ -8,9 +8,10 @@ test("renders a live telemetry snapshot supplied by the monitoring API contract"
     await route.fulfill({ json: snapshot[endpoint] });
   });
   await page.goto("/");
-  await expect(page.getByText("Stage1B v2")).toBeVisible();
-  await expect(page.getByText("GPU 0")).toBeVisible();
-  await expect(page.getByText("GPU 1")).toBeVisible();
+  await expect(page).toHaveTitle("TARCA 运行监督");
+  await expect(page.getByRole("heading", { name: "Stage 2 v1" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "GPU 0" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "GPU 1" })).toBeVisible();
   await expect(page.getByText("预计剩余时间")).toBeVisible();
   await expect(page.getByText("数据正常").first()).toBeVisible();
   await expect(page.getByText("最后采样")).toBeVisible();

@@ -1,9 +1,19 @@
 # TARCA Stage 2 / E02 服务器交接 v1
 
+> 2026-09-01 状态更新：本文件描述的同运行恢复已经完成，Stage 2 为 `37/37 COMPLETED`，
+> freeze receipt 与本地完整归档均已独立校验，E02 仍未打开。当前事实与回收位置见
+> `docs/research/stage2_server_run_report_v1.md`；下文恢复步骤保留为事故审计记录，不再是待执行任务。
+
 ## 1. 当前边界
 
-本地代码和离线服务器包已经准备，但 `REMOTE_SERVER_NOT_CONNECTED`，尚未执行完整 Stage 2/E02。
-本文件中的确认串只是精确 CLI 契约，不构成当前对远程连接、上传、正式训练或
+上一台服务器已经执行过 Stage 2 的前半段：37 个图节点中形成了 16 个完成记录，六个神经
+训练 attempt-1 在训练和 `COMPLETE` checkpoint 写入之后，因固定验证预测的 CPU/CUDA 设备
+不一致而失败。完整服务器状态已经下载为固定恢复归档；当前本地状态为
+`LOCAL_RECOVERY_KIT_READY`，E02 尚未打开。
+
+下一台服务器不得重新 `launch` 或从头训练。唯一允许的 Stage 2 路径是：导入固定恢复归档、
+运行恢复专用 preflight、在同一 run 中追加六个 attempt-2、启动只读前端，然后等待用户再次
+确认 `resume`。本文件中的确认串只是精确 CLI 契约，不构成当前对远程连接、上传、resume 或
 E02 formal open 的授权。
 
 服务器访问必须遵守 `docs/auth/TARCA_SERVER_ACCESS_RUNBOOK.md`：只从受控环境变量读取连接
@@ -11,95 +21,114 @@ E02 formal open 的授权。
 再执行用户当前明确授权的白名单操作，并在 `finally` 清理临时密钥、known_hosts、代理脚本
 和残留进程。
 
-## 2. 开机后的第一条实验入口
+## 2. 恢复包与开机入口
 
-先把下列三个文件通过既有安全通道上传到新服务器的同一目录：
+通过既有安全通道把下面五个文件上传到新服务器同一目录：
 
 ```text
 tarca-stage2-v1-server.tar.gz
 tarca-stage2-v1-server.tar.gz.sha256
 tarca-stage2-v1-server.tar.gz.receipt.json
+tarca-stage2-recovery-20260831T102151Z.tar.gz
+tarca-stage2-recovery-20260831T102151Z.tar.gz.sha256
 ```
 
-在服务器校验并解压，目标目录应位于至少有 300 GiB 可用空间的本地 NVMe：
+服务器目录应位于至少有 300 GiB 可用空间的本地 NVMe。先校验并解压固定代码包：
 
 ```bash
 sha256sum --check tarca-stage2-v1-server.tar.gz.sha256
+sha256sum --check tarca-stage2-recovery-20260831T102151Z.tar.gz.sha256
 mkdir -p /opt/tarca
 tar -xzf tarca-stage2-v1-server.tar.gz -C /opt/tarca
 cd /opt/tarca
 ```
 
-构建固定镜像；正式来源从包内 capsule 导入，不从网络获取。若基础镜像和 Node 构建镜像未在
-宿主机缓存，镜像层的首次拉取仍需要可信 registry 通路。
+服务器包已经携带本地测试和构建完成的只读前端，不在服务器执行 `npm ci`，也不需要 Node
+构建前端。正式论文代码来源从包内 capsule 导入，不从网络追踪 GitHub 分支。如果 SSH 目标是
+Docker 宿主机，使用下述 Compose 恢复入口；如果云平台已经把 SSH 会话放在用户指定的
+`pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04` 容器内且没有 Docker daemon，则使用包内
+`recovery_bootstrap_direct.sh`，不得在容器内安装 Docker。
+
+`N` 是此刻距整机清空的真实剩余小时数。运行恢复准备脚本：
 
 ```bash
-docker compose -f deploy/stage2/compose.yaml build
+bash deploy/stage2/recovery_bootstrap.sh \
+  --recovery-archive /path/to/tarca-stage2-recovery-20260831T102151Z.tar.gz \
+  --server-bundle /path/to/tarca-stage2-v1-server.tar.gz \
+  --remaining-rental-hours N
 ```
 
-运行唯一 preflight。`N` 是此刻距整机清空的真实剩余小时数，不是套餐总时长：
+已处于目标 PyTorch 容器内时，等价的直接入口为：
 
 ```bash
-docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 \
-  bootstrap --mode preflight --remaining-rental-hours N
+bash deploy/stage2/recovery_bootstrap_direct.sh \
+  --repository-root /opt/tarca \
+  --recovery-archive /path/to/tarca-stage2-recovery-20260831T102151Z.tar.gz \
+  --server-bundle /path/to/tarca-stage2-v1-server.tar.gz \
+  --remaining-rental-hours N
 ```
 
-镜像内的等价固定入口是：
+直接入口只使用包内 wheelhouse 创建继承系统 PyTorch/CUDA 的隔离虚拟环境，然后执行相同的
+来源导入、恢复、双卡 preflight、repair 和只读前端启动；它同样停在
+`RECOVERY_READY_FOR_USER_RESUME`，不会自行 resume。
 
-```bash
-bash deploy/stage2/bootstrap.sh --mode preflight --remaining-rental-hours N
-```
+该脚本 fail closed 地按以下顺序执行：
 
-该步骤不会训练或打开 formal 数据。它验证环境、两卡、来源和 checkpoint，并让两张 4090
-同时运行固定 PatchTST/iTransformer 代表性 workload，估计未缩减完整工作量的 critical path。
-只有 `estimated_remaining_seconds + 3600 < N * 3600` 时才返回 `PREFLIGHT_PASS`。超时、OOM、
-来源漂移、磁盘/RAM 不足或非有限数值均 fail closed；不要通过删 seed、降 epoch 或减 trajectory
-绕过。
+1. 再次校验两个外层 SHA-256，并构建固定镜像；
+2. 只从恢复归档提取 Stage 2 artifacts、Stage1B v2 和 E01 v2 冻结输入，忽略归档里的旧源码；
+3. 用一致性快照恢复原执行数据库，并把恢复输入凭证绑定到当前服务器包；
+4. 做最小硬件/来源检查，同时在 GPU 0 和 GPU 1 上各运行一个完整 checkpoint 的只读预测；
+5. 要求训练步数为 0、checkpoint 哈希不变，并验证 `ETA + 1 hour < remaining rental window`；
+6. 在同一 run 中追加六个 READY attempt-2，保留 attempt-1 失败记录；
+7. 启动只读监控，等待 `/api/v1/run` 可用；
+8. 输出 `RECOVERY_READY_FOR_USER_RESUME` 和下一条命令，但不自动 resume。
 
-## 3. 监控先行
+恢复专用 preflight 不再重复最大 epoch 训练；它只验证真正要走的 `COMPLETE` checkpoint 快速
+路径，并用两卡并发观测、三波 GPU 工作、35% 裕量和固定非神经开销给出保守 ETA。任一
+checkpoint 缺失、哈希/身份漂移、GPU 不可用、来源漂移、租期不足或非有限预测都会停止。
 
-preflight 通过后可以启动只读监控服务：
+## 3. 前端监督
 
-```bash
-docker compose -f deploy/stage2/compose.yaml up -d tarca-stage2
-docker compose -f deploy/stage2/compose.yaml ps
-```
+恢复准备脚本成功后，监控容器已经启动。服务只绑定 `127.0.0.1:8765`。通过符合服务器
+runbook 的 SSH 隧道访问 `http://127.0.0.1:8765/`；不要把 8765 暴露到公网。
 
-服务只绑定 `127.0.0.1:8765`。从操作端建立 SSH 隧道后访问：
+页面每 2 秒刷新主机、GPU 0、GPU 1、真实利用率、显存、功率、温度、计算进程、CPU 忙核和
+亲和性。尚未分配的 GPU 任务明确显示“GPU 待分配”和冻结的显存请求，不会误标为 CPU 任务。
+任务表只展示每个任务的最新 attempt，因此 repair 后显示 READY/RUNNING attempt-2，
+不会把保留的 attempt-1 事故记录误报为当前失败。整体 ETA 在运行历史形成前使用哈希绑定的
+服务器预检保守估计，并明确标记来源；遥测缺失显示“不可用”，不会伪装成 0。
 
-```bash
-ssh -L 8765:127.0.0.1:8765 <user>@<server>
-```
+监控 API 只允许读取，不提供停止、重试、删除或修改任务的按钮。用户和前端承担运行监督；
+不需要 Codex 持续轮询服务器。
 
-页面只展示执行状态、进度、资源、checkpoint 新鲜度、ETA 和告警；运行中不泄露模型比较或
-formal 科学中间结论。
+## 4. 用户确认后的 Stage 2 resume
 
-## 4. Stage 2 独立点火边界
-
-必须在用户看到 preflight 证据并另行明确授权后，才可使用下面的精确确认串。确认串为
-`I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN`。建议以脱离 SSH 会话的命名容器启动：
+看到 `RECOVERY_READY_FOR_USER_RESUME`、前端可用和 preflight 证据之后，用户仍需单独确认
+resume。当前数据库已经存在，禁止使用 `launch`。精确确认串为
+`I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN`：
 
 ```bash
 docker compose -f deploy/stage2/compose.yaml run -d \
-  --name tarca-stage2-run tarca-stage2 stage2 launch \
+  --name tarca-stage2-recovery-resume tarca-stage2 stage2 resume \
+  --repository-root /opt/tarca \
+  --config configs/stage2/stage2_v1.yaml \
+  --artifact-root artifacts/stage2 \
   --acknowledgement I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN
 ```
 
-状态查询不会打开科学结果：
+调度器优先填充两个 GPU 槽：只要至少有两个可运行的 GPU 节点，就分别在 GPU 0/GPU 1 上
+并行启动，绝不把六个恢复任务串行化。每个任务仍使用冻结资源请求，CPU-only 尾部任务在依赖
+满足时 backfill；不通过伪造额外任务制造虚假占用。
+
+辅助状态查询不会打开科学结果：
 
 ```bash
 docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 stage2 status
-docker logs --tail 200 tarca-stage2-run
+docker logs --tail 200 tarca-stage2-recovery-resume
 ```
 
-首次 launch 创建稳定 run identity 和 SQLite；数据库存在后禁止再次 launch。进程中断时保留
-`artifacts/stage2/`，使用同一科学图 resume：
-
-```bash
-docker compose -f deploy/stage2/compose.yaml run -d \
-  --name tarca-stage2-resume tarca-stage2 stage2 resume \
-  --acknowledgement I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN
-```
+进程中断时保留 `artifacts/stage2/`，使用相同命令和同一科学图 resume；如果命名容器仍存在，
+先检查其真实状态，不得用新 launch 隐藏旧失败。
 
 ## 5. 24 小时清空与恢复
 
@@ -113,9 +142,10 @@ docker compose -f deploy/stage2/compose.yaml run -d \
 docker compose -f deploy/stage2/compose.yaml run --rm tarca-stage2 stage2 recover
 ```
 
-随后把 `artifacts/stage2/runtime/recovery/` 中最新目录和全部已发布 artifact 下载到本地或持久
-对象存储，并核对 recovery receipt。新机器上恢复同一路径，重新构建镜像、重新运行 preflight，
-再使用 `resume`；不得用新 launch 隐藏旧失败。
+随后把 `artifacts/stage2/runtime/recovery/` 中最新目录、执行数据库和全部已发布 artifact 下载到
+本地或持久对象存储，并核对 recovery receipt。新机器上必须重新生成一个与新快照精确绑定的
+恢复规格和恢复包，不能把本次六任务设备事故的固定 repair 规格套到另一状态；不得用新 launch
+隐藏旧失败。
 
 ## 6. E02 是第二次独立授权
 

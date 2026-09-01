@@ -22,7 +22,7 @@ def test_doctor_cli_returns_machine_readable_cpu_smoke() -> None:
         check=True,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
     )
 
     payload = json.loads(completed.stdout)

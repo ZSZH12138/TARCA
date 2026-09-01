@@ -127,3 +127,24 @@ def test_worker_never_resolves_an_executor_from_a_shell_string(tmp_path: Path) -
     )
     assert result.state is TaskState.FAILED
     assert store.attempt_error(context.attempt_id) == "IDENTITY_DRIFT"
+
+
+def test_worker_classifies_typed_device_contract_failure(tmp_path: Path) -> None:
+    from tarca.execution.errors import DeviceContractError
+
+    store, context = _running_store(tmp_path)
+
+    def fail_on_device_contract(
+        task: TaskSpec, _context: ExecutionContext, progress: object
+    ) -> ArtifactRef:
+        del task, progress
+        raise DeviceContractError("model and fixed validation batch use different devices")
+
+    result = run_worker(
+        context,
+        store,
+        ExecutorRegistry({"stage1b.test": fail_on_device_contract}),
+    )
+
+    assert result.state is TaskState.FAILED
+    assert store.attempt_error(context.attempt_id) == "DEVICE_MISMATCH"

@@ -14,6 +14,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 
 from tarca.contracts import canonical_json_hash
+from tarca.stage1b.evidence_io import sha256_file
 from tarca.stage1b.modeling import OfficialOperablePredictor
 from tarca.stage1b.neural import OperableNeuralPredictor
 from tarca.stage1b.training_checkpoints import (
@@ -234,6 +235,7 @@ def train_candidate(
     progress: ProgressSink | None = None,
     resume_from: Path | None = None,
     resume_if_available: bool = False,
+    require_complete_resume: bool = False,
     stop_after_epoch: int | None = None,
     batch_size: int | None = None,
     max_epochs: int | None = None,
@@ -256,8 +258,12 @@ def train_candidate(
         raise ValueError("training seed must be a non-negative integer")
     if type(resume_if_available) is not bool:
         raise ValueError("resume_if_available must be boolean")
+    if type(require_complete_resume) is not bool:
+        raise ValueError("require_complete_resume must be boolean")
     if resume_from is not None and resume_if_available:
         raise ValueError("explicit and automatic checkpoint resume are mutually exclusive")
+    if require_complete_resume and not (resume_from is not None or resume_if_available):
+        raise ValueError("complete checkpoint recovery requires a resume source")
     if stop_after_epoch is not None and not 1 <= stop_after_epoch <= resolved_policy.max_epochs:
         raise ValueError("stop_after_epoch must be within the training budget")
     device = torch.device(resolved_policy.device)
@@ -306,6 +312,8 @@ def train_candidate(
         resolved_resume = resume_from
         if resume_if_available and checkpoint is not None and checkpoint.is_file():
             resolved_resume = checkpoint
+        if require_complete_resume and resolved_resume is None:
+            raise RuntimeError("a complete checkpoint is required for controlled recovery")
         model.to(device)
         for parameter in model.parameters():
             parameter.requires_grad_(True)
@@ -344,9 +352,14 @@ def train_candidate(
         stale_epochs = 0
         epochs_completed = 0
         start_epoch = 0
+        resume_complete = False
+        checkpoint_sha256: str | None = None
+        result_checkpoint = checkpoint
         if resolved_resume is not None:
             resume_path = _resolve_resume_path(resolved_resume, resolved_policy.checkpoint_root)
             payload = _load_checkpoint(resume_path)
+            if require_complete_resume and payload["status"] != "COMPLETE":
+                raise RuntimeError("controlled recovery requires a COMPLETE checkpoint")
             start_epoch, best_loss, best_epoch, best_state, stale_epochs = _restore_checkpoint(
                 payload,
                 expected_task_sha256=task_sha256,
@@ -360,6 +373,10 @@ def train_candidate(
                 use_cuda=use_cuda,
             )
             epochs_completed = start_epoch
+            resume_complete = payload["status"] == "COMPLETE"
+            if resume_complete:
+                result_checkpoint = resume_path
+                checkpoint_sha256 = sha256_file(resume_path)
 
         total_steps = len(train_loader) * resolved_policy.max_epochs
         completed_steps = len(train_loader) * start_epoch
@@ -367,8 +384,10 @@ def train_candidate(
         progress_sink = progress or _NullProgressSink()
         started = time.perf_counter()
         interrupted = False
-        checkpoint_sha256: str | None = None
-        for epoch in range(start_epoch, resolved_policy.max_epochs):
+        epoch_range = range(0) if resume_complete else range(
+            start_epoch, resolved_policy.max_epochs
+        )
+        for epoch in epoch_range:
             model.train()
             for batch_index, (train_batch_x, train_batch_y) in enumerate(train_loader, start=1):
                 batch_x = train_batch_x.to(device=device, non_blocking=use_cuda)
@@ -455,7 +474,12 @@ def train_candidate(
         if not best_state or not math.isfinite(best_loss):
             raise RuntimeError("neural training produced no finite checkpoint")
         model.load_state_dict(best_state)
-        if explicit_policy and checkpoint is not None and not interrupted:
+        if (
+            explicit_policy
+            and checkpoint is not None
+            and not interrupted
+            and not resume_complete
+        ):
             checkpoint_sha256 = _atomic_torch_save(
                 _checkpoint_payload(
                     task_sha256=task_sha256,
@@ -488,11 +512,13 @@ def train_candidate(
             model_hash=model.model_hash,
             device=resolved_policy.device,
             precision=resolved_policy.precision,
-            checkpoint_path=checkpoint.as_posix() if checkpoint is not None else None,
+            checkpoint_path=(
+                result_checkpoint.as_posix() if result_checkpoint is not None else None
+            ),
             checkpoint_sha256=checkpoint_sha256,
-            completed=not interrupted,
+            completed=resume_complete or not interrupted,
         )
-        return TrainingResult(model=model, receipt=receipt, checkpoint=checkpoint)
+        return TrainingResult(model=model, receipt=receipt, checkpoint=result_checkpoint)
     finally:
         torch.use_deterministic_algorithms(previous_determinism)
         torch.backends.cudnn.benchmark = previous_benchmark

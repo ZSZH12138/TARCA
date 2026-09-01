@@ -12,11 +12,18 @@ from typing import Any
 from tarca.contracts import ArtifactRef, canonical_json_bytes, canonical_json_hash, sha256_file
 from tarca.execution import LocalMultiProcessBackend, ResourceCapacity, RunTerminalStatus
 from tarca.stage2.config import load_stage2_config
+from tarca.stage2.recovery import (
+    Stage2RecoveryRejected,
+    authorize_stage2_device_mismatch_recovery,
+    load_stage2_recovery_input_receipt,
+)
+from tarca.stage2.recovery_archive import restore_stage2_recovery_archive
 from tarca.stage2.resources import stage2_reset_time_gate
 from tarca.stage2.runner import run_stage2
 from tarca.stage2.tasks import Stage2Graph, Stage2GraphInputs, compile_stage2_graph
 
 STAGE2_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_STAGE2_V1_TRAINING_RUN"
+STAGE2_RECOVERY_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_STAGE2_DEVICE_MISMATCH_RECOVERY_V1"
 
 
 class Stage2RuntimeAuthorizationError(RuntimeError):
@@ -127,9 +134,36 @@ def record_stage2_preflight(
     }
     if not required.issubset(evidence):
         raise Stage2RuntimeAuthorizationError("preflight evidence is incomplete")
-    exact_probe = "stage2-v1-two-exact-neural-concurrent-max-epochs"
+    recovery_input_path = artifact_root.resolve() / "runtime/recovery_input_receipt.json"
+    recovery_mode = recovery_input_path.is_file()
+    if recovery_mode:
+        try:
+            load_stage2_recovery_input_receipt(recovery_input_path)
+        except Stage2RecoveryRejected as error:
+            raise Stage2RuntimeAuthorizationError(
+                "recovery input receipt is invalid or tampered"
+            ) from error
+    exact_probe = (
+        "stage2-v1-recovery-two-complete-checkpoints-concurrent"
+        if recovery_mode
+        else "stage2-v1-two-exact-neural-concurrent-max-epochs"
+    )
+    recovery_boundaries = (
+        evidence.get("recovery_mode") == "DEVICE_MISMATCH_V1"
+        and all(
+            evidence.get(name) is True
+            for name in (
+                "complete_checkpoint_fast_path_passed",
+                "zero_optimizer_steps",
+                "checkpoint_hashes_unchanged",
+            )
+        )
+        if recovery_mode
+        else True
+    )
     if (
         evidence.get("probe_contract") != exact_probe
+        or not recovery_boundaries
         or evidence.get("eta_gate_passed") is not True
         or evidence.get("reset_margin_hours") != 1
         or not all(
@@ -157,6 +191,7 @@ def record_stage2_preflight(
             "status": "PREFLIGHT_PASS",
             "prepared_receipt_sha256": prepared["receipt_sha256"],
             "evidence_sha256": sha256_file(evidence_path.resolve()),
+            "recovery_mode": "DEVICE_MISMATCH_V1" if recovery_mode else "NONE",
             "formal_tasks_executed": 0,
             "scientific_results_visible": False,
         }
@@ -168,6 +203,77 @@ def record_stage2_preflight(
 def _authorize(value: str) -> None:
     if value != STAGE2_ACKNOWLEDGEMENT:
         raise Stage2RuntimeAuthorizationError("exact Stage 2 training acknowledgement required")
+
+
+def _authorize_recovery(value: str) -> None:
+    if value != STAGE2_RECOVERY_ACKNOWLEDGEMENT:
+        raise Stage2RuntimeAuthorizationError(
+            "exact Stage 2 recovery acknowledgement required"
+        )
+
+
+def repair_stage2(
+    repository_root: Path,
+    config_path: Path,
+    artifact_root: Path,
+    *,
+    acknowledgement: str,
+) -> dict[str, object]:
+    del config_path
+    _authorize_recovery(acknowledgement)
+    root = repository_root.resolve()
+    artifacts = artifact_root.resolve()
+    return authorize_stage2_device_mismatch_recovery(
+        root,
+        artifacts,
+        spec_path=root / "configs/stage2/stage2_device_mismatch_recovery_v1.json",
+        recovery_input_receipt_path=artifacts / "runtime/recovery_input_receipt.json",
+    )
+
+
+def restore_stage2_input(
+    repository_root: Path,
+    config_path: Path,
+    artifact_root: Path,
+    *,
+    recovery_archive: Path,
+    server_bundle: Path,
+) -> dict[str, object]:
+    del config_path
+    root = repository_root.resolve()
+    expected_artifacts = (root / "artifacts/stage2").resolve()
+    if artifact_root.resolve() != expected_artifacts:
+        raise Stage2RuntimeAuthorizationError(
+            "recovery input must target the canonical Stage 2 artifact root"
+        )
+    return restore_stage2_recovery_archive(
+        root,
+        recovery_archive=recovery_archive,
+        server_bundle=server_bundle,
+        spec_path=root / "configs/stage2/stage2_device_mismatch_recovery_v1.json",
+    )
+
+
+def _resume_environment(runtime: Path, launch: Mapping[str, Any]) -> dict[str, str]:
+    environment = {"TARCA_EXECUTION_KIND": "stage2-v1"}
+    recovery_path = runtime / "device_mismatch_recovery_receipt.json"
+    if not recovery_path.is_file():
+        return environment
+    recovery = _read_receipt(recovery_path, "device-mismatch recovery receipt")
+    if (
+        recovery.get("schema_version") != "tarca-stage2-recovery-authorization-v1"
+        or recovery.get("status") != "AUTHORIZED"
+        or recovery.get("reason") != "DEVICE_MISMATCH_V1"
+        or recovery.get("run_id") != launch.get("run_id")
+        or recovery.get("graph_id") != launch.get("graph_id")
+    ):
+        raise Stage2RuntimeAuthorizationError(
+            "device-mismatch recovery receipt does not bind the launched run"
+        )
+    return {
+        **environment,
+        "TARCA_STAGE2_RECOVERY_MODE": "DEVICE_MISMATCH_V1",
+    }
 
 
 def _file_ref(
@@ -192,7 +298,7 @@ def _file_ref(
 
 def _compiled_graph(root: Path, config_path: Path) -> Stage2Graph:
     config = load_stage2_config(config_path.resolve())
-    graph = compile_stage2_graph(
+    return compile_stage2_graph(
         config,
         Stage2GraphInputs(
             stage1b_manifest=_file_ref(
@@ -217,7 +323,6 @@ def _compiled_graph(root: Path, config_path: Path) -> Stage2Graph:
             formal_access_event_count=0,
         ),
     )
-    return graph
 
 
 def _runtime_capacity(artifact_root: Path) -> ResourceCapacity:
@@ -299,13 +404,14 @@ def resume_stage2(
         raise Stage2RuntimeAuthorizationError("execution database is required before resume")
     launch = _read_receipt(runtime / "launch_authorization_receipt.json", "launch receipt")
     graph = _compiled_graph(root, config_path)
+    environment = _resume_environment(runtime, launch)
     result = run_stage2(
         graph,
         _runtime_capacity(artifact_root),
         repository_root=root,
         database_path=runtime / "execution.sqlite3",
         backend=LocalMultiProcessBackend(
-            root, environment_overrides={"TARCA_EXECUTION_KIND": "stage2-v1"}
+            root, environment_overrides=environment
         ),
         maximum_wait_seconds=2.0,
     )
@@ -365,6 +471,8 @@ def dispatch_stage2_runtime_command(
         "dry-run": dry_run_stage2,
         "preflight": record_stage2_preflight,
         "launch": launch_stage2,
+        "restore-input": restore_stage2_input,
+        "repair": repair_stage2,
         "resume": resume_stage2,
     }
     if command == "status":

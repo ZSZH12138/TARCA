@@ -19,6 +19,8 @@ def test_stage2_cli_help_lists_exact_commands() -> None:
         "dry-run",
         "preflight",
         "launch",
+        "restore-input",
+        "repair",
         "resume",
         "status",
         "freeze",

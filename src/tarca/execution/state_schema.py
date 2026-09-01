@@ -73,6 +73,20 @@ CREATE TABLE IF NOT EXISTS alerts (
     category TEXT NOT NULL,
     message TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS recovery_events (
+    recovery_id TEXT NOT NULL,
+    run_id TEXT NOT NULL REFERENCES runs(run_id),
+    source_attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+    new_attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+    reason TEXT NOT NULL,
+    spec_sha256 TEXT NOT NULL,
+    checkpoint_sha256 TEXT NOT NULL,
+    code_bundle_sha256 TEXT NOT NULL,
+    created_at_utc TEXT NOT NULL,
+    PRIMARY KEY (recovery_id, source_attempt_id),
+    UNIQUE (new_attempt_id)
+);
 CREATE INDEX IF NOT EXISTS idx_attempts_state ON attempts(state, created_at_utc);
 CREATE INDEX IF NOT EXISTS idx_progress_attempt ON progress_events(attempt_id, event_id);
+CREATE INDEX IF NOT EXISTS idx_recovery_events_run ON recovery_events(run_id, recovery_id);
 """

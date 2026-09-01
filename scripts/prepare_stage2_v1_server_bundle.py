@@ -14,6 +14,7 @@ from typing import Any
 from tarca.contracts import canonical_json_bytes, canonical_json_hash, sha256_file
 from tarca.e02.config import load_e02_config
 from tarca.stage2.config import load_stage2_config
+from tarca.stage2.recovery import load_stage2_recovery_spec
 
 _SOURCE_CAPSULE = "stage2-v1-official-sources.tar.gz"
 _FORBIDDEN_BYTES = (
@@ -79,6 +80,7 @@ def _selected_files(root: Path) -> tuple[Path, ...]:
     for relative in (
         "docs/research/stage2_e02_local_implementation_report_v1.md",
         "docs/research/stage2_e02_server_handoff_v1.md",
+        "docs/research/stage2_device_mismatch_recovery_v1.md",
     ):
         document = root / relative
         if document.is_file():
@@ -133,6 +135,20 @@ def _tar_bytes(files: tuple[tuple[str, bytes, int], ...]) -> bytes:
     return compressed.getvalue()
 
 
+def _verify_prebuilt_frontend(root: Path) -> None:
+    assets = tuple((root / "frontend/stage1b-monitor/dist/assets").glob("*.js"))
+    required_markers = (
+        b"/api/v1/runtime",
+        "服务器预检给出的保守估计".encode(),
+        b"eta_source",
+    )
+    if not assets or any(
+        not any(marker in path.read_bytes() for path in assets)
+        for marker in required_markers
+    ):
+        raise ValueError("prebuilt Stage 2 frontend is missing or stale")
+
+
 def _atomic_bytes(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=".stage2-bundle-", suffix=".tmp", dir=path.parent)
@@ -147,7 +163,12 @@ def _atomic_bytes(path: Path, payload: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def build_stage2_server_bundle(repository_root: Path, output: Path) -> dict[str, Any]:
+def build_stage2_server_bundle(
+    repository_root: Path,
+    output: Path,
+    *,
+    recovery_archive: Path | None = None,
+) -> dict[str, Any]:
     root = repository_root.resolve()
     stage2 = load_stage2_config(root / "configs/stage2/stage2_v1.yaml")
     e02 = load_e02_config(root / "configs/e02/e02_v1.yaml")
@@ -156,6 +177,20 @@ def build_stage2_server_bundle(repository_root: Path, output: Path) -> dict[str,
         raise ValueError("Stage 2 scientific config hash drifted")
     if e02.scientific_hash() != "9027fcb9d40e89e66cd047c247b5dd5fc10a548916e9b97ffad45ddf262b310c":
         raise ValueError("E02 scientific config hash drifted")
+    _verify_prebuilt_frontend(root)
+    recovery_spec = load_stage2_recovery_spec(
+        root / "configs/stage2/stage2_device_mismatch_recovery_v1.json"
+    )
+    resolved_recovery: Path | None = None
+    if recovery_archive is not None:
+        resolved_recovery = recovery_archive.resolve()
+        if resolved_recovery.name != recovery_spec.source_archive_filename:
+            raise ValueError("recovery archive filename does not match the frozen spec")
+        if (
+            not resolved_recovery.is_file()
+            or sha256_file(resolved_recovery) != recovery_spec.source_archive_sha256
+        ):
+            raise ValueError("recovery archive SHA-256 does not match the frozen spec")
     selected: list[tuple[str, bytes, int]] = []
     sums: dict[str, str] = {}
     for path in _selected_files(root):
@@ -185,7 +220,21 @@ def build_stage2_server_bundle(repository_root: Path, output: Path) -> dict[str,
             root / f"artifacts/stage2/source-capsules/{_SOURCE_CAPSULE}"
         ),
         "formal_tasks_executed": 0,
+        "recovery_mode": (
+            "DEVICE_MISMATCH_V1" if resolved_recovery is not None else "NONE"
+        ),
     }
+    if resolved_recovery is not None:
+        receipt.update(
+            {
+                "recovery_archive_filename": resolved_recovery.name,
+                "recovery_archive_sha256": recovery_spec.source_archive_sha256,
+                "recovery_manifest_sha256": recovery_spec.source_manifest_sha256,
+                "recovery_spec_sha256": canonical_json_hash(
+                    recovery_spec.model_dump(mode="json")
+                ),
+            }
+        )
     receipt["receipt_sha256"] = canonical_json_hash(receipt)
     _atomic_bytes(
         output_path.with_name(output_path.name + ".sha256"),
@@ -204,10 +253,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build deterministic TARCA Stage 2 server bundle")
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--recovery-archive", type=Path)
     arguments = parser.parse_args()
     print(
         json.dumps(
-            build_stage2_server_bundle(arguments.repository_root, arguments.output), sort_keys=True
+            build_stage2_server_bundle(
+                arguments.repository_root,
+                arguments.output,
+                recovery_archive=arguments.recovery_archive,
+            ),
+            sort_keys=True,
         )
     )
     return 0

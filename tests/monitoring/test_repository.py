@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from tarca.contracts import canonical_json_hash, sha256_file
 from tarca.execution import ResourceAllocation, ResourceRequest, RunPlanNode, ScientificIdentity
 from tarca.execution.contracts import TaskSpec
 from tarca.execution.state import ExecutionStateStore
@@ -27,12 +29,16 @@ def test_repository_builds_only_explicit_runtime_views(monitoring_database: Path
     assert snapshot.jobs[0].world_id == "lorenz96_f10_v2"
     assert snapshot.jobs[0].expected_cpu_cores == 4
     assert snapshot.jobs[0].actual_effective_busy_cores == 18.5
+    assert snapshot.jobs[0].cpu_affinity_ids == (4, 5, 6, 7)
     assert snapshot.jobs[0].actual_vram_bytes == 18 * 1024**3
     assert snapshot.jobs[0].eta_seconds == 80.0
     assert snapshot.jobs[0].epoch == 3
     assert snapshot.jobs[1].state == "PENDING"
     assert {resource.label for resource in snapshot.resources} == {"主机", "GPU 0", "GPU 1"}
     assert {resource.telemetry_status for resource in snapshot.resources} == {"LIVE"}
+    host = next(resource for resource in snapshot.resources if resource.kind == "HOST")
+    assert host.disk_read_bytes_per_second == 1000.0
+    assert host.disk_write_bytes_per_second == 2000.0
     assert snapshot.alerts[0].category == "GPU_PRESSURE"
 
 
@@ -132,6 +138,72 @@ def test_zero_progress_keeps_eta_calibrating(tmp_path: Path) -> None:
     assert snapshot.jobs[0].eta_seconds is None
     assert snapshot.run.eta_seconds is None
     assert snapshot.run.eta_status == "CALIBRATING"
+
+
+def test_trusted_preflight_estimate_is_used_until_runtime_eta_is_calibrated(
+    tmp_path: Path,
+) -> None:
+    database = _running_database(tmp_path, completed_steps=0)
+    runtime = database.parent
+    evidence = runtime / "bootstrap_evidence.json"
+    evidence.write_text(
+        '{"estimated_remaining_seconds":14400,"eta_gate_passed":true,'
+        '"formal_tasks_executed":0,"status":"PREFLIGHT_PASS"}\n',
+        encoding="utf-8",
+    )
+    receipt_payload = {
+        "schema_version": "tarca-stage2-preflight-v1",
+        "status": "PREFLIGHT_PASS",
+        "evidence_sha256": sha256_file(evidence),
+        "formal_tasks_executed": 0,
+    }
+    receipt = {
+        **receipt_payload,
+        "receipt_sha256": canonical_json_hash(receipt_payload),
+    }
+    (runtime / "preflight_receipt.json").write_text(
+        json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    snapshot = MonitoringRepository(database, now=lambda: SAMPLED_AT).snapshot()
+
+    assert snapshot.run.eta_status == "AVAILABLE"
+    assert snapshot.run.eta_seconds == 14_400.0
+    assert snapshot.run.eta_source == "PREFLIGHT_ESTIMATE"
+
+
+def test_controlled_attempt_two_hides_the_superseded_failure_from_live_status(
+    tmp_path: Path,
+) -> None:
+    database = _running_database(tmp_path)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE attempts SET state = 'FAILED', error_category = 'WORKER_ERROR' "
+            "WHERE attempt_id = 'task-a-attempt-1'"
+        )
+        connection.execute(
+            """
+            INSERT INTO attempts(
+                attempt_id, task_id, attempt_number, state, packing_level,
+                created_at_utc, updated_at_utc
+            ) VALUES (?, ?, 2, 'READY', 1, ?, ?)
+            """,
+            (
+                "task-a-attempt-2",
+                "task-a",
+                "2026-08-26T12:00:01+00:00",
+                "2026-08-26T12:00:01+00:00",
+            ),
+        )
+
+    snapshot = MonitoringRepository(database, now=lambda: SAMPLED_AT).snapshot()
+
+    assert snapshot.jobs[0].state == "READY"
+    assert snapshot.jobs[0].retry_count == 1
+    assert snapshot.jobs[0].error_category is None
+    assert snapshot.run.status == "ACTIVE"
+    assert snapshot.run.failed_tasks == 0
 
 
 @pytest.mark.parametrize(

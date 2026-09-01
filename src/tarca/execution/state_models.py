@@ -38,6 +38,7 @@ RETRY_POLICY: Mapping[str, RetryDisposition] = MappingProxyType(
         "TRANSIENT_IO": RetryDisposition.RETRY_ONCE,
         "WORKER_DIED": RetryDisposition.RETRY_ONCE,
         "CUDA_OOM": RetryDisposition.RETRY_ONCE_WITH_LOWER_PACKING,
+        "DEVICE_MISMATCH": RetryDisposition.TERMINAL,
         "HASH_DRIFT": RetryDisposition.TERMINAL,
         "TRUTH_LEAKAGE": RetryDisposition.TERMINAL,
         "NONFINITE": RetryDisposition.TERMINAL,

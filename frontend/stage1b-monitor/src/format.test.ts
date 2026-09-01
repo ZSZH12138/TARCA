@@ -13,6 +13,7 @@ describe("runtime display formatting", () => {
 
   it("formats calibration, completion, and positive ETA", () => {
     expect(formatEta(null, "CALIBRATING")).toBe("校准中");
+    expect(formatEta(null, "FAILED")).toBe("整体 ETA 不可用");
     expect(formatEta(0, "COMPLETE")).toBe("已完成");
     expect(formatEta(7_260, "AVAILABLE")).toBe("2 小时 1 分钟");
   });

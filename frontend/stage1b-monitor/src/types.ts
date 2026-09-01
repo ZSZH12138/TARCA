@@ -1,3 +1,9 @@
+export interface RuntimeIdentity {
+  execution_kind: "stage1b-v2" | "e01-v2" | "stage2-v1" | "e02-v1";
+  display_label: string;
+  access_mode: "READ_ONLY";
+}
+
 export interface RunSummary {
   run_id: string;
   graph_id: string;
@@ -11,6 +17,7 @@ export interface RunSummary {
   progress_fraction: number;
   eta_seconds: number | null;
   eta_status: "CALIBRATING" | "AVAILABLE" | "COMPLETE" | "FAILED";
+  eta_source: "NONE" | "PREFLIGHT_ESTIMATE" | "RUNTIME_PROGRESS" | "COMPLETE";
   created_at_utc: string;
   last_sampled_at_utc: string | null;
   last_checkpoint_at_utc: string | null;
@@ -28,6 +35,7 @@ export interface JobStatus {
   gpu_ids: number[];
   expected_cpu_cores: number;
   actual_effective_busy_cores: number | null;
+  cpu_affinity_ids: number[];
   expected_ram_bytes: number;
   actual_rss_bytes: number | null;
   expected_vram_bytes: number;
@@ -52,6 +60,8 @@ export interface ResourceStatus {
   temperature_celsius: number | null;
   power_watts: number | null;
   active_processes: number;
+  disk_read_bytes_per_second: number | null;
+  disk_write_bytes_per_second: number | null;
   sampled_at_utc: string | null;
   telemetry_status: "LIVE" | "STALE" | "UNAVAILABLE";
 }
@@ -65,6 +75,7 @@ export interface RuntimeAlert {
 }
 
 export interface RuntimeSnapshot {
+  runtime: RuntimeIdentity;
   run: RunSummary;
   jobs: JobStatus[];
   resources: ResourceStatus[];

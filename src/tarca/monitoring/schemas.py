@@ -22,6 +22,7 @@ class JobStatusView(RuntimeView):
     gpu_ids: tuple[int, ...]
     expected_cpu_cores: int
     actual_effective_busy_cores: float | None
+    cpu_affinity_ids: tuple[int, ...]
     expected_ram_bytes: int
     actual_rss_bytes: int | None
     expected_vram_bytes: int
@@ -47,6 +48,7 @@ class RunSummaryView(RuntimeView):
     progress_fraction: float
     eta_seconds: float | None
     eta_status: Literal["CALIBRATING", "AVAILABLE", "COMPLETE", "FAILED"]
+    eta_source: Literal["NONE", "PREFLIGHT_ESTIMATE", "RUNTIME_PROGRESS", "COMPLETE"]
     created_at_utc: datetime
     last_sampled_at_utc: datetime | None
     last_checkpoint_at_utc: datetime | None
@@ -64,6 +66,8 @@ class ResourceView(RuntimeView):
     temperature_celsius: float | None
     power_watts: float | None
     active_processes: int
+    disk_read_bytes_per_second: float | None
+    disk_write_bytes_per_second: float | None
     sampled_at_utc: datetime | None
     telemetry_status: Literal["LIVE", "STALE", "UNAVAILABLE"]
 

@@ -9,6 +9,8 @@ from typing import Literal
 import torch
 from torch import Tensor
 
+from tarca.contracts import ForecastDistribution
+from tarca.execution.errors import DeviceContractError
 from tarca.stage1b.modeling import OfficialOperablePredictor
 from tarca.stage1b.neural import OperableNeuralPredictor
 from tarca.stage1b.training import (
@@ -132,6 +134,27 @@ def _validate_model_identity(model: Stage2NeuralModel, model_id: Stage2NeuralMod
         raise ValueError(f"Stage 2 {model_id} policy does not match {model.adapter_name}")
 
 
+def _single_model_device(model: Stage2NeuralModel) -> torch.device:
+    devices = {parameter.device for parameter in model.parameters()}
+    if len(devices) != 1:
+        raise DeviceContractError("Stage 2 neural model must occupy exactly one device")
+    return next(iter(devices))
+
+
+def forecast_fixed_batch_on_model_device(
+    model: Stage2NeuralModel,
+    validation_x: Tensor,
+) -> ForecastDistribution:
+    """Run the fixed validation forecast on the model's actual device."""
+    model_device = _single_model_device(model)
+    fixed_batch = validation_x.to(device=model_device)
+    if fixed_batch.device != model_device:
+        raise DeviceContractError("fixed validation batch did not reach the model device")
+    model.eval()
+    with torch.inference_mode():
+        return model.forward_distribution(fixed_batch)
+
+
 def train_stage2_neural(
     model: Stage2NeuralModel,
     train_x: Tensor,
@@ -144,6 +167,7 @@ def train_stage2_neural(
     progress: ProgressSink | None = None,
     resume_from: Path | None = None,
     resume_if_available: bool = False,
+    require_complete_resume: bool = False,
     stop_after_epoch: int | None = None,
 ) -> Stage2TrainingResult:
     _validate_model_identity(model, policy.model_id)
@@ -158,10 +182,13 @@ def train_stage2_neural(
         progress=progress,
         resume_from=resume_from,
         resume_if_available=resume_if_available,
+        require_complete_resume=require_complete_resume,
         stop_after_epoch=stop_after_epoch,
     )
     fixed_count = min(2, validation_x.shape[0])
-    forecast = trained.model.forward_distribution(validation_x[:fixed_count])
+    forecast = forecast_fixed_batch_on_model_device(
+        trained.model, validation_x[:fixed_count]
+    )
     if forecast.scale is None or forecast.mean.shape != validation_y[:fixed_count].shape:
         raise RuntimeError("Stage 2 neural checkpoint has an invalid probability shape")
     if not all(bool(torch.isfinite(tensor).all()) for tensor in (forecast.mean, forecast.scale)):

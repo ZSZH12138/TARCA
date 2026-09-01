@@ -1,4 +1,4 @@
-import type { MonitoringApi, RuntimeSnapshot } from "./types";
+import type { MonitoringApi, RuntimeIdentity, RuntimeSnapshot } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { method: "GET", credentials: "same-origin" });
@@ -14,14 +14,23 @@ function websocketUrl(): string {
 }
 
 export function createBrowserMonitoringApi(): MonitoringApi {
+  let runtimePromise: Promise<RuntimeIdentity> | null = null;
+  const loadRuntime = (refresh = false): Promise<RuntimeIdentity> => {
+    if (refresh || runtimePromise === null) {
+      runtimePromise = getJson<RuntimeIdentity>("/api/v1/runtime");
+    }
+    return runtimePromise;
+  };
+
   const loadSnapshot = async (): Promise<RuntimeSnapshot> => {
-    const [run, jobs, resources, alerts] = await Promise.all([
+    const [runtime, run, jobs, resources, alerts] = await Promise.all([
+      loadRuntime(),
       getJson<RuntimeSnapshot["run"]>("/api/v1/run"),
       getJson<RuntimeSnapshot["jobs"]>("/api/v1/jobs"),
       getJson<RuntimeSnapshot["resources"]>("/api/v1/resources"),
       getJson<RuntimeSnapshot["alerts"]>("/api/v1/alerts"),
     ]);
-    return { run, jobs, resources, alerts };
+    return { runtime, run, jobs, resources, alerts };
   };
 
   return {
@@ -37,10 +46,22 @@ export function createBrowserMonitoringApi(): MonitoringApi {
         socket = new WebSocket(websocketUrl());
         socket.onopen = () => {
           reconnectAttempt = 0;
+          void loadRuntime(true).catch(() => undefined);
         };
         socket.onmessage = (event) => {
           try {
-            onSnapshot(JSON.parse(String(event.data)) as RuntimeSnapshot);
+            const value = JSON.parse(String(event.data)) as
+              | RuntimeSnapshot
+              | Omit<RuntimeSnapshot, "runtime">;
+            if ("runtime" in value) {
+              onSnapshot(value);
+            } else {
+              void loadRuntime()
+                .then((runtime) => onSnapshot({ ...value, runtime }))
+                .catch((error: unknown) => {
+                  onError(error instanceof Error ? error : new Error("运行身份加载失败"));
+                });
+            }
           } catch {
             onError(new Error("监控数据格式无效"));
           }
@@ -48,6 +69,7 @@ export function createBrowserMonitoringApi(): MonitoringApi {
         socket.onerror = () => socket?.close();
         socket.onclose = () => {
           if (stopped) return;
+          runtimePromise = null;
           void loadSnapshot().then(onSnapshot).catch((error: unknown) => {
             onError(error instanceof Error ? error : new Error("监控连接暂时中断"));
           });

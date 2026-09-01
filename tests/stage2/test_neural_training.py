@@ -6,6 +6,8 @@ import pytest
 import torch
 
 from tarca.stage1b.neural import ITransformerReference
+from tarca.stage1b.training import TrainingProgress
+from tarca.stage1b.training_checkpoints import atomic_torch_save, load_checkpoint
 from tarca.stage2.training import (
     Stage2TrainingPolicy,
     train_stage2_neural,
@@ -46,6 +48,41 @@ def _policy(root: Path, *, max_epochs: int = 3) -> Stage2TrainingPolicy:
         dataloader_workers=0,
         checkpoint_root=root,
     )
+
+
+class _ProgressRecorder:
+    def __init__(self) -> None:
+        self.values: list[TrainingProgress] = []
+
+    def report(self, progress: TrainingProgress) -> None:
+        self.values.append(progress)
+
+
+class _ObservedITransformer(ITransformerReference):
+    observed_input_device: torch.device | None
+    observed_grad_enabled: bool | None
+    observed_training: bool | None
+
+    def __init__(self) -> None:
+        super().__init__(
+            history_length=8,
+            horizon=2,
+            input_dimension=3,
+            d_model=12,
+            n_layers=1,
+            n_heads=3,
+            d_ff=24,
+            dropout=0.0,
+        )
+        self.observed_input_device = None
+        self.observed_grad_enabled = None
+        self.observed_training = None
+
+    def forward_distribution(self, histories: torch.Tensor):  # type: ignore[no-untyped-def]
+        self.observed_input_device = histories.device
+        self.observed_grad_enabled = torch.is_grad_enabled()
+        self.observed_training = self.training
+        return super().forward_distribution(histories)
 
 
 def test_stage2_training_policy_is_exact(tmp_path: Path) -> None:
@@ -120,6 +157,140 @@ def test_resume_preserves_checkpoint_and_fixed_batch_forecast(tmp_path: Path) ->
     assert resumed.best_validation_nll == uninterrupted.best_validation_nll
 
 
+def test_complete_checkpoint_resume_skips_training_and_preserves_checkpoint(
+    tmp_path: Path,
+) -> None:
+    train_x, train_y, validation_x, validation_y = _data()
+    policy = _policy(tmp_path, max_epochs=3)
+    interrupted = train_stage2_neural(
+        _model(dropout=0.1),
+        train_x,
+        train_y,
+        validation_x,
+        validation_y,
+        policy=policy,
+        seed=1797287582,
+        stop_after_epoch=1,
+    )
+    assert interrupted.checkpoint is not None
+    payload = load_checkpoint(interrupted.checkpoint)
+    payload["status"] = "COMPLETE"
+    original_sha256 = atomic_torch_save(payload, interrupted.checkpoint)
+    original_bytes = interrupted.checkpoint.read_bytes()
+    progress = _ProgressRecorder()
+
+    resumed = train_stage2_neural(
+        _model(dropout=0.1),
+        train_x,
+        train_y,
+        validation_x,
+        validation_y,
+        policy=policy,
+        seed=1797287582,
+        progress=progress,
+        resume_from=interrupted.checkpoint,
+    )
+
+    assert resumed.completed is True
+    assert resumed.epochs_completed == 1
+    assert progress.values == []
+    assert resumed.checkpoint_sha256 == original_sha256
+    assert interrupted.checkpoint.read_bytes() == original_bytes
+
+
+def test_resume_rejects_unknown_checkpoint_status(tmp_path: Path) -> None:
+    train_x, train_y, validation_x, validation_y = _data()
+    policy = _policy(tmp_path, max_epochs=3)
+    interrupted = train_stage2_neural(
+        _model(),
+        train_x,
+        train_y,
+        validation_x,
+        validation_y,
+        policy=policy,
+        seed=1797287582,
+        stop_after_epoch=1,
+    )
+    assert interrupted.checkpoint is not None
+    payload = load_checkpoint(interrupted.checkpoint)
+    payload["status"] = "UNKNOWN"
+    atomic_torch_save(payload, interrupted.checkpoint)
+
+    with pytest.raises(ValueError, match="checkpoint status"):
+        train_stage2_neural(
+            _model(),
+            train_x,
+            train_y,
+            validation_x,
+            validation_y,
+            policy=policy,
+            seed=1797287582,
+            resume_from=interrupted.checkpoint,
+        )
+
+
+def test_recovery_mode_requires_an_existing_complete_checkpoint(tmp_path: Path) -> None:
+    train_x, train_y, validation_x, validation_y = _data()
+
+    with pytest.raises(RuntimeError, match="complete checkpoint is required"):
+        train_stage2_neural(
+            _model(),
+            train_x,
+            train_y,
+            validation_x,
+            validation_y,
+            policy=_policy(tmp_path, max_epochs=3),
+            seed=1797287582,
+            resume_if_available=True,
+            require_complete_resume=True,
+        )
+
+
+def test_recovery_mode_rejects_an_in_progress_checkpoint(tmp_path: Path) -> None:
+    train_x, train_y, validation_x, validation_y = _data()
+    policy = _policy(tmp_path, max_epochs=3)
+    interrupted = train_stage2_neural(
+        _model(),
+        train_x,
+        train_y,
+        validation_x,
+        validation_y,
+        policy=policy,
+        seed=1797287582,
+        stop_after_epoch=1,
+    )
+    assert interrupted.checkpoint is not None
+
+    with pytest.raises(RuntimeError, match="COMPLETE checkpoint"):
+        train_stage2_neural(
+            _model(),
+            train_x,
+            train_y,
+            validation_x,
+            validation_y,
+            policy=policy,
+            seed=1797287582,
+            resume_from=interrupted.checkpoint,
+            require_complete_resume=True,
+        )
+
+
+def test_fixed_batch_forecast_follows_model_device_and_disables_gradients() -> None:
+    from tarca.stage2.training import forecast_fixed_batch_on_model_device
+
+    model = _ObservedITransformer()
+    model.train()
+    validation_x = torch.randn(2, 8, 3)
+
+    forecast = forecast_fixed_batch_on_model_device(model, validation_x)
+
+    model_device = next(model.parameters()).device
+    assert model.observed_input_device == model_device
+    assert model.observed_grad_enabled is False
+    assert model.observed_training is False
+    assert forecast.mean.device == model_device
+
+
 def test_stage2_training_emits_positive_finite_probability_and_checkpoint(
     tmp_path: Path,
 ) -> None:
@@ -145,4 +316,3 @@ def test_stage2_training_emits_positive_finite_probability_and_checkpoint(
     assert torch.isfinite(forecast.scale).all()
     assert bool((forecast.scale > 0).all())
     assert forecast.mean.shape == forecast.scale.shape == (2, 2, 3)
-

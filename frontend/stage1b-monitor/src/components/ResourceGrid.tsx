@@ -1,4 +1,4 @@
-import { formatBytes, formatDecimal } from "../format";
+import { formatByteRate, formatBytes, formatDecimal } from "../format";
 import type { ResourceStatus } from "../types";
 
 const TELEMETRY_LABELS = {
@@ -40,6 +40,9 @@ export function ResourceGrid({ resources }: { resources: ResourceStatus[] }) {
                 <div><dt>有效忙核</dt><dd>{formatDecimal(resource.actual_effective_busy_cores)}</dd></div>
                 <div><dt>已预留内存</dt><dd>{formatBytes(resource.expected_memory_bytes)}</dd></div>
                 <div><dt>实际内存</dt><dd>{formatBytes(resource.actual_memory_bytes)}</dd></div>
+                <div><dt>磁盘读取</dt><dd>{formatByteRate(resource.disk_read_bytes_per_second ?? null)}</dd></div>
+                <div><dt>磁盘写入</dt><dd>{formatByteRate(resource.disk_write_bytes_per_second ?? null)}</dd></div>
+                <div><dt>活动进程</dt><dd>{resource.active_processes}</dd></div>
               </dl>
             ) : (
               <dl>
@@ -47,6 +50,7 @@ export function ResourceGrid({ resources }: { resources: ResourceStatus[] }) {
                 <div><dt>实际显存</dt><dd>{formatBytes(resource.actual_memory_bytes)}</dd></div>
                 <div><dt>温度</dt><dd>{resource.temperature_celsius === null ? "—" : `${resource.temperature_celsius.toFixed(0)}°C`}</dd></div>
                 <div><dt>功率</dt><dd>{resource.power_watts === null ? "—" : `${resource.power_watts.toFixed(0)} W`}</dd></div>
+                <div><dt>计算进程</dt><dd>{resource.active_processes}</dd></div>
               </dl>
             )}
           </article>

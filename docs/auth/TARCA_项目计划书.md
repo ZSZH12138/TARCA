@@ -5,6 +5,7 @@
 > **契约修订核对日期**：2026-08-20
 > **契约优先级**：Stage 0 应冻结 `preregistration_v0.md`、`assumption_ledger.md`、`novelty_claims.md`、`terminology.md`；Stage 1+ 必须服从这些研究契约。没有明确、可追溯的上位修订时，不得静默改写其 Gate、证据等级或创新边界。
 > **目标**：形成一个以通用时间序列方法为主体、金融序列为高难度验证场景。
+> **当前实施事实入口**：实施进度不改写本计划的研究规则；Stage 2 完成身份与 E02 交接边界见 `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。
 
 ---
 

@@ -181,6 +181,7 @@ def test_production_probe_gracefully_runs_without_nvml(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(telemetry_module.psutil, "disk_io_counters", lambda: None)
+    monkeypatch.setattr(telemetry_module.shutil, "which", lambda _name: None)
 
     def unavailable(_name: str) -> Any:
         raise ImportError("NVML is unavailable")
@@ -189,6 +190,70 @@ def test_production_probe_gracefully_runs_without_nvml(
     probe = PsutilNvmlTelemetryProbe()
     assert probe.gpu_samples() == ()
     probe.close()
+
+
+def test_production_probe_falls_back_to_nvidia_smi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(telemetry_module.psutil, "disk_io_counters", lambda: None)
+    monkeypatch.setattr(
+        telemetry_module.importlib,
+        "import_module",
+        lambda _name: (_ for _ in ()).throw(ImportError("NVML is unavailable")),
+    )
+    monkeypatch.setattr(telemetry_module.shutil, "which", lambda _name: "/usr/bin/nvidia-smi")
+
+    def run(command: list[str], **kwargs: Any) -> Any:
+        assert kwargs == {
+            "capture_output": True,
+            "check": False,
+            "text": True,
+            "timeout": 2.0,
+        }
+        gpu_query = (
+            "--query-gpu=index,uuid,utilization.gpu,memory.used,memory.total,"
+            "power.draw,temperature.gpu"
+        )
+        if gpu_query in command:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "0, GPU-a, 96, 18432, 24564, 402.5, 71\n"
+                    "1, GPU-b, 89, 17408, 24564, 394.0, 72\n"
+                ),
+            )
+        assert "--query-compute-apps=gpu_uuid,pid" in command
+        return SimpleNamespace(returncode=0, stdout="GPU-a, 4877\nGPU-b, 5166\n")
+
+    monkeypatch.setattr(telemetry_module.subprocess, "run", run)
+
+    samples = PsutilNvmlTelemetryProbe().gpu_samples()
+
+    assert tuple(sample.gpu_id for sample in samples) == (0, 1)
+    assert samples[0].utilization_percent == 96.0
+    assert samples[0].memory_used_bytes == 18_432 * 1024**2
+    assert samples[0].compute_pids == (4877,)
+    assert samples[1].power_watts == 394.0
+    assert samples[1].compute_pids == (5166,)
+
+
+def test_production_probe_treats_failed_nvidia_smi_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(telemetry_module.psutil, "disk_io_counters", lambda: None)
+    monkeypatch.setattr(
+        telemetry_module.importlib,
+        "import_module",
+        lambda _name: (_ for _ in ()).throw(ImportError("NVML is unavailable")),
+    )
+    monkeypatch.setattr(telemetry_module.shutil, "which", lambda _name: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(
+        telemetry_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout=""),
+    )
+
+    assert PsutilNvmlTelemetryProbe().gpu_samples() == ()
 
 
 class _FakeNvml:

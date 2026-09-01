@@ -14,6 +14,7 @@ from typing import Any, Literal, cast
 
 import psutil
 
+from tarca.contracts import canonical_json_hash, sha256_file
 from tarca.execution.contracts import ResourceRequest, RunPlanNode
 from tarca.monitoring.schemas import (
     AlertView,
@@ -103,6 +104,35 @@ def _datetime(value: object) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
         return None
     return parsed
+
+
+def _trusted_preflight_eta(runtime: Path) -> float | None:
+    """Read a hash-bound runtime estimate without trusting arbitrary UI input."""
+    receipt_path = runtime / "preflight_receipt.json"
+    evidence_path = runtime / "bootstrap_evidence.json"
+    if not receipt_path.is_file() or not evidence_path.is_file():
+        return None
+    try:
+        receipt = _object(receipt_path.read_text(encoding="utf-8"))
+        evidence = _object(evidence_path.read_text(encoding="utf-8"))
+        unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+        if any(
+            (
+                receipt.get("schema_version") != "tarca-stage2-preflight-v1",
+                receipt.get("status") != "PREFLIGHT_PASS",
+                receipt.get("formal_tasks_executed") != 0,
+                receipt.get("receipt_sha256") != canonical_json_hash(unsigned),
+                receipt.get("evidence_sha256") != sha256_file(evidence_path),
+                evidence.get("status") != "PREFLIGHT_PASS",
+                evidence.get("eta_gate_passed") is not True,
+                evidence.get("formal_tasks_executed") != 0,
+            )
+        ):
+            return None
+        eta = _optional_number(evidence.get("estimated_remaining_seconds"))
+        return eta if eta is not None and eta > 0 else None
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,6 +388,11 @@ class MonitoringRepository:
             actual_effective_busy_cores=_optional_number(
                 record.resource.get("effective_busy_cores")
             ),
+            cpu_affinity_ids=tuple(
+                int(cpu)
+                for cpu in record.resource.get("process_affinity_cpu_ids", [])
+                if type(cpu) is int and cpu >= 0
+            ),
             expected_ram_bytes=round(request.host_memory_gib * _GIB),
             actual_rss_bytes=_optional_integer(record.resource.get("process_rss_bytes")),
             expected_vram_bytes=round(request.gpu_memory_gib * _GIB),
@@ -418,6 +453,7 @@ class MonitoringRepository:
         jobs: tuple[JobStatusView, ...],
         last_sampled_at: datetime | None,
         last_checkpoint_at: datetime | None,
+        preflight_eta_seconds: float | None,
     ) -> RunSummaryView:
         total = len(jobs)
         completed = sum(job.state == "COMPLETED" for job in jobs)
@@ -426,11 +462,14 @@ class MonitoringRepository:
         pending = total - completed - running - failed
         status = "FAILED" if failed else "COMPLETED" if total and completed == total else "ACTIVE"
         eta_status: Literal["CALIBRATING", "AVAILABLE", "COMPLETE", "FAILED"]
+        eta_source: Literal["NONE", "PREFLIGHT_ESTIMATE", "RUNTIME_PROGRESS", "COMPLETE"]
         eta: float | None = None
         if failed:
             eta_status = "FAILED"
+            eta_source = "NONE"
         elif status == "COMPLETED":
             eta_status, eta = "COMPLETE", 0.0
+            eta_source = "COMPLETE"
         else:
             unknown = tuple(
                 job
@@ -448,10 +487,16 @@ class MonitoringRepository:
                 if job.state in {"PENDING", "READY"} and job.eta_seconds is not None
             )
             if unknown or not running_etas:
-                eta_status = "CALIBRATING"
+                if preflight_eta_seconds is None:
+                    eta_status = "CALIBRATING"
+                    eta_source = "NONE"
+                else:
+                    eta_status, eta = "AVAILABLE", preflight_eta_seconds
+                    eta_source = "PREFLIGHT_ESTIMATE"
             else:
                 eta_status = "AVAILABLE"
                 eta = max(running_etas) + sum(pending_etas)
+                eta_source = "RUNTIME_PROGRESS"
         return RunSummaryView(
             run_id=str(row["run_id"]),
             graph_id=str(row["graph_id"]),
@@ -465,6 +510,7 @@ class MonitoringRepository:
             progress_fraction=0.0 if total == 0 else completed / total,
             eta_seconds=eta,
             eta_status=eta_status,
+            eta_source=eta_source,
             created_at_utc=datetime.fromisoformat(str(row["created_at_utc"])),
             last_sampled_at_utc=last_sampled_at,
             last_checkpoint_at_utc=last_checkpoint_at,
@@ -491,6 +537,12 @@ class MonitoringRepository:
                 temperature_celsius=None,
                 power_watts=None,
                 active_processes=sum(job.alive for job in active),
+                disk_read_bytes_per_second=_optional_number(
+                    sample.get("disk_read_bytes_per_second")
+                ),
+                disk_write_bytes_per_second=_optional_number(
+                    sample.get("disk_write_bytes_per_second")
+                ),
                 sampled_at_utc=sampled_at,
                 telemetry_status=status,
             )
@@ -518,6 +570,8 @@ class MonitoringRepository:
                         if isinstance(processes, list)
                         else sum(job.alive for job in gpu_jobs)
                     ),
+                    disk_read_bytes_per_second=None,
+                    disk_write_bytes_per_second=None,
                     sampled_at_utc=sampled_at,
                     telemetry_status=status,
                 )
@@ -556,7 +610,13 @@ class MonitoringRepository:
             sample, sampled_at = self._latest_run_sample(connection, run_id)
             checkpoint_at = self._latest_checkpoint(connection, run_id)
             return RuntimeSnapshotView(
-                run=self._run_view(run_row, jobs, sampled_at, checkpoint_at),
+                run=self._run_view(
+                    run_row,
+                    jobs,
+                    sampled_at,
+                    checkpoint_at,
+                    _trusted_preflight_eta(self.database_path.parent),
+                ),
                 jobs=jobs,
                 resources=self._resources(jobs, sample, sampled_at),
                 alerts=self._alerts(connection, run_id),

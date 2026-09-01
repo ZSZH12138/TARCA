@@ -1,11 +1,14 @@
 # TARCA E01 完成情况与任务交接快照
 
+> 2026-09-01 后续状态：Stage 2 已完成并冻结；E02 尚未运行。当前交接入口见
+> `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。本文其余内容继续作为 E01 完成时快照保留。
+
 > 快照日期：2026-08-30
 > 阶段状态：`COMPLETED / PASS`
 > 唯一活动版本：`v2`
 > 实验身份：`e01_scm_truth_v2`
 > 前置身份：Stage1B `FROZEN_V2`
-> 下一阶段：Stage 2 基础预测器与概率输出，随后实施 E02
+> 本快照形成时的下一阶段：Stage 2 基础预测器与概率输出，随后实施 E02
 > 变更控制：`TARCA_PROTOCOL_CHANGE_CONTROL_CCP_0004.md`
 
 ## 1. 功能层结论

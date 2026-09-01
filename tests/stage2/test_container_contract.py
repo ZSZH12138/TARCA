@@ -7,7 +7,10 @@ DEPLOY = ROOT / "deploy/stage2"
 
 def test_dockerfile_preserves_base_cuda_torch() -> None:
     text = (DEPLOY / "Dockerfile").read_text(encoding="utf-8")
-    assert text.startswith("FROM node:20-bookworm-slim AS ui-build")
+    assert text.startswith("FROM pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04")
+    assert "FROM node:" not in text
+    assert "npm ci" not in text
+    assert "COPY frontend/stage1b-monitor/dist/" in text
     assert "FROM pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04" in text
     assert "pip install torch" not in text
     assert "USER tarca" in text

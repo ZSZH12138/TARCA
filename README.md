@@ -31,13 +31,13 @@ TARCA（Temporal Abstraction and Robust Causal Alignment）是一个面向非平
 
 ## Stage 2 / E02 当前状态
 
-方案 B 的 Stage 2 与 E02 本地实现已完成并进入 `LOCAL_IMPLEMENTATION_COMPLETE`：科学配置、
-执行图、双 RTX 4090 调度、正式访问隔离、恢复、只读监控和离线服务器包均已落地。当前仍为
-`NOT_RUN_FULL_STAGE2_E02 / REMOTE_SERVER_NOT_CONNECTED`；尚未连接服务器、未执行完整训练，
-也未打开 E02 formal 数据。实现证据见
-[`stage2_e02_local_implementation_report_v1.md`](docs/research/stage2_e02_local_implementation_report_v1.md)，
-开机后固定流程见
-[`stage2_e02_server_handoff_v1.md`](docs/research/stage2_e02_server_handoff_v1.md)。
+Stage 2 v1 已在双 RTX 4090 服务器上完成并冻结为 `FROZEN`。固定 run 的最新任务状态为
+`37/37 COMPLETED`；六个 attempt-1 `WORKER_ERROR` 作为事故历史保留，六个同 run attempt-2
+均已完成。E02 为 `NOT_RUN_E02_FORMAL`，没有打开 formal 数据，也没有 E02 PASS/FAIL 结论。
+权威完成身份与下一任务入口见
+[`TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`](docs/auth/TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md)，
+服务器完成事实与本地回收校验见
+[`stage2_server_run_report_v1.md`](docs/research/stage2_server_run_report_v1.md)。
 
 项目关注三个彼此关联的问题：神经网络内部位置是否与预先定义的高层因果变量保持干预一致性；forecast horizon 与 causal lag 能否被独立定位；已经识别的机制能否在未见状态变化下保持 zero-refit 的解释有效性。金融序列只作为后期高难度压力测试，不构成方法新颖性来源。
 
@@ -94,7 +94,8 @@ third_party_manifest/   第三方论文、仓库、版本和许可证边界
 
 Stage 1A 自身仍不训练正式模型、不下载或生成正式数据。Stage1B 当前状态为 `FROZEN_V2`：
 `lorenz96_twoscale_v2 + ITransformerReference` 已在独立确认种子上通过 h1–6 资格门禁，并以
-内容哈希绑定为唯一活动 `v2`；E01 已以 `v2/PASS` 完成，E02 尚未运行。Stage 1A 范围见
+内容哈希绑定为唯一活动 `v2`；E01 已以 `v2/PASS` 完成，Stage 2 已冻结，E02 尚未运行。
+Stage 1A 范围见
 [`docs/stage1a_scope.md`](docs/stage1a_scope.md)，Stage1B 当前权威交接见
 [`TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md`](docs/auth/TARCA_STAGE1B_HANDOFF_SNAPSHOT_2026-08-29.md)。
 
@@ -179,6 +180,10 @@ Stage1B 已冻结为唯一 `v2`；正常情况下禁止覆盖，用户明确授�
 2. [`TARCA_END_TO_END_STAGE_PROTOCOL_SPECIFICATION_V2_0.md`](docs/auth/TARCA_END_TO_END_STAGE_PROTOCOL_SPECIFICATION_V2_0.md)：公共类型、函数和 Stage I/O；
 3. [`TARCA_具体实施计划.md`](docs/auth/TARCA_具体实施计划.md)：实施顺序、验证方式和验收边界；
 4. [`TARCA_SERVER_ACCESS_RUNBOOK.md`](docs/auth/TARCA_SERVER_ACCESS_RUNBOOK.md)：服务器接入的安全规范。
+
+当前 Stage 2 完成事实、冻结身份和 E02 交接边界以
+[`TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`](docs/auth/TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md)
+为权威状态快照；它不能反向修改以上计划、协议或 Gate。
 
 冻结的研究边界由 `docs/preregistration_v0.md`、`docs/assumption_ledger.md`、`docs/novelty_claims.md` 和 `docs/terminology.md` 共同给出。
 

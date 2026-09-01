@@ -16,6 +16,8 @@ def main() -> int:
             "dry-run",
             "preflight",
             "launch",
+            "restore-input",
+            "repair",
             "resume",
             "status",
             "freeze",
@@ -27,12 +29,19 @@ def main() -> int:
     parser.add_argument("--artifact-root", type=Path, default=Path("artifacts/stage2"))
     parser.add_argument("--acknowledgement", default="")
     parser.add_argument("--evidence", type=Path)
+    parser.add_argument("--recovery-archive", type=Path)
+    parser.add_argument("--server-bundle", type=Path)
     args = parser.parse_args()
     keyword = {}
-    if args.command in {"launch", "resume"}:
+    if args.command in {"launch", "repair", "resume"}:
         keyword["acknowledgement"] = args.acknowledgement
     if args.command == "preflight":
         keyword["evidence_path"] = args.evidence
+    if args.command == "restore-input":
+        if args.recovery_archive is None or args.server_bundle is None:
+            parser.error("restore-input requires --recovery-archive and --server-bundle")
+        keyword["recovery_archive"] = args.recovery_archive
+        keyword["server_bundle"] = args.server_bundle
     result = dispatch_stage2_runtime_command(
         args.command, args.repository_root, args.config, args.artifact_root, **keyword
     )

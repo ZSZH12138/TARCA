@@ -112,8 +112,8 @@ def _verify_frozen_inputs(root: Path) -> tuple[str, str, str]:
 
 def _verify_prebuilt_frontend(root: Path) -> None:
     assets = tuple((root / "frontend/stage1b-monitor/dist/assets").glob("*.js"))
-    if not assets or not any(b"E01-v2 SCM" in path.read_bytes() for path in assets):
-        raise ValueError("prebuilt frontend does not contain the E01-v2 runtime identity")
+    if not assets or not any(b"/api/v1/runtime" in path.read_bytes() for path in assets):
+        raise ValueError("prebuilt frontend does not load its runtime identity from the API")
 
 
 def _receipt_path(output: Path) -> Path:

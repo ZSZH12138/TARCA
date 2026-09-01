@@ -53,7 +53,11 @@ from tarca.stage2.selection import (
     select_strongest_linear,
 )
 from tarca.stage2.sources import dlinear_model_config
-from tarca.stage2.training import Stage2TrainingPolicy, train_stage2_neural
+from tarca.stage2.training import (
+    Stage2TrainingPolicy,
+    forecast_fixed_batch_on_model_device,
+    train_stage2_neural,
+)
 
 _SCHEMA = "tarca-stage2-job-v1"
 
@@ -84,6 +88,11 @@ def stage2_artifact_store(
 
 def _config(root: Path) -> Stage2Config:
     return load_stage2_config(root / "configs/stage2/stage2_v1.yaml")
+
+
+def _neural_runtime_device() -> torch.device:
+    """Select the single GPU exposed to a GPU-scoped worker."""
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def _publish_json(root: Path, task: TaskSpec, value: object) -> ArtifactRef:
@@ -452,6 +461,9 @@ def train_neural_job(
     model_id = task.identity.model_id
     cfg = config.model(cast(Any, model_id))
     model = _new_neural(root, config, model_id, train_x.shape[2])
+    recovery_mode = os.environ.get("TARCA_STAGE2_RECOVERY_MODE", "")
+    if recovery_mode not in {"", "DEVICE_MISMATCH_V1"}:
+        raise ValueError("Stage 2 recovery mode is not allowlisted")
     policy = Stage2TrainingPolicy(
         model_id=cast(Any, model_id),
         device="cuda",
@@ -473,6 +485,7 @@ def train_neural_job(
         seed=task.identity.seed,
         progress=cast(Any, progress),
         resume_if_available=True,
+        require_complete_resume=recovery_mode == "DEVICE_MISMATCH_V1",
     )
     if not result.completed:
         raise RuntimeError("Stage 2 neural training did not complete")
@@ -505,10 +518,10 @@ def validate_checkpoint_job(
     bundle = _data_input(root, task)
     model = _new_neural(root, _config(root), payload["model_id"], bundle.records[0].values.shape[1])
     model.load_state_dict(payload["state_dict"], strict=True)
+    model.to(_neural_runtime_device())
     model.freeze()
     val_x, val_y, _ = stack_partition(bundle, DatasetWindowPartition.VALIDATION)
-    with torch.no_grad():
-        distribution = model.forward_distribution(val_x[:2])
+    distribution = forecast_fixed_batch_on_model_device(model, val_x[:2])
     if distribution.scale is None or distribution.mean.shape != val_y[:2].shape:
         raise ValueError("Stage 2 checkpoint probability shape is invalid")
     if not bool(

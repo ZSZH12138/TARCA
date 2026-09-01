@@ -1,11 +1,3 @@
-FROM node:20-bookworm-slim AS ui-build
-WORKDIR /ui
-COPY frontend/stage1b-monitor/package*.json ./
-RUN npm ci
-COPY frontend/stage1b-monitor/ ./
-ARG VITE_TARCA_RUNTIME_LABEL="Stage 2 v1"
-RUN npm run build
-
 FROM pytorch:2.2.2-cuda12.1-cudnn8-py310-ubuntu22.04
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -30,7 +22,7 @@ RUN git --version \
       --cache-root /opt/tarca/third_party/stage2 \
       --capsule /opt/tarca/artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz \
       --receipt /opt/tarca/artifacts/stage2/source-capsules/stage2-v1-official-sources.tar.gz.receipt.json
-COPY --from=ui-build /ui/dist/ /opt/tarca/frontend/stage1b-monitor/dist/
+COPY frontend/stage1b-monitor/dist/ /opt/tarca/frontend/stage1b-monitor/dist/
 RUN mkdir -p /opt/tarca/artifacts /opt/tarca/logs \
     && chown -R tarca:tarca /opt/tarca/artifacts /opt/tarca/logs \
     && chmod 0555 /opt/tarca/deploy/stage2/*.sh

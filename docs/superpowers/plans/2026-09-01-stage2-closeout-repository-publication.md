@@ -25,15 +25,59 @@
 
 ---
 
-### Task 1: Add Stage 2 closeout documentation and publication contract tests
+### Task 0: Stabilize the Stage 0 doctor subprocess baseline timeout
+
+**Files:**
+- Modify: `tests/stage0/test_cli.py`
+- Test: `tests/stage0/test_cli.py`
+
+**Interfaces:**
+- Consumes: the real `scripts/doctor.py --json` subprocess.
+- Produces: the same behavior assertions with a timeout that accommodates a measured cold Windows dependency import.
+
+- [ ] **Step 1: Preserve the observed RED evidence**
+
+The unmodified full suite produced `653 passed, 1 failed`; the only failure was
+`test_doctor_cli_returns_machine_readable_cpu_smoke`, which timed out at 60 seconds. A direct cold run then completed successfully in 60.88 seconds, while the same isolated pytest completed in 11.87 seconds with warm file/import caches. The subprocess output was a valid `PASS` report.
+
+- [ ] **Step 2: Raise only the infrastructure timeout**
+
+In `test_doctor_cli_returns_machine_readable_cpu_smoke`, change:
+
+```python
+timeout=60,
+```
+
+to:
+
+```python
+timeout=120,
+```
+
+Do not change `scripts/doctor.py`, `run_doctor()`, or any behavior assertion. The test verifies output correctness, not a 60-second performance SLA.
+
+- [ ] **Step 3: Verify GREEN in isolation**
+
+Run:
+
+```powershell
+$env:PYTHONPATH='C:\Users\DELL\Desktop\TARCA\src'
+& 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage0/test_cli.py::test_doctor_cli_returns_machine_readable_cpu_smoke -q
+```
+
+Expected: PASS with the same machine-readable output assertions.
+
+---
+
+### Task 1: Add the Stage 2 frozen-evidence and actual Git-boundary contract tests
 
 **Files:**
 - Modify: `tests/stage2/test_documentation_contract.py`
 - Test: `tests/stage2/test_documentation_contract.py`
 
 **Interfaces:**
-- Consumes: repository Markdown, `.gitignore`, and canonical Stage 2 frozen JSON files.
-- Produces: tests that fail until the authority snapshot, current status, evidence files, and upload boundary exist.
+- Consumes: canonical Stage 2 frozen JSON files and Git's real ignore resolver.
+- Produces: tests that fail until valid small evidence exists and Git ignores large Stage 2 products while exposing the two receipts.
 
 - [ ] **Step 1: Add closeout constants and the frozen-evidence test**
 
@@ -50,7 +94,6 @@ from tarca.stage2.manifest import stage2_manifest_from_payload
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "docs/research/stage2_e02_local_implementation_report_v1.md"
 HANDOFF = ROOT / "docs/research/stage2_e02_server_handoff_v1.md"
-SNAPSHOT = ROOT / "docs/auth/TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md"
 FREEZE_ROOT = ROOT / "artifacts/stage2/frozen/v1"
 ```
 
@@ -78,46 +121,31 @@ def test_stage2_frozen_evidence_is_small_valid_and_publishable() -> None:
     assert receipt.scientific_sha256 == manifest.scientific_sha256
 ```
 
-- [ ] **Step 2: Add documentation synchronization assertions**
+- [ ] **Step 2: Add the real Git ignore-boundary test**
 
-Add:
+Add `subprocess` and this integration test:
 
 ```python
-def test_stage2_closeout_status_is_synchronized() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    snapshot = SNAPSHOT.read_text(encoding="utf-8")
-    implementation = (ROOT / "docs/auth/TARCA_具体实施计划.md").read_text(
-        encoding="utf-8"
+def _is_ignored(relative_path: str) -> bool:
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", relative_path],
+        cwd=ROOT,
+        check=False,
     )
-    protocol = (
-        ROOT / "docs/auth/TARCA_END_TO_END_STAGE_PROTOCOL_SPECIFICATION_V2_0.md"
-    ).read_text(encoding="utf-8")
+    return result.returncode == 0
 
-    for text in (readme, snapshot, implementation):
-        assert "37/37 COMPLETED" in text
-        assert "E02" in text
-    assert "TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md" in readme
-    assert "TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md" in protocol
-    assert "NOT_RUN_E02_FORMAL" in snapshot
-    assert "37a3a5c45a8bf4b4a703f40b7ab2e82b8d8b9bf0554a6b13f470ee7e5017e166" in snapshot
+
+def test_stage2_git_boundary_exposes_only_small_frozen_evidence() -> None:
+    assert _is_ignored(
+        "artifacts/stage2/server-results/final/tarca-stage2-v1-complete.tar.gz"
+    )
+    assert not _is_ignored(
+        "artifacts/stage2/frozen/v1/stage2_freeze_receipt.json"
+    )
+    assert not _is_ignored("artifacts/stage2/frozen/v1/stage2_manifest.json")
 ```
 
-- [ ] **Step 3: Add static upload-boundary assertions**
-
-Add:
-
-```python
-def test_stage2_gitignore_exposes_only_small_frozen_evidence() -> None:
-    ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    assert "/artifacts/stage2/**" in ignore
-    assert "!/artifacts/stage2/frozen/v1/stage2_freeze_receipt.json" in ignore
-    assert "!/artifacts/stage2/frozen/v1/stage2_manifest.json" in ignore
-    assert "/artifacts/stage2/server-results/" not in ignore
-```
-
-The final assertion ensures the new blanket rule replaces, rather than coexists with, a partial server-results exception.
-
-- [ ] **Step 4: Run the focused test and verify RED**
+- [ ] **Step 3: Run the focused test and verify RED**
 
 Run:
 
@@ -126,7 +154,7 @@ $env:PYTHONPATH='C:\Users\DELL\Desktop\TARCA\src'
 & 'D:\software\MyAnaconda\envs\tarca-finalize-py311\python.exe' -m pytest tests/stage2/test_documentation_contract.py -q
 ```
 
-Expected: FAIL because the new snapshot and canonical Stage 2 frozen evidence do not yet exist and README still states Stage 2 was not run.
+Expected: FAIL because the canonical Stage 2 frozen evidence does not yet exist and the current partial ignore rules do not implement the approved boundary.
 
 ---
 

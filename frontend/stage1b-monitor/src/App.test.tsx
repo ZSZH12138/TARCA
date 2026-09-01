@@ -3,8 +3,71 @@ import { describe, expect, it } from "vitest";
 
 import { App } from "./App";
 import { fakeApi, twoGpuSnapshot } from "./test/fixtures";
+import type { RuntimeSnapshot } from "./types";
 
 describe("Stage1B runtime dashboard", () => {
+  it("uses the runtime API identity and makes parallel work and task ETA explicit", async () => {
+    const runtimeAware = {
+      ...twoGpuSnapshot,
+      runtime: {
+        execution_kind: "stage2-v1",
+        display_label: "Stage 2 v1",
+        access_mode: "READ_ONLY",
+      },
+      resources: twoGpuSnapshot.resources.map((resource) =>
+        resource.kind === "HOST"
+          ? {
+              ...resource,
+              disk_read_bytes_per_second: 1024,
+              disk_write_bytes_per_second: 2048,
+            }
+          : resource,
+      ),
+      jobs: twoGpuSnapshot.jobs.map((job, index) => ({
+        ...job,
+        eta_seconds: index === 0 ? 2_400 : 5_400,
+        cpu_affinity_ids: index === 0 ? [4, 5, 6, 7] : [8, 9, 10, 11],
+      })),
+    } as unknown as RuntimeSnapshot;
+
+    render(<App api={fakeApi(runtimeAware)} />);
+
+    expect(await screen.findByText("Stage 2 v1")).toBeVisible();
+    expect(screen.getByText(/2 个进程并行运行/)).toBeVisible();
+    expect(screen.getByText(/GPU 0.*GPU 1/)).toBeVisible();
+    expect(screen.getByText("当前任务 ETA")).toBeVisible();
+    expect(screen.getByText("磁盘读取")).toBeVisible();
+    expect(screen.getByText("磁盘写入")).toBeVisible();
+  });
+
+  it("keeps running work at the top of the task table", async () => {
+    const completedFirst = {
+      ...twoGpuSnapshot,
+      jobs: [
+        {
+          ...twoGpuSnapshot.jobs[0],
+          task_id: "completed-first",
+          state: "COMPLETED" as const,
+          pid: null,
+          alive: false,
+          gpu_ids: [],
+        },
+        {
+          ...twoGpuSnapshot.jobs[1],
+          task_id: "running-second",
+          pid: 901,
+          alive: true,
+        },
+      ],
+    };
+
+    render(<App api={fakeApi(completedFirst)} />);
+
+    const rows = await screen.findAllByRole("row");
+    expect(rows[1]).toHaveTextContent("PID 901");
+    expect(rows[2]).toHaveTextContent("任务已完成");
+  });
+
   it("shows expected and actual resources for both GPUs", async () => {
     render(<App api={fakeApi(twoGpuSnapshot)} />);
 
@@ -21,7 +84,7 @@ describe("Stage1B runtime dashboard", () => {
 
   it("contains no task mutation controls", async () => {
     render(<App api={fakeApi(twoGpuSnapshot)} />);
-    await screen.findByText("Stage1B v2");
+    await screen.findByText(twoGpuSnapshot.runtime.display_label);
 
     expect(screen.queryByRole("button", { name: /重启|停止|删除|修改/ })).toBeNull();
   });
@@ -30,6 +93,52 @@ describe("Stage1B runtime dashboard", () => {
     render(<App api={fakeApi(twoGpuSnapshot)} />);
 
     expect(await screen.findByText("校准中")).toBeVisible();
+  });
+
+  it("labels the conservative preflight ETA without calling it runtime history", async () => {
+    const preflightEstimate = {
+      ...twoGpuSnapshot,
+      run: {
+        ...twoGpuSnapshot.run,
+        eta_status: "AVAILABLE" as const,
+        eta_seconds: 14_400,
+        eta_source: "PREFLIGHT_ESTIMATE" as const,
+      },
+    };
+
+    render(<App api={fakeApi(preflightEstimate)} />);
+
+    expect(await screen.findByText("服务器预检给出的保守估计")).toBeVisible();
+  });
+
+  it("distinguishes runtime-history ETA from a failed run", async () => {
+    const runtimeEstimate = {
+      ...twoGpuSnapshot,
+      run: {
+        ...twoGpuSnapshot.run,
+        eta_status: "AVAILABLE" as const,
+        eta_seconds: 3_600,
+        eta_source: "RUNTIME_PROGRESS" as const,
+      },
+    };
+    const first = render(<App api={fakeApi(runtimeEstimate)} />);
+
+    expect(await screen.findByText("按已完成同类任务估算")).toBeVisible();
+    first.unmount();
+
+    const failed = {
+      ...twoGpuSnapshot,
+      run: {
+        ...twoGpuSnapshot.run,
+        status: "FAILED",
+        eta_status: "FAILED" as const,
+        eta_seconds: null,
+        eta_source: "NONE" as const,
+      },
+    };
+    render(<App api={fakeApi(failed)} />);
+
+    expect(await screen.findByText("已有失败任务，需恢复后重算整体 ETA")).toBeVisible();
   });
 
   it("distinguishes real zero utilization from unavailable telemetry", async () => {
@@ -135,6 +244,7 @@ describe("Stage1B runtime dashboard", () => {
       gpu_ids: [],
       actual_effective_busy_cores: 0,
       actual_rss_bytes: 0,
+      expected_vram_bytes: 0,
       actual_vram_bytes: 0,
       epoch: null,
       batch: null,
@@ -152,5 +262,26 @@ describe("Stage1B runtime dashboard", () => {
     expect(screen.queryByText("未检测到进程")).not.toBeInTheDocument();
     expect(screen.getByText("等待")).toBeVisible();
     expect(screen.getByText("等待下一批任务")).toBeVisible();
+  });
+
+  it("labels an unallocated GPU job by its frozen request instead of calling it CPU", async () => {
+    const readyGpu = {
+      ...twoGpuSnapshot,
+      jobs: [{
+        ...twoGpuSnapshot.jobs[0],
+        state: "READY",
+        pid: null,
+        alive: false,
+        gpu_ids: [],
+        actual_vram_bytes: null,
+        epoch: null,
+        batch: null,
+      }],
+    } as RuntimeSnapshot;
+
+    render(<App api={fakeApi(readyGpu)} />);
+
+    expect(await screen.findByText("GPU 待分配")).toBeVisible();
+    expect(screen.getByText("— / 20.0 GiB VRAM")).toBeVisible();
   });
 });

@@ -63,8 +63,9 @@ Stage N 标准输入
 - **科学证据等级**：只能由 Gate evidence 给出；
 - **任何实施进度变化都不得静默改变协议语义、Gate 或科学身份。**
 
-当前实施事实不写入协议正文；E01 的独立状态、收据和 Stage 2 交接入口统一记录在
-`TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`，不得用该快照反向修改本协议接口语义。
+当前实施事实不写入协议正文；E01 的独立状态与收据记录在
+`TARCA_E01_HANDOFF_SNAPSHOT_2026-08-30.md`，Stage 2 完成身份和 E02 交接入口记录在
+`TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。不得用这些快照反向修改本协议接口语义。
 
 ---
 

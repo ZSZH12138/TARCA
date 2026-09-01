@@ -328,6 +328,66 @@ class _FakeNeural(nn.Module):
         )
 
 
+def test_checkpoint_validation_uses_the_allocated_neural_device_boundary(
+    repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _development_bundle()
+    data_task = _task("device-data", "DEV_DATA", "DATA", "STAGE2_DEVELOPMENT_DATA")
+    data_ref = _publish_torch(repository, data_task, _bundle_payload(bundle))
+    source_task = _task(
+        "device-checkpoint-source",
+        "NEURAL_TRAIN",
+        "PATCHTST",
+        "STAGE2_NEURAL_CHECKPOINT",
+        seed=1797287582,
+    )
+    source_model = _FakeNeural()
+    checkpoint_ref = _publish_torch(
+        repository,
+        source_task,
+        {
+            "model_id": "PATCHTST",
+            "seed": 1797287582,
+            "state_dict": source_model.state_dict(),
+            "model_sha256": "1" * 64,
+        },
+    )
+    validation_task = _task(
+        "device-checkpoint-validation",
+        "CHECKPOINT_VALIDATE",
+        "PATCHTST",
+        "VALIDATED_STAGE2_CHECKPOINT",
+        seed=1797287582,
+        inputs=(checkpoint_ref, data_ref),
+    )
+    observed: dict[str, object] = {}
+
+    def forecast(model: nn.Module, histories: torch.Tensor) -> ForecastDistribution:
+        observed["model_device"] = next(model.parameters()).device.type
+        observed["history_device"] = histories.device.type
+        observed["training"] = model.training
+        return model.forward_distribution(histories)
+
+    monkeypatch.setattr("tarca.stage2.jobs._new_neural", lambda *args: _FakeNeural())
+    monkeypatch.setattr(
+        "tarca.stage2.jobs._neural_runtime_device", lambda: torch.device("cpu")
+    )
+    monkeypatch.setattr(
+        "tarca.stage2.jobs.forecast_fixed_batch_on_model_device", forecast
+    )
+
+    validated = validate_checkpoint_job(
+        repository, validation_task, _context(validation_task), _Progress()
+    )
+
+    assert _load_torch(repository, validated)["validated"] is True
+    assert observed == {
+        "model_device": "cpu",
+        "history_device": "cpu",
+        "training": False,
+    }
+
+
 def test_upstream_source_data_and_neural_job_paths(
     repository: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

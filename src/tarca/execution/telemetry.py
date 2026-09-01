@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import math
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -184,6 +186,7 @@ class PsutilNvmlTelemetryProbe:
             self._pynvml = module
         except Exception:
             self._pynvml = None
+        self._nvidia_smi = shutil.which("nvidia-smi") if self._pynvml is None else None
 
     @staticmethod
     def _process_tree(process_id: int, *, include_descendants: bool) -> tuple[Any, ...]:
@@ -265,7 +268,7 @@ class PsutilNvmlTelemetryProbe:
     def gpu_samples(self) -> tuple[GpuSample, ...]:
         module = self._pynvml
         if module is None:
-            return ()
+            return self._nvidia_smi_samples()
         samples: list[GpuSample] = []
         for gpu_id in range(int(module.nvmlDeviceGetCount())):
             handle = module.nvmlDeviceGetHandleByIndex(gpu_id)
@@ -289,6 +292,80 @@ class PsutilNvmlTelemetryProbe:
                 )
             )
         return tuple(samples)
+
+    def _run_nvidia_smi(self, query: str) -> str | None:
+        executable = self._nvidia_smi
+        if executable is None:
+            return None
+        try:
+            result = subprocess.run(
+                [executable, query, "--format=csv,noheader,nounits"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=2.0,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return result.stdout if result.returncode == 0 else None
+
+    @staticmethod
+    def _nvidia_smi_processes(value: str | None) -> dict[str, tuple[int, ...]]:
+        if value is None:
+            return {}
+        rows = tuple(
+            tuple(part.strip() for part in line.split(","))
+            for line in value.splitlines()
+            if line.strip()
+        )
+        valid_pairs = tuple(
+            (row[0], int(row[1]))
+            for row in rows
+            if len(row) == 2 and row[1].isdigit() and int(row[1]) > 0
+        )
+        return {
+            gpu_uuid: tuple(sorted({pid for row_uuid, pid in valid_pairs if row_uuid == gpu_uuid}))
+            for gpu_uuid in {row_uuid for row_uuid, _pid in valid_pairs}
+        }
+
+    @staticmethod
+    def _nvidia_smi_sample(
+        row: tuple[str, ...],
+        processes: dict[str, tuple[int, ...]],
+    ) -> GpuSample | None:
+        if len(row) != 7:
+            return None
+        try:
+            gpu_id = int(row[0])
+            memory_used = int(float(row[3]) * 1024**2)
+            memory_total = int(float(row[4]) * 1024**2)
+            return GpuSample(
+                gpu_id=gpu_id,
+                utilization_percent=float(row[2]),
+                memory_used_bytes=memory_used,
+                memory_total_bytes=memory_total,
+                power_watts=float(row[5]),
+                temperature_celsius=float(row[6]),
+                compute_pids=processes.get(row[1], ()),
+            )
+        except (TypeError, ValueError):
+            return None
+
+    def _nvidia_smi_samples(self) -> tuple[GpuSample, ...]:
+        gpu_output = self._run_nvidia_smi(
+            "--query-gpu=index,uuid,utilization.gpu,memory.used,memory.total,power.draw,temperature.gpu"
+        )
+        if gpu_output is None:
+            return ()
+        process_output = self._run_nvidia_smi("--query-compute-apps=gpu_uuid,pid")
+        processes = self._nvidia_smi_processes(process_output)
+        rows = tuple(
+            tuple(part.strip() for part in line.split(","))
+            for line in gpu_output.splitlines()
+            if line.strip()
+        )
+        parsed = tuple(self._nvidia_smi_sample(row, processes) for row in rows)
+        return tuple(sample for sample in parsed if sample is not None)
 
     def close(self) -> None:
         if self._pynvml is not None:

@@ -1021,6 +1021,12 @@ axes:
 - 未见状态性能会下降，但不是完全失效；
 - 概率输出没有严重数值问题。
 
+实施同步（2026-09-01）：Stage 2 v1 已沿用固定 run 完成同运行恢复，最新图状态为
+`37/37 COMPLETED`，并发布状态为 `FROZEN` 的 receipt；strongest linear 固定为 `VAR`，
+primary iTransformer seed 固定为 `1797287582`，formal access event count 为 0。
+E02 仍为 `NOT_RUN_E02_FORMAL`，不得把 Stage 2 授权延伸为 E02 formal 授权。完整运行身份、
+事故留痕、本地归档和下一步边界见 `TARCA_STAGE2_HANDOFF_SNAPSHOT_2026-09-01.md`。
+
 ---
 
 ## 8. 阶段 3：机制植入网络（第 10–12 周）
@@ -3018,8 +3024,8 @@ docs/stage1_unified_data_contract.md
 
 若答案为否，不进入基础预测器，更不能进入内部干预或 OT。
 
-当前答案为“是”：E01-v2 已通过并冻结。后续从 Stage 2 基础预测器开始，E02 在 Stage 2 输出
-满足统一 `ForecastDistribution` 契约后实施。
+当前答案为“是”：E01-v2 已通过并冻结，Stage 2 v1 也已完成并冻结。后续从 E02 的
+prepare、dry-run 和 preflight 开始；只有再次获得独立书面授权后，才允许打开 E02 formal 数据。
 
 ---
 

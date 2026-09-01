@@ -16,6 +16,12 @@ from tarca.execution import (
     SynchronousTestBackend,
 )
 from tarca.execution.scheduler import WorkerBackend
+from tarca.execution.supervision import RuntimeSupervisor
+from tarca.execution.telemetry import (
+    PsutilNvmlTelemetryProbe,
+    TelemetryPolicy,
+    TelemetryProbe,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +46,7 @@ def run_e02_formal(
     database_path: Path,
     registry: ExecutorRegistry | None = None,
     backend: WorkerBackend | None = None,
+    telemetry_probe: TelemetryProbe | None = None,
     maximum_wait_seconds: float = 1.0,
 ) -> E02RunResult:
     root = repository_root.resolve()
@@ -61,32 +68,50 @@ def run_e02_formal(
             for n in graph.nodes
         ),
     )
+    telemetry = telemetry_probe or PsutilNvmlTelemetryProbe()
     scheduler = Scheduler(
         state,
         backend or SynchronousTestBackend(state, resolved_registry),
         capacity,
         poll_interval_seconds=0.001,
+        supervisor=RuntimeSupervisor(
+            state,
+            telemetry,
+            TelemetryPolicy(sample_interval_seconds=2.0),
+        ),
     )
-    while True:
-        completed = state.completed_artifacts(run_id)
-        if len(completed) == len(graph.nodes):
-            return E02RunResult(
-                run_id,
-                graph.graph_id,
-                RunTerminalStatus.COMPLETED,
-                tuple(sorted(completed.items())),
+    try:
+        while True:
+            completed = state.completed_artifacts(run_id)
+            if len(completed) == len(graph.nodes):
+                return E02RunResult(
+                    run_id,
+                    graph.graph_id,
+                    RunTerminalStatus.COMPLETED,
+                    tuple(sorted(completed.items())),
+                )
+            manifest = compile_e02_ready(graph, completed)
+            node_by_id = {n.node_id: n for n in graph.nodes}
+            for task in manifest.tasks:
+                node = node_by_id[task.task_id]
+                state.enqueue_task(
+                    run_id, task, node.executor_key, dependency_task_ids=node.dependency_ids
+                )
+            if not manifest.tasks and not state.running_attempts(run_id):
+                return E02RunResult(
+                    run_id,
+                    graph.graph_id,
+                    RunTerminalStatus.FAILED,
+                    tuple(sorted(completed.items())),
+                )
+            status = scheduler.run_until_terminal(
+                run_id, maximum_wait_seconds=maximum_wait_seconds
             )
-        manifest = compile_e02_ready(graph, completed)
-        node_by_id = {n.node_id: n for n in graph.nodes}
-        for task in manifest.tasks:
-            node = node_by_id[task.task_id]
-            state.enqueue_task(
-                run_id, task, node.executor_key, dependency_task_ids=node.dependency_ids
-            )
-        if not manifest.tasks and not state.running_attempts(run_id):
-            return E02RunResult(
-                run_id, graph.graph_id, RunTerminalStatus.FAILED, tuple(sorted(completed.items()))
-            )
-        status = scheduler.run_until_terminal(run_id, maximum_wait_seconds=maximum_wait_seconds)
-        if status is RunTerminalStatus.FAILED:
-            return E02RunResult(run_id, graph.graph_id, status, tuple(sorted(completed.items())))
+            if status is RunTerminalStatus.FAILED:
+                return E02RunResult(
+                    run_id, graph.graph_id, status, tuple(sorted(completed.items()))
+                )
+    finally:
+        close_probe = getattr(telemetry, "close", None)
+        if callable(close_probe):
+            close_probe()

@@ -159,6 +159,8 @@ def load_checkpoint(path: Path) -> dict[str, Any]:
     loaded = torch.load(path, map_location="cpu", weights_only=True)
     if not isinstance(loaded, dict) or loaded.get("schema_version") != "1.0.0":
         raise ValueError("training checkpoint has an unsupported schema")
+    if loaded.get("status") not in {"IN_PROGRESS", "COMPLETE"}:
+        raise ValueError("training checkpoint status is invalid")
     return cast(dict[str, Any], loaded)
 
 

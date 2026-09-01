@@ -13,6 +13,8 @@ import psutil
 import torch
 import yaml
 
+from tarca.stage2.recovery import load_stage2_recovery_input_receipt
+from tarca.stage2.recovery_probe import run_stage2_recovery_probe
 from tarca.stage2.server_probe import run_stage2_server_probe
 
 
@@ -79,15 +81,27 @@ def run_server_preflight(
     artifacts = artifact_root.resolve()
     runtime = artifacts / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
+    recovery_input = runtime / "recovery_input_receipt.json"
+    recovery_mode = recovery_input.is_file()
+    if recovery_mode:
+        load_stage2_recovery_input_receipt(recovery_input)
     _verify_hardware(artifacts, remaining_rental_hours)
     _verify_sources(root, config)
     fp32_finite, amp_finite = _exercise_cuda_and_checkpoint(runtime)
-    throughput = run_stage2_server_probe(
-        root,
-        config,
-        runtime,
-        remaining_rental_hours=remaining_rental_hours,
-    )
+    if recovery_mode:
+        throughput = run_stage2_recovery_probe(
+            root,
+            config,
+            runtime,
+            remaining_rental_hours=remaining_rental_hours,
+        )
+    else:
+        throughput = run_stage2_server_probe(
+            root,
+            config,
+            runtime,
+            remaining_rental_hours=remaining_rental_hours,
+        )
     evidence: dict[str, Any] = {
         "status": "PREFLIGHT_PASS",
         "remaining_rental_hours": remaining_rental_hours,
